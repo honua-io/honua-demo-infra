@@ -64,8 +64,9 @@ resource "aws_vpc_endpoint" "s3" {
 # amazonaws.com resolve to in-VPC ENIs. bedrock_ai_region must equal var.region
 # (the VPC's region) — an interface endpoint can only front a service in its own
 # region, and the WorkflowGeneration provider invokes Bedrock in that same
-# region. Live id: vpce-003090af73dc835fe (SG sg-0ac55474b410c5d34) — adopt both
-# with `terraform import` (see README → "Import the Bedrock VPC endpoint").
+# region. Live id vpce-003090af73dc835fe is imported and fully managed here
+# (2026-07-24: apply reconciled it to single-AZ with the module-created SG; the
+# original hand-made SG was deleted).
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "bedrock_endpoint" {
@@ -113,22 +114,10 @@ resource "aws_vpc_endpoint" "bedrock_runtime" {
 # service in its own region, and the place index the aws-serverless module
 # creates lives in this same region (the module resolves its region from the
 # "aws" provider, i.e. var.region), so there is no other valid choice.
-#
-# NOTE (read-only AWS audit, 2026-07-23): the already-live bedrock-runtime
-# endpoint above is documented here and in main.tf as "single-AZ to save
-# cost", but `aws ec2 describe-vpc-endpoints` shows the deployed
-# vpce-003090af73dc835fe actually spans all three private subnets/AZs — live
-# drift from what this file's `subnet_ids = [module.honua.private_subnet_ids[0]]`
-# describes. (The account's other interface endpoints for
-# com.amazonaws.us-west-2.lambda/.sts/.logs/.monitoring, also observed
-# spanning all three private subnets during the same audit, are NOT drift —
-# they are the module's own deploy-control.tf, gated behind
-# enable_control_plane_events, which intentionally uses all of
-# local.private_subnets rather than a single AZ.) This new `geo` endpoint
-# follows the single-AZ pattern as WRITTEN (matching the Secrets Manager
-# endpoint and the cost this PR documents), not the bedrock endpoint's
-# drifted live shape. Flagging the bedrock discrepancy for a maintainer to
-# reconcile separately — not touched by this change.
+# (The account's interface endpoints for
+# com.amazonaws.us-west-2.lambda/.sts/.logs/.monitoring intentionally span all
+# three private subnets — they belong to the module's deploy-control.tf, gated
+# behind enable_control_plane_events, not this file's single-AZ pattern.)
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "amazon_location_endpoint" {
