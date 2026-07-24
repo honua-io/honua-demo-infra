@@ -6,19 +6,15 @@ honua-server `docs/internal/demo/demo-honua-io-capability-runbook.md` as part
 of the honua-iac#126 extraction (demo ops docs no longer live in the
 honua-server backlog).
 
-> **PROVISIONAL IMPORT.** This is the `docs/internal/demo/…` file as it stood
-> on honua-server `trunk` at commit `30d6d6f115e23e193fdaceb2a5742180165cc618`
-> at extraction time. honua-server PR
-> [#3009](https://github.com/honua-io/honua-server/pull/3009) ("docs: make
-> Amazon Location + PrivateLink the primary geocoding fix") — runbook v2 —
-> was **open, not merged** (`mergeStateStatus: BLOCKED`) after a 30-minute
-> foreground poll during the extraction, so it is **not** reflected here. No
-> honua-server pointer-stub PR was opened (that step is gated on #3009
-> merging first — see honua-iac#126 sequencing). Follow-up: once #3009
-> merges, re-pull `docs/internal/demo/demo-honua-io-capability-runbook.md`
-> from honua-server trunk at the merge commit, replace this file with it, and
-> only then open the honua-server stub PR that replaces the original with a
-> pointer here.
+> **Reconciled 2026-07-24.** This is the final runbook from honua-server
+> `trunk` at commit `776d74a28` — includes runbook v2 (honua-server#3009,
+> Amazon Location + PrivateLink as the primary geocoding fix, merged via the
+> train). The honua-server original has been replaced with a pointer stub.
+> Applied-state notes beyond the runbook: geocoding infra (place index +
+> `geo.places` endpoint) is live and serving is on v35 — see
+> stacks/aws/vpc-endpoints.tf and honua-demo#11 for the remaining
+> enablement items (Redis stays off pending honua-server#3011; geocoding
+> e2e pending the next image with the AOT config-binding fix).
 
 No separate probe/verification scripts were moved: the runbook's verification
 commands are inline `bash`/`curl` blocks within the markdown itself, not
