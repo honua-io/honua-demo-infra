@@ -25,4 +25,12 @@ commands are inline `bash`/`curl` blocks within the markdown itself, not
 standalone script files. The one script it references,
 `tests/seed/apply-demo-stac-seed.sh`, is schema-coupled seed tooling that
 stays in honua-server per the seed-data policy (see the repo-root README →
-"Seed data").
+"Seed data") — pinned reference:
+
+```
+https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/apply-demo-stac-seed.sh
+```
+
+(and the sibling `tests/seed/demo-*.sql` / `client-compat-v1.sql` fixtures at
+the same ref). Bump `30d6d6f1…` deliberately when a newer seed fixture is
+needed — do not float on `trunk`.
