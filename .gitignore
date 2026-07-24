@@ -1,0 +1,9 @@
+.terraform/
+# Local operator inputs/state — terraform.tfvars contains secrets, never commit.
+terraform.tfvars
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Apply-time build artifacts for the PostGIS bootstrap Lambda.
+stacks/aws/postgis-bootstrap/build/
+stacks/aws/postgis-bootstrap/bootstrap.zip

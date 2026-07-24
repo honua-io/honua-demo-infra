@@ -1,0 +1,106 @@
+name: Demo Drift Plan
+
+# Scheduled, READ-ONLY `terraform plan` against the live demo.honua.io AWS
+# account (honua-iac#126 extraction, item 6). Never applies. Purpose: turn
+# the demo's known hand-managed drift (see stacks/aws/README.md → "Pro + AI
+# demo drift") into a visible, recurring signal instead of a surprise.
+#
+# ONE-TIME OPERATOR SETUP (this workflow no-ops until both are done — see
+# repo README "Drift-plan CI: one-time operator setup"):
+#   1. Provision an AWS OIDC role for this repo (mirror honua-iac's
+#      infrastructure/terraform/components/aws-github-oidc component —
+#      trust `repo:honua-io/honua-demo:*` or a tighter `environment:` subject,
+#      permissions scoped to read-only Describe/Get/List on the demo stack's
+#      resources plus s3:GetObject/s3:PutObject on the tfstate key for
+#      backend init). Put the resulting role ARN in the repo variable
+#      HONUA_DEMO_DRIFT_ROLE_ARN below (currently a placeholder — the role
+#      does not exist yet, so this workflow is dispatch-only and will fail
+#      fast with a clear message if run before the ARN is set).
+#   2. Set repo variable HONUA_DEMO_DRIFT_ENABLED=true to turn on the daily
+#      schedule (left commented out below until then) and set the tfvars
+#      inputs (repo vars HONUA_DEMO_HONUA_IMAGE / HONUA_DEMO_ROUTE53_ZONE_ID,
+#      repo secret HONUA_DEMO_ADMIN_PASSWORD) so the plan reflects real
+#      values instead of failing on missing required variables.
+#
+# Until both steps are done, workflow_dispatch still runs (for ad-hoc use)
+# but the job's `if` gate skips it neutrally unless HONUA_DEMO_DRIFT_ROLE_ARN
+# is set to a real ARN.
+
+on:
+  workflow_dispatch: {}
+  # Uncomment once HONUA_DEMO_DRIFT_ENABLED=true is set (operator step 2
+  # above) and the role ARN in step 1 is live. Daily at 09:00 UTC.
+  # schedule:
+  #   - cron: "0 9 * * *"
+
+permissions:
+  contents: read
+  id-token: write # required to mint the OIDC token for aws-actions/configure-aws-credentials
+
+concurrency:
+  group: demo-drift-plan
+  cancel-in-progress: false
+
+env:
+  HONUA_DEMO_DRIFT_ROLE_ARN: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN || '' }}
+
+jobs:
+  drift-plan:
+    name: Read-only terraform plan (demo.honua.io)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Neutral no-op (not a failure) until the operator has provisioned the
+    # OIDC role and pointed HONUA_DEMO_DRIFT_ROLE_ARN at it, OR opted in via
+    # HONUA_DEMO_DRIFT_ENABLED for the schedule. workflow_dispatch with the
+    # ARN already set always runs (ad-hoc operator check).
+    if: ${{ (vars.HONUA_DEMO_DRIFT_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && vars.HONUA_DEMO_DRIFT_ROLE_ARN != '' }}
+    defaults:
+      run:
+        working-directory: stacks/aws
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: terraform init -input=false -no-color
+
+      - name: terraform plan (read-only, never applied)
+        id: plan
+        env:
+          TF_VAR_honua_image: ${{ vars.HONUA_DEMO_HONUA_IMAGE }}
+          TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+          TF_VAR_route53_zone_id: ${{ vars.HONUA_DEMO_ROUTE53_ZONE_ID }}
+          TF_VAR_enable_redis: "true"
+          TF_VAR_enable_bedrock_ai: "true"
+          TF_VAR_enable_pro_license: "true"
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock-timeout=60s -detailed-exitcode
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          # 0 = no changes, 1 = real error, 2 = changes present (expected
+          # until the operator has run the terraform import steps in
+          # stacks/aws/README.md — this workflow never applies either way).
+          if [ "$code" = "1" ]; then
+            exit 1
+          fi
+
+      - name: Surface drift result
+        run: |
+          case "${{ steps.plan.outputs.exitcode }}" in
+            0) echo "No drift detected (plan exit 0)." ;;
+            2) echo "::warning::terraform plan shows pending changes — review the plan step output above. Expected until the stacks/aws/README.md terraform-import steps have been run against this state; this workflow never applies." ;;
+          esac
