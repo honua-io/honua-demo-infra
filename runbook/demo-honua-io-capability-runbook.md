@@ -20,6 +20,32 @@ those steps are marked **[OPERATOR]**. No secrets are committed in this repo.
 
 ---
 
+## As-applied update (2026-07-24 — image redeploy, geocoding live, schema 089)
+
+The 2026-07-24 ops round supersedes the two remaining open items in the table below:
+
+- **Demo image redeployed**: Lambda version **36** now serves via the terraform-managed
+  `live` alias, image `nightly-lambda-aot-6b65376-amd64` (trunk `6b65376` — includes
+  server PRs #2993, #3005–#3007, #3013, #3015; image mirrored GHCR → account ECR, tag
+  kept SHA-explicit to avoid date-tag collisions with the pre-merge morning nightly).
+- **Schema at 089**: out-of-band DbUp run per the frozen-version model (flip
+  `HONUA_SKIP_MIGRATIONS` on `$LATEST` only → unqualified invoke → verify "Upgrade
+  successful" → restore env byte-identically, verified). Migrations 083–089 applied.
+- **Geocoding LIVE end-to-end** via Amazon Location + `geo.places` PrivateLink:
+  `findAddressCandidates?singleLine=Kahului Airport, Maui` → 200 in **1.3s**, 5
+  candidates, top `Kahului Airport, Kahului, HI, USA`. (Known cosmetic gap unchanged:
+  `DescribePlaceIndex` has no PrivateLink service, so the provider *health* probe
+  reports unreachable; request routing does not gate on it.)
+- **ImageServer `maui-imagery` metadata**: 200 in ~20.6s on first (cold-cache) call —
+  the #2993 statistics budget (20s) degrading gracefully instead of hanging past the
+  platform timeout. No longer hangs.
+- **PMTiles `maui-basemap`**: bare no-Range GET → fast `413` (by design, #2993);
+  `Range: bytes=0-16383` → `206`. Real PMTiles clients (always ranged) unaffected.
+- `/api/scenes` → 200 (0.7s); `/rest/services`, `/stac/collections`,
+  `/ogc/features/collections` all 200 post-deploy.
+- Redis remains **off** (`enable_redis = false`) until a demo image contains the
+  server-side `aws:secretsmanager:` Redis-ref fix (server#3011, PR #3021).
+
 ## As-verified live state (2026-07-23, server#2948)
 
 A fresh, read-only probe of `https://demo.honua.io` on 2026-07-23 found this runbook's
