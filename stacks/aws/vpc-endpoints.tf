@@ -150,9 +150,18 @@ resource "aws_security_group" "amazon_location_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "geo" {
-  count               = var.enable_amazon_location_geocoding ? 1 : 0
-  vpc_id              = module.honua.vpc_id
-  service_name        = "com.amazonaws.${var.region}.geo"
+  count  = var.enable_amazon_location_geocoding ? 1 : 0
+  vpc_id = module.honua.vpc_id
+  # Amazon Location has no single "geo" PrivateLink service — it publishes one
+  # per capability (geo.places, geo.maps, geo.routes, ...). The Places data
+  # plane (SearchPlaceIndexForText/ForPosition/ForSuggestions — everything the
+  # server's geocode request path calls) rides geo.places; private DNS covers
+  # places.geo.${var.region}.amazonaws.com. Known gap: DescribePlaceIndex (the
+  # provider's explicit health-check API, control plane) has no PrivateLink
+  # service, so the provider health endpoint reports unreachable from this
+  # no-NAT VPC — request routing does not gate on it (verified in
+  # GeocodeCoordinatorService: health is a separate informational API).
+  service_name        = "com.amazonaws.${var.region}.geo.places"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [module.honua.private_subnet_ids[0]] # single AZ to save cost, matches the Secrets Manager endpoint's pattern
   security_group_ids  = [aws_security_group.amazon_location_endpoint[0].id]
