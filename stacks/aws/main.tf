@@ -193,8 +193,10 @@ module "honua" {
   gp_batch_data_bucket_arn     = aws_s3_bucket.demo_data.arn
   gp_batch_data_bucket_enabled = true
 
-  # Demo-specific environment variables
-  additional_env = {
+  # Demo-specific environment variables. The trailing merge folds in the
+  # StudioAiProxy__* block when enable_studio_ai is on (studio-ai.tf) — kept
+  # out of this literal so the Studio AI wiring stays self-contained there.
+  additional_env = merge({
     HONUA_SERVE_API_DOCS          = "true"
     HONUA_SERVE_STAC_DEMO         = "true"
     MultiTenancy__Enabled         = "true"
@@ -246,7 +248,7 @@ module "honua" {
     # in honua-site) — harmless for a public-data demo server.
     Cors__AllowedOrigins__2 = "http://localhost:8123"
     Cors__AllowCredentials  = "false"
-  }
+  }, local.studio_ai_environment)
 
   tags = local.common_tags
 }

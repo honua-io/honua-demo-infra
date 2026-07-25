@@ -111,6 +111,16 @@ output "redis_connection_secret_arn" {
 }
 
 output "bedrock_vpc_endpoint_id" {
-  description = "ID of the bedrock-runtime interface VPC endpoint (null unless enable_bedrock_ai). Live id: vpce-003090af73dc835fe — adopt via terraform import."
-  value       = var.enable_bedrock_ai ? aws_vpc_endpoint.bedrock_runtime[0].id : null
+  description = "ID of the bedrock-runtime interface VPC endpoint (null unless enable_bedrock_ai or enable_studio_ai — the endpoint is shared by both AI add-ons). Live id: vpce-003090af73dc835fe — adopt via terraform import."
+  value       = (var.enable_bedrock_ai || var.enable_studio_ai) ? aws_vpc_endpoint.bedrock_runtime[0].id : null
+}
+
+output "studio_ai_enabled" {
+  description = "Whether the demo Lambda is wired for live Studio AI generation via Amazon Bedrock (StudioAiProxy, honua-server#3000)."
+  value       = var.enable_studio_ai
+}
+
+output "studio_ai_model" {
+  description = "Bedrock model id the Studio AI proxy is configured to use (null unless enable_studio_ai)."
+  value       = var.enable_studio_ai ? var.studio_ai_model : null
 }

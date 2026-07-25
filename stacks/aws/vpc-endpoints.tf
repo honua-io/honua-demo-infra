@@ -56,22 +56,25 @@ resource "aws_vpc_endpoint" "s3" {
 }
 
 # ---------------------------------------------------------------------------
-# Bedrock runtime interface endpoint — only when the AI demo is enabled.
+# Bedrock runtime interface endpoint — when either AI add-on is enabled
+# (enable_bedrock_ai = WorkflowGeneration, enable_studio_ai = Studio AI proxy;
+# see studio-ai.tf). One endpoint serves both: it fronts the regional
+# bedrock-runtime service, not a specific model.
 #
 # This no-NAT VPC has no default route, so the Lambda cannot reach the public
 # Bedrock runtime endpoint. com.amazonaws.<region>.bedrock-runtime as an
 # interface endpoint (with private DNS) makes bedrock-runtime.<region>.
-# amazonaws.com resolve to in-VPC ENIs. bedrock_ai_region must equal var.region
-# (the VPC's region) — an interface endpoint can only front a service in its own
-# region, and the WorkflowGeneration provider invokes Bedrock in that same
-# region. Live id vpce-003090af73dc835fe is imported and fully managed here
-# (2026-07-24: apply reconciled it to single-AZ with the module-created SG; the
-# original hand-made SG was deleted).
+# amazonaws.com resolve to in-VPC ENIs. bedrock_ai_region AND studio_ai_region
+# must equal var.region (the VPC's region) — an interface endpoint can only
+# front a service in its own region, and both AI providers invoke Bedrock in
+# that same region. Live id vpce-003090af73dc835fe is imported and fully
+# managed here (2026-07-24: apply reconciled it to single-AZ with the
+# module-created SG; the original hand-made SG was deleted).
 # ---------------------------------------------------------------------------
 
 resource "aws_security_group" "bedrock_endpoint" {
   #checkov:skip=CKV2_AWS_5: Attached to the bedrock-runtime interface endpoint below.
-  count       = var.enable_bedrock_ai ? 1 : 0
+  count       = (var.enable_bedrock_ai || var.enable_studio_ai) ? 1 : 0
   name_prefix = "${var.name_prefix}-${var.environment}-bedrock-vpce-"
   description = "Allow HTTPS to the Bedrock runtime interface VPC endpoint from inside the VPC"
   vpc_id      = module.honua.vpc_id
@@ -88,8 +91,11 @@ resource "aws_security_group" "bedrock_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "bedrock_runtime" {
-  count               = var.enable_bedrock_ai ? 1 : 0
-  vpc_id              = module.honua.vpc_id
+  count  = (var.enable_bedrock_ai || var.enable_studio_ai) ? 1 : 0
+  vpc_id = module.honua.vpc_id
+  # bedrock_ai_region and studio_ai_region are both required to equal
+  # var.region (see variables.tf), so either would name the same service;
+  # keep the original expression for zero churn on the imported endpoint.
   service_name        = "com.amazonaws.${var.bedrock_ai_region}.bedrock-runtime"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [module.honua.private_subnet_ids[0]] # single AZ to save cost

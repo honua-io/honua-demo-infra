@@ -576,3 +576,77 @@ No action for this issue. `Experimental:Features:SensorThings=false` (default, n
 override) is the intended state; GA promotion is tracked in #2434. Documented here to
 close out this issue's acceptance criterion ("confirmed as intentionally gated ... and
 recorded in the runbook").
+
+---
+
+## Studio AI (Bedrock BYOM) — pilot rehearsal enablement (#9, honua-server#3000)
+
+Live AI generation in Honua Studio on the demo, backed by Amazon Bedrock in the demo's
+own account (`585192672263`) — bring-your-own-model, no third-party API key: the
+server's Studio AI proxy `bedrock` provider authenticates via the Lambda execution
+role, so no secret is staged anywhere for this feature.
+
+**What it enables**: the Studio pilot journey's AI beats (compose assistance /
+generation via `POST /api/v1/studio/ai/chat`, capabilities via
+`GET /api/v1/studio/ai/capabilities`) run against a real model instead of being
+unconfigured (the proxy is `Enabled=false` by compiled default).
+
+**How**: `enable_studio_ai = true` in `stacks/aws/terraform.tfvars`, then the normal
+plan/apply flow (`stacks/aws/README.md` → "Studio AI proxy on Bedrock"). Terraform
+adds the least-privilege `bedrock:InvokeModel(+WithResponseStream)` grant scoped to
+the inference-profile + foundation-model ARNs of the active model **and** the declared
+fallbacks, injects the `StudioAiProxy__*` env block (model
+`us.anthropic.claude-opus-5`, region `us-west-2`), and shares the existing
+`bedrock-runtime` VPC interface endpoint with the WorkflowGeneration add-on. If that
+endpoint (`vpce-003090af73dc835fe`) is not yet in Terraform state, run the two imports
+in "Pro + AI demo drift" first. A deployed image containing honua-server#3000's Studio
+AI proxy is required — check the deployed image's trunk SHA includes that feature
+before expecting the endpoints to exist.
+
+**Model access state (as of 2026-07-24)**:
+
+- `us.anthropic.claude-opus-5` (the default): the account's foundation-model
+  agreement for `anthropic.claude-opus-5` was accepted on 2026-07-24 via
+  `aws bedrock create-foundation-model-agreement` (`agreementAvailability:
+  AVAILABLE`); the cross-region inference profile is ACTIVE. **Runtime entitlement
+  can lag the agreement** — immediately after acceptance, `converse` still returned
+  `AccessDeniedException: anthropic.claude-opus-5 is not available for this account`.
+  Run the Opus smoke below until it succeeds before relying on it in a rehearsal.
+- `us.anthropic.claude-sonnet-4-6` (the fallback, covered by the same IAM grant):
+  verified invocable end-to-end on 2026-07-24, from us-east-1 and from us-west-2.
+  If Opus 5 entitlement has not landed by rehearsal time, set
+  `studio_ai_model = "us.anthropic.claude-sonnet-4-6"` and re-apply — env-only
+  change, no IAM edit needed.
+
+**Validate** (smoke the exact model the proxy will use, in the region it calls):
+
+```bash
+# Primary — Claude Opus 5 (succeeds once entitlement propagation completes)
+aws bedrock-runtime converse --region us-west-2 \
+  --model-id us.anthropic.claude-opus-5 \
+  --messages '[{"role":"user","content":[{"text":"Reply with the single word: ok"}]}]' \
+  --inference-config '{"maxTokens":16}'
+
+# Fallback — Claude Sonnet 4.6 (verified working 2026-07-24)
+aws bedrock-runtime converse --region us-west-2 \
+  --model-id us.anthropic.claude-sonnet-4-6 \
+  --messages '[{"role":"user","content":[{"text":"Reply with the single word: ok"}]}]' \
+  --inference-config '{"maxTokens":16}'
+# -> {"output":{"message":{"content":[{"text":"ok"}]}}, "stopReason":"end_turn", ...}
+```
+
+Then end-to-end after apply: `GET https://demo.honua.io/api/v1/studio/ai/capabilities`
+should list the `bedrock` provider, and a Studio chat turn should stream a completion.
+
+**[OPERATOR] Enabling other Anthropic models later** (e.g. Opus 4.8): same shape as
+the Opus 5 step above — accept the model's foundation-model agreement (Bedrock console
+→ **Model access**, or `aws bedrock create-foundation-model-agreement`; Anthropic
+models require the EULA, and the grant is account+region-scoped, so cover each `us.`
+member region: us-east-1, us-east-2, us-west-2), wait out entitlement propagation,
+smoke with `converse`, then either add the profile id to `studio_ai_fallback_models`
+or set it as `studio_ai_model` and re-apply — the IAM grant is derived from those two
+variables and re-scopes automatically.
+
+**Rollback**: `enable_studio_ai = false` + apply — removes the env block and the IAM
+inline policy; the shared Bedrock VPC endpoint remains while `enable_bedrock_ai` is
+on. Additive, no coupling to seeds, license, or geocoding.
