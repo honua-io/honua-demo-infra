@@ -18,10 +18,11 @@
 #   2. StudioAiProxy__* environment — the exact configuration keys the server
 #      binds (StudioAiProxyConfiguration, section "StudioAiProxy") — merged
 #      into the module's additional_env in main.tf.
-#   3. Network path: the bedrock-runtime interface VPC endpoint in
-#      vpc-endpoints.tf is shared with enable_bedrock_ai (its count gates on
-#      either toggle) — this no-NAT VPC has no other route to Bedrock, which
-#      is also why studio_ai_region must equal var.region (see variables.tf).
+#   3. Network path: Bedrock is reached through the fck-nat egress
+#      (nat-instance.tf) — the bedrock-runtime interface endpoint this
+#      originally shared with enable_bedrock_ai was removed in the 2026-07-24
+#      cost round. studio_ai_region stays us-west-2 (= var.region) to keep
+#      the invocation local to the demo's region.
 ###############################################################################
 
 data "aws_caller_identity" "current" {}

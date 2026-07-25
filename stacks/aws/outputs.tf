@@ -110,9 +110,14 @@ output "redis_connection_secret_arn" {
   sensitive   = true
 }
 
-output "bedrock_vpc_endpoint_id" {
-  description = "ID of the bedrock-runtime interface VPC endpoint (null unless enable_bedrock_ai or enable_studio_ai — the endpoint is shared by both AI add-ons). Live id: vpce-003090af73dc835fe — adopt via terraform import."
-  value       = (var.enable_bedrock_ai || var.enable_studio_ai) ? aws_vpc_endpoint.bedrock_runtime[0].id : null
+output "nat_instance_id" {
+  description = "Instance ID of the fck-nat NAT instance providing private-subnet egress (replace with `terraform apply -replace=aws_instance.nat` if it dies)."
+  value       = aws_instance.nat.id
+}
+
+output "nat_public_ip" {
+  description = "Elastic IP of the NAT instance — the demo's outbound source IP (useful for third-party allowlists)."
+  value       = aws_eip.nat.public_ip
 }
 
 output "studio_ai_enabled" {

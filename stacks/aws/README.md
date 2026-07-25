@@ -52,8 +52,10 @@ a data-isolation feature for production deployments.
 | ACM certificate | Auto-provisioned and DNS-validated for `demo.honua.io` |
 | Route53 A/AAAA records | `demo.honua.io` → CloudFront distribution (alias; → API Gateway custom domain and no AAAA while `route_demo_dns_to_cloudfront=false`) |
 | API Gateway custom domain | `demo.honua.io`, TLS 1.2, regional endpoint |
-| VPC | New VPC, **no NAT gateway** — VPC endpoints instead (see below) |
-| VPC endpoints | Secrets Manager interface endpoint (single-AZ) + free S3 gateway endpoint + bedrock-runtime interface endpoint (when `enable_bedrock_ai` or `enable_studio_ai`) + geo interface endpoint (only when `enable_amazon_location_geocoding`) |
+| VPC | New VPC, **no managed NAT gateway** — a fck-nat t4g.nano instance provides egress (see below) |
+| NAT | fck-nat instance (`nat-instance.tf`): t4g.nano + EIP in one public subnet, default route for the private subnets (~$7.5/mo all-in; replaced ~$110/mo of interface-endpoint ENIs, 2026-07-24) |
+| VPC endpoints | Free S3 gateway endpoint only (keeps tile/import S3 bytes off the NAT). All interface endpoints removed — see "fck-nat NAT instance" below |
+| Budget | `aws_budgets_budget` monthly cost alarm (`cost-controls.tf`): alerts at 100%/200% of $150, actual + forecasted, to the ops contact |
 | PostGIS bootstrap | One-shot in-VPC Lambda enables `postgis` + `postgis_raster` during apply |
 | CloudWatch Logs | 90-day retention for Lambda and API Gateway |
 | Secrets Manager | DB connection string, admin password, master key |
@@ -137,22 +139,35 @@ per-request/per-GB only (~$0.085/GB + $0.0075–0.01 per 10k HTTPS requests in
 PriceClass_100, well under a dollar a month at current volumes), and cached
 tile hits *reduce* Lambda/API Gateway/RDS load.
 
-### No NAT gateway — VPC endpoints instead
+### fck-nat NAT instance — interface endpoints removed (2026-07-24)
 
-A NAT gateway costs ~$33/mo before data charges, and the public demo has no
-OIDC and no outbound integrations, so the Lambda needs **no general internet
-egress**. What it does need at runtime is Secrets Manager (the
-`aws:secretsmanager:` environment references are resolved on cold start), so
-the config provisions:
+The original no-NAT design reached every AWS service through interface VPC
+endpoints — which quietly became the dominant fixed cost: the module's
+deploy-control endpoints (lambda/sts/monitoring/logs across 3 AZs, ~$88/mo)
+plus the demo's secretsmanager/bedrock-runtime/geo.places single-AZ
+endpoints (~$22/mo). A single **fck-nat** instance (`nat-instance.tf`,
+https://fck-nat.dev — purpose-built minimal NAT AMI) replaces all of them:
 
-- **Secrets Manager interface endpoint** (`vpc-endpoints.tf`) — single-AZ on
-  purpose (~$7.30/mo for one ENI); cross-AZ hops from the other private
-  subnets are fine at demo traffic levels.
-- **S3 gateway endpoint** — free, attached to the private route tables, ready
-  for future COG (Cloud-Optimized GeoTIFF) serving from S3.
+- **t4g.nano + EIP** in one public subnet, `source_dest_check` off, default
+  route (`0.0.0.0/0`) from the private route tables through its ENI.
+  ~$7.5/mo all-in (~$3.1 instance + ~$0.7 EBS + ~$3.7 public IPv4).
+- **All interface endpoints removed**: the demo's in `vpc-endpoints.tf`
+  (only the free S3 gateway endpoint remains — it also keeps PMTiles/import
+  S3 bytes off the NAT) and the module's via
+  `enable_deploy_control_vpc_endpoints = false` in `main.tf`.
+- **Bonus**: the VPC now has true internet egress, so previously-unreachable
+  paths (Nominatim, OIDC, webhooks) are network-possible again.
+- **Accepted SPOF**: one instance, one AZ. If it dies, private-subnet egress
+  is down (the public CloudFront → API Gateway → Lambda invoke path stays
+  up, but Secrets Manager / Bedrock / Amazon Location / deploy-control calls
+  fail) until `terraform apply -replace=aws_instance.nat` (~2 min).
+  Acceptable for a demo; a production stack would run fck-nat in an ASG or a
+  managed NAT gateway per AZ. See the runbook ("Cost & network
+  architecture") for recreate/resize steps.
 
-If the demo ever needs general egress again (e.g. OIDC against an external
-IdP), set `enable_nat_gateway = true` in `main.tf`.
+If the demo ever outgrows the instance, bump `nat_instance_type`, or set
+`enable_nat_gateway = true` in `main.tf` (managed NAT, ~$33/mo + data) and
+remove `nat-instance.tf`.
 
 ### Geocoding on Amazon Location Service (honua-server#2948)
 
@@ -185,20 +200,19 @@ Setting `enable_amazon_location_geocoding = true`:
   why: Nominatim's own default is `Enabled=true`, and failover would
   otherwise retry it — and hang another ~15.8s — on any Amazon Location
   error).
-- Provisions a **`com.amazonaws.<region>.geo` VPC interface endpoint**
-  (`vpc-endpoints.tf`), the same no-NAT pattern as the Secrets Manager and
-  Bedrock endpoints above, single-AZ.
+- Amazon Location is reached through the fck-nat egress (`nat-instance.tf`);
+  the dedicated `geo.places` interface endpoint this originally provisioned
+  was removed in the 2026-07-24 cost round.
 
 **Data source note**: results come from Esri (or HERE if
 `amazon_location_data_source = "Here"`) — not OpenStreetMap. This is a full
 provider swap: coverage, address formatting, and attribution differ from
 Nominatim.
 
-**Cost**: the `geo` interface endpoint costs the same as the Secrets Manager
-endpoint above (single ENI, ~$7–8/month + a small per-GB processed charge).
-The place index itself has no idle charge — cost is per API call under Amazon
-Location's Esri/HERE pricing tier, low single dollars/month at demo traffic
-volumes. No NAT gateway, no new compute.
+**Cost**: the place index has no idle charge — cost is per API call under
+Amazon Location's Esri/HERE pricing tier, low single dollars/month at demo
+traffic volumes. No dedicated endpoint or compute (traffic rides the shared
+fck-nat instance).
 
 **This has not been applied.** See the root repo's demo runbook
 (`honua-server` `docs/internal/demo/demo-honua-io-capability-runbook.md`) for
@@ -240,11 +254,10 @@ Setting `enable_studio_ai = true` (`studio-ai.tf`):
   `StudioAiProxy__Providers__bedrock__Kind=bedrock`,
   `StudioAiProxy__Providers__bedrock__Model=<studio_ai_model>`,
   `StudioAiProxy__Providers__bedrock__Region=<studio_ai_region>`.
-- Ensures the **bedrock-runtime interface VPC endpoint** exists — shared with
-  `enable_bedrock_ai` (`vpc-endpoints.tf` gates it on either toggle). If the
-  live endpoint `vpce-003090af73dc835fe` has not yet been imported (see the
-  drift section below), run those two imports before an apply with this
-  toggle on, or Terraform will try to create a duplicate.
+- Network path: Bedrock is reached through the fck-nat egress
+  (`nat-instance.tf`) — no dedicated endpoint. (The bedrock-runtime
+  interface endpoint this originally shared with `enable_bedrock_ai` was
+  removed in the 2026-07-24 cost round.)
 
 **Model**: defaults to the cross-region Claude Opus 5 inference profile
 `us.anthropic.claude-opus-5` (profile ACTIVE in this account; the
@@ -258,9 +271,8 @@ actually calls) — so flipping `studio_ai_model` to it is env-only.
 Validation smoke commands live in the repo runbook
 (`runbook/demo-honua-io-capability-runbook.md` → "Studio AI (Bedrock BYOM)").
 
-**Region**: `studio_ai_region` must equal `region` (the VPC's region) — the
-no-NAT VPC reaches Bedrock only through the interface endpoint, which can
-only front its own region's service.
+**Region**: keep `studio_ai_region` equal to `region` (the VPC's region) so
+invocations stay region-local through the NAT egress.
 
 ### Pro + AI demo drift (Pro license, Bedrock AI, Redis)
 
@@ -289,7 +301,7 @@ workstation and no `terraform import` step**.
 | Toggle | What it adds | Live values (from the deploy record) |
 |---|---|---|
 | `enable_pro_license` | `secretsmanager:GetSecretValue` for the Lambda role on the **externally-managed** license secret; injects `Licensing__LicenseContentSecretRef` + `Licensing__TrustedKeys__honuademo2026q2`. Creates **no** secret and **no** secret version. | secret `honua-demo-demo/license-pro` (ARN default in `variables.tf`); keyId `honuademo2026q2` |
-| `enable_bedrock_ai` | least-privilege `bedrock:InvokeModel` (+ `…WithResponseStream`) on the Lambda role scoped to the Claude model's inference-profile + foundation-model ARNs; `WorkflowGeneration__*` env (provider=bedrock, region=us-west-2); the `bedrock-runtime` interface VPC endpoint this no-NAT VPC needs | model `us.anthropic.claude-sonnet-4-5-20250929-v1:0`; region `us-west-2`; endpoint `vpce-003090af73dc835fe`, SG `sg-0ac55474b410c5d34` |
+| `enable_bedrock_ai` | least-privilege `bedrock:InvokeModel` (+ `…WithResponseStream`) on the Lambda role scoped to the Claude model's inference-profile + foundation-model ARNs; `WorkflowGeneration__*` env (provider=bedrock, region=us-west-2). Bedrock rides the fck-nat egress — the dedicated `bedrock-runtime` endpoint (live `vpce-003090af73dc835fe`, SG `sg-0ac55474b410c5d34`) was removed from config in the 2026-07-24 cost round; if it is in state the next apply destroys it, and if it is NOT in state it must be deleted by hand or it keeps billing (~$7.5/mo) as an orphan | model `us.anthropic.claude-sonnet-4-5-20250929-v1:0`; region `us-west-2` |
 | `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | cluster `honua-demo-redis`, SG `sg-0454e3341c5de3068` |
 
 #### The CIDR-egress gotcha (important)
@@ -326,9 +338,13 @@ honua-demo) with the toggles set in `terraform.tfvars`:
 # GetSecretValue on that ARN. Nothing to import; nothing to keep in sync.
 # See "Pro licensing (adopt-by-ARN)" below.
 
-# --- Bedrock runtime VPC endpoint + its SG (item 3) ------------------------
-terraform import 'aws_vpc_endpoint.bedrock_runtime[0]'   vpce-003090af73dc835fe
-terraform import 'aws_security_group.bedrock_endpoint[0]' sg-0ac55474b410c5d34
+# --- Bedrock runtime VPC endpoint + its SG — OBSOLETE (2026-07-24) ---------
+# The endpoint was removed from config in the fck-nat cost round; there is no
+# longer a resource address to import to. If the live endpoint
+# vpce-003090af73dc835fe / SG sg-0ac55474b410c5d34 are still in state, the
+# next apply destroys them (intended); if they were never imported, delete
+# them by hand (aws ec2 delete-vpc-endpoints / delete-security-group) or they
+# keep billing as orphans.
 
 # --- Redis (item 4) — replication group, subnet group, SG, secret ----------
 terraform import 'module.honua.aws_elasticache_replication_group.redis[0]' honua-demo-redis
@@ -408,8 +424,9 @@ aws logs filter-log-events --region us-west-2 \
 
 ### Database bootstrap and migrations
 
-The RDS instance is in private subnets with no NAT/VPN, so nothing outside
-the VPC can reach it — including the module's `enable_postgis` local-exec
+The RDS instance is in private subnets with no inbound path (the fck-nat
+instance is egress-only — not a bastion — and there is no VPN), so nothing
+outside the VPC can reach it — including the module's `enable_postgis` local-exec
 (psql) path, which this config disables. Instead:
 
 1. **PostGIS** — a one-shot Python Lambda inside the VPC
@@ -599,36 +616,35 @@ curl -f https://demo.honua.io/healthz/ready
 terraform output postgis_bootstrap_result
 ```
 
-## Estimated monthly cost (us-west-2, June 2026)
+## Estimated monthly cost (us-west-2, July 2026 — post fck-nat cost round)
 
 | Component | Estimate |
 |---|---|
-| RDS db.t4g.micro, single-AZ | ~$12 |
+| RDS db.t4g.micro, single-AZ (downsized back from small 2026-07-24, paired with reserved concurrency 25) | ~$12 |
 | RDS storage, 20 GB gp3 | ~$2.50 |
-| Secrets Manager interface endpoint (single-AZ) | ~$7.50 |
+| fck-nat instance (t4g.nano + gp3 root + public IPv4) | ~$7.50 |
 | S3 gateway endpoint | $0 (free) |
-| NAT gateway | $0 (**removed** — was ~$33/mo + data) |
+| Interface VPC endpoints | $0 (**all removed** 2026-07-24 — was ~$110/mo: 12 module deploy-control ENIs + 3 demo single-AZ ENIs) |
 | Lambda (requests + duration, demo traffic) | ~$0–1 |
 | API Gateway HTTP API (requests) | ~$0–1 |
 | CloudFront (requests + data out, demo traffic) | ~$0–1 (no base fee) |
 | CloudWatch Logs (90-day, low volume) | ~$1 |
 | Secrets Manager secrets, Route53 zone | ~$1.50 |
-| **Total** | **~$23 / month** |
+| AWS Budget | $0 (first two budgets free) |
+| **Total** | **~$26 / month** stock; **~$35–40 / month** with the live add-ons (Pro license $1.50, Bedrock/Studio AI per-token, Amazon Location per-call, ElastiCache ~$9 if/when Redis is enabled) |
 
 This total is the **stock** apply (`enable_redis`, `enable_pro_license`,
-`enable_bedrock_ai`, and `enable_amazon_location_geocoding` all default
-`false`); it does not include the "Pro + AI demo drift" or geocoding add-ons
-documented above, which the live demo runs on top of this base. The
-`enable_amazon_location_geocoding` add-on's incremental cost is the `geo`
-interface endpoint (~$7–8/mo, same single-AZ pricing as the Secrets Manager
-endpoint) plus low-single-dollar per-request Amazon Location charges at demo
-traffic volumes — no NAT gateway, no new compute.
+`enable_bedrock_ai`, `enable_studio_ai`, and
+`enable_amazon_location_geocoding` all default `false`). Before the
+2026-07-24 cost round the live environment's fixed spend was ~$140/mo — the
+delta is almost entirely interface-endpoint ENI-hours (~$110) plus the RDS
+small→micro downsize (~$12).
 
-The RDS instance and the Secrets Manager endpoint dominate cost. Lambda + API
+The RDS instance and the NAT instance now dominate fixed cost. Lambda + API
 Gateway are effectively free at demo traffic volumes. Compare to the ECS/ALB
 equivalent (~$120–160/mo) — the main savings are eliminating the always-on
-Fargate task, the ALB (~$20/mo), and the NAT gateway (~$33/mo) that the
-VPC endpoints replace.
+Fargate task, the ALB (~$20/mo), and the managed NAT gateway (~$33/mo) that
+the fck-nat instance replaces.
 
 ## Post-deploy: seeding demo data
 

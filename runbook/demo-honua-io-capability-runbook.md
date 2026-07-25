@@ -595,12 +595,10 @@ unconfigured (the proxy is `Enabled=false` by compiled default).
 plan/apply flow (`stacks/aws/README.md` → "Studio AI proxy on Bedrock"). Terraform
 adds the least-privilege `bedrock:InvokeModel(+WithResponseStream)` grant scoped to
 the inference-profile + foundation-model ARNs of the active model **and** the declared
-fallbacks, injects the `StudioAiProxy__*` env block (model
-`us.anthropic.claude-opus-5`, region `us-west-2`), and shares the existing
-`bedrock-runtime` VPC interface endpoint with the WorkflowGeneration add-on. If that
-endpoint (`vpce-003090af73dc835fe`) is not yet in Terraform state, run the two imports
-in "Pro + AI demo drift" first. A deployed image containing honua-server#3000's Studio
-AI proxy is required — check the deployed image's trunk SHA includes that feature
+fallbacks, and injects the `StudioAiProxy__*` env block (model
+`us.anthropic.claude-opus-5`, region `us-west-2`). Bedrock is reached through the
+fck-nat egress (see "Cost & network architecture" below) — no dedicated VPC endpoint.
+A deployed image containing honua-server#3000's Studio AI proxy is required — check the deployed image's trunk SHA includes that feature
 before expecting the endpoints to exist.
 
 **Model access state (as of 2026-07-24)**:
@@ -650,3 +648,59 @@ variables and re-scopes automatically.
 **Rollback**: `enable_studio_ai = false` + apply — removes the env block and the IAM
 inline policy; the shared Bedrock VPC endpoint remains while `enable_bedrock_ai` is
 on. Additive, no coupling to seeds, license, or geocoding.
+
+
+---
+
+## Cost & network architecture (2026-07-24 cost round)
+
+Fixed spend was cut from ~$140/mo to ~$35–40/mo. Two changes, both in
+`stacks/aws` (see `stacks/aws/README.md` → "fck-nat NAT instance" and "Estimated
+monthly cost" for the full tables):
+
+1. **fck-nat NAT instance replaces ALL interface VPC endpoints.** The no-NAT design
+   reached AWS services through interface endpoints — 12 module deploy-control ENIs
+   (lambda/sts/monitoring/logs, ~$88/mo) + 3 demo single-AZ ENIs
+   (secretsmanager/bedrock-runtime/geo.places, ~$22/mo). A single fck-nat t4g.nano +
+   EIP in one public subnet (`nat-instance.tf`, ~$7.5/mo all-in) now provides the
+   private subnets' default route; only the free S3 gateway endpoint remains (it also
+   keeps tile/import S3 bytes off the NAT). Side effect: the VPC has true internet
+   egress for the first time — Nominatim/OIDC/webhooks are network-possible again.
+2. **RDS db.t4g.small → db.t4g.micro (~$23 → ~$12/mo), PAIRED with Lambda reserved
+   concurrency 50 → 25.** The 2026-06 53300 connection-exhaustion outage that forced
+   the small upgrade was a slots problem (50 envs × pool 4 = 200 > micro's ~112
+   slots); 25 × 4 = 100 fits micro. These two settings move together — never raise
+   concurrency alone on micro.
+
+**Redis / ElastiCache stays as-is**: `enable_redis` remains `false` in Terraform
+(nothing applied to remove) — honua-server hard-requires a durable feature-change
+event store in Production, and the toggle stays available for when the server-side
+`aws:secretsmanager:` Redis-ref fix (server#3011 / PR #3021) ships in a deployed
+image. Do not delete the toggle to save the ~$9/mo — that breaks `/healthz/ready`
+the day Redis is wired.
+
+**Budget tripwire**: `aws_budgets_budget` (`cost-controls.tf`) — monthly $150 limit,
+email alerts to `mike@honua.io` at 100% and 200% (i.e. $150 and $300), both actual
+and forecasted spend.
+
+### NAT instance: SPOF, recovery, resize [OPERATOR]
+
+- **Accepted SPOF** (demo posture): one instance in one AZ. If it (or its AZ) dies,
+  private-subnet egress is down — the public site keeps serving (CloudFront → API
+  Gateway → Lambda invoke is not routed through the NAT, and CloudFront keeps
+  serving cached tiles), but the Lambda loses Secrets Manager (cold starts fail),
+  Bedrock, Amazon Location, and deploy-control until the NAT is back.
+- **Recreate** (~2 min): `terraform apply -replace=aws_instance.nat` from
+  `stacks/aws`. The EIP and the private-route entries re-associate automatically.
+- **Resize**: set `nat_instance_type` (t4g.nano → t4g.micro/small) in tfvars and
+  apply. t4g.nano sustains ~5 Gbps burst — far beyond demo traffic; resize only on
+  measured saturation (CloudWatch `NetworkOut` on the instance).
+- **AMI updates**: the config pins the AMI via `ignore_changes` so a new fck-nat
+  release never replaces the live NAT on an unrelated apply. To take an update
+  deliberately: `terraform apply -replace=aws_instance.nat` (picks up the latest
+  `fck-nat-al2023-*-arm64` AMI at that moment).
+- **Orphan check after the migration apply**: if any of the old interface endpoints
+  were never imported into state (see "Pro + AI demo drift"), Terraform cannot
+  destroy them — verify with `aws ec2 describe-vpc-endpoints
+  --filters Name=vpc-endpoint-type,Values=Interface` and delete leftovers by hand,
+  or they keep billing ~$7.5/mo each.
