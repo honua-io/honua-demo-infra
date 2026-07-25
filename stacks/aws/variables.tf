@@ -34,6 +34,12 @@ variable "db_password" {
   default     = null
 }
 
+variable "db_instance_class" {
+  description = "RDS instance class. db.t4g.micro (default, ~$12/mo) fits demo traffic ONLY because lambda_reserved_concurrent_executions is sized to micro's ~112 connection-slot ceiling (25 x Maximum Pool Size 4 = 100 — see main.tf). The 2026-06 53300 connection-exhaustion outages that forced db.t4g.small happened at reserved concurrency 50 (200 potential connections). If demo bursts throttle too aggressively at 25, flip this back to db.t4g.small AND restore reserved concurrency to 50 together — never raise concurrency alone on micro."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
 variable "route53_zone_id" {
   description = "Route53 hosted zone ID for demo.honua.io. Required — see DNS prerequisites in README."
   type        = string
@@ -159,12 +165,12 @@ variable "pro_license_trusted_public_key" {
 # ---------------------------------------------------------------------------
 # Bedrock AI — WorkflowGeneration via Amazon Bedrock (us-west-2).
 # Off by default. When enabled, grants the Lambda role least-privilege
-# bedrock:InvokeModel for the configured Claude model and provisions the
-# bedrock-runtime VPC interface endpoint this no-NAT VPC needs (vpc-endpoints.tf).
+# bedrock:InvokeModel for the configured Claude model. Bedrock is reached via
+# the fck-nat egress (nat-instance.tf).
 # ---------------------------------------------------------------------------
 
 variable "enable_bedrock_ai" {
-  description = "Grant the demo Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream for the configured Claude model, route the AI studio (WorkflowGeneration) to Amazon Bedrock, and provision the bedrock-runtime VPC interface endpoint (this no-NAT VPC has no other egress path to Bedrock). Off by default."
+  description = "Grant the demo Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream for the configured Claude model and route the AI studio (WorkflowGeneration) to Amazon Bedrock, reached via the fck-nat egress (nat-instance.tf; the bedrock-runtime interface endpoint was removed in the 2026-07 cost round). Off by default."
   type        = bool
   default     = false
 }
@@ -176,7 +182,7 @@ variable "bedrock_ai_model" {
 }
 
 variable "bedrock_ai_region" {
-  description = "AWS region the server invokes Bedrock in (WorkflowGeneration provider Region) and where the bedrock-runtime VPC interface endpoint is created. Defaults to us-west-2 — keep it equal to var.region (the demo VPC's region) so the interface endpoint resolves."
+  description = "AWS region the server invokes Bedrock in (WorkflowGeneration provider Region). Defaults to us-west-2 — keep it equal to var.region (the demo VPC's region) so invocations stay region-local through the NAT egress."
   type        = string
   default     = "us-west-2"
 }
@@ -185,13 +191,13 @@ variable "bedrock_ai_region" {
 # Studio AI proxy — live Honua Studio AI generation via Amazon Bedrock
 # (honua-server#3000; demo enablement tracked in #9). Off by default.
 # Distinct from enable_bedrock_ai (WorkflowGeneration): both reach the
-# Bedrock runtime through the same VPC interface endpoint (vpc-endpoints.tf
-# gates it on either toggle), but each has its own toggle, model, and IAM
-# grant so they can be tuned and rolled independently.
+# Bedrock runtime via the fck-nat egress (nat-instance.tf), but each has its
+# own toggle, model, and IAM grant so they can be tuned and rolled
+# independently.
 # ---------------------------------------------------------------------------
 
 variable "enable_studio_ai" {
-  description = "Wire the demo Lambda for live Studio AI generation via Amazon Bedrock: grant the Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream scoped to studio_ai_model's inference-profile + foundation-model ARNs, inject the StudioAiProxy__* env (kind=bedrock), and ensure the bedrock-runtime VPC interface endpoint exists (shared with enable_bedrock_ai — this no-NAT VPC has no other path to Bedrock). Off by default."
+  description = "Wire the demo Lambda for live Studio AI generation via Amazon Bedrock: grant the Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream scoped to studio_ai_model's (and studio_ai_fallback_models') inference-profile + foundation-model ARNs and inject the StudioAiProxy__* env (kind=bedrock). Bedrock is reached via the fck-nat egress (nat-instance.tf). Off by default."
   type        = bool
   default     = false
 }
@@ -209,23 +215,23 @@ variable "studio_ai_fallback_models" {
 }
 
 variable "studio_ai_region" {
-  description = "AWS region the server invokes Bedrock in for the Studio AI proxy (StudioAiProxy provider Region). Must equal var.region (the demo VPC's region): the no-NAT VPC reaches Bedrock only through the bedrock-runtime interface endpoint, and an interface endpoint can only front a service in its own region. Defaults to us-west-2, matching bedrock_ai_region."
+  description = "AWS region the server invokes Bedrock in for the Studio AI proxy (StudioAiProxy provider Region). Defaults to us-west-2, matching bedrock_ai_region — keep it equal to var.region so invocations stay region-local through the NAT egress."
   type        = string
   default     = "us-west-2"
 }
 
 # ---------------------------------------------------------------------------
-# Geocoding on Amazon Location Service — replaces the Nominatim provider,
-# which this no-NAT VPC cannot reach (honua-server#2948: every geocode call
-# failed after a consistent ~15.8s outbound-connect timeout — a categorical
-# network-egress problem, not a cold-start one). Off by default. When
-# enabled, provisions an Amazon Location place index + Lambda IAM grant (via
-# the aws-serverless module) and the `com.amazonaws.<region>.geo` VPC
-# interface endpoint this no-NAT VPC needs to reach it (vpc-endpoints.tf).
+# Geocoding on Amazon Location Service — replaced the Nominatim provider,
+# which the then-egress-less VPC could not reach (honua-server#2948: every
+# geocode call failed after a consistent ~15.8s outbound-connect timeout).
+# Off by default. When enabled, provisions an Amazon Location place index +
+# Lambda IAM grant (via the aws-serverless module); the service is reached
+# via the fck-nat egress (nat-instance.tf; the geo.places interface endpoint
+# was removed in the 2026-07 cost round).
 # ---------------------------------------------------------------------------
 
 variable "enable_amazon_location_geocoding" {
-  description = "Provision an Amazon Location place index, grant the Lambda role geo:Search*/DescribePlaceIndex on it, route Geocoding__DefaultProvider to amazon-location (Nominatim disabled), and provision the geo VPC interface endpoint this no-NAT VPC needs to reach Amazon Location. Off by default."
+  description = "Provision an Amazon Location place index, grant the Lambda role geo:Search*/DescribePlaceIndex on it, and route Geocoding__DefaultProvider to amazon-location (Nominatim disabled). Amazon Location is reached via the fck-nat egress (nat-instance.tf). Off by default."
   type        = bool
   default     = false
 }
@@ -240,4 +246,29 @@ variable "amazon_location_data_source" {
   description = "Upstream data provider for the Amazon Location place index: Esri or Here (not OpenStreetMap/Nominatim — this is a full provider swap with different coverage/attribution)."
   type        = string
   default     = "Esri"
+}
+
+# ---------------------------------------------------------------------------
+# Cost controls — fck-nat NAT instance (nat-instance.tf) and the monthly AWS
+# Budget alarm (cost-controls.tf). The NAT instance replaced the interface
+# VPC endpoints (~$110/mo of ENI-hours) in 2026-07; see nat-instance.tf for
+# the architecture and the accepted single-AZ SPOF.
+# ---------------------------------------------------------------------------
+
+variable "nat_instance_type" {
+  description = "Instance type for the fck-nat NAT instance. t4g.nano (~$3.1/mo) sustains far more throughput than demo traffic needs; bump to t4g.micro/small only if NAT becomes a measured bottleneck."
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "monthly_budget_amount" {
+  description = "Monthly AWS Budget limit in USD. Alerts fire at 100% (actual + forecasted) and again at 200% (actual + forecasted) of this amount."
+  type        = number
+  default     = 150
+}
+
+variable "budget_notification_email" {
+  description = "Email address subscribed to the monthly budget notifications. Defaults to the demo ops contact."
+  type        = string
+  default     = "mike@honua.io"
 }

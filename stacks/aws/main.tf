@@ -1,12 +1,12 @@
 ###############################################################################
 # Phase-A Honua Demo Environment — demo.honua.io
 #
-# Lambda container (AOT) + API Gateway HTTP API + RDS db.t4g.small + PostGIS.
+# Lambda container (AOT) + API Gateway HTTP API + RDS db.t4g.micro + PostGIS.
 # Optional Pro+AI demo add-ons, all gated off by default (see README → "Pro +
 # AI demo drift"): a Secrets-Manager-delivered Pro license (enable_pro_license),
 # a least-privilege Bedrock InvokeModel grant + WorkflowGeneration env for the
-# AI studio (enable_bedrock_ai, plus the Bedrock VPC endpoint in vpc-endpoints.tf
-# this no-NAT VPC requires), and an in-VPC ElastiCache Redis (enable_redis) for
+# AI studio (enable_bedrock_ai; Bedrock is reached via the fck-nat egress in
+# nat-instance.tf), and an in-VPC ElastiCache Redis (enable_redis) for
 # the durable feature-change event store /healthz/ready needs in Production.
 # No WAF: API Gateway HTTP API does not support WAFv2 association; rate-limiting
 # is handled via API Gateway throttle settings (see throttle variables below).
@@ -22,8 +22,8 @@ locals {
   }, var.tags)
 
   # Declared here (rather than relying on the module default) because it is
-  # also used for the VPC-endpoint security group and the in-VPC PostGIS
-  # bootstrap (see vpc-endpoints.tf / postgis-bootstrap.tf).
+  # also used for the NAT-instance security group and the in-VPC PostGIS
+  # bootstrap (see nat-instance.tf / postgis-bootstrap.tf).
   vpc_cidr = "10.0.0.0/16"
 }
 
@@ -55,13 +55,19 @@ module "honua" {
   # No provisioned concurrency: cold starts are acceptable for a demo.
   # The AOT image keeps cold start latency short (~200–400 ms typical).
   #
-  # Reserved concurrency 50 (2026-06-12, LIVE): was 20, set out-of-band in
-  # the console as an emergency brake when browser tile bursts exhausted the
-  # micro instance's connection slots (53300) — encoded here so applies stop
-  # reverting it. 50 environments x Maximum Pool Size 4 = 200 direct
-  # connections, under db.t4g.small's ~225-slot ceiling; bursts beyond 50
-  # throttle at Lambda instead of 500ing every in-flight request.
-  lambda_reserved_concurrent_executions = 50
+  # Reserved concurrency 25 (2026-07-24, cost round): paired with the RDS
+  # downsize back to db.t4g.micro below. History: 20 -> 50 on 2026-06-12 when
+  # tile bursts exhausted micro's ~112 connection slots (53300) and the DB
+  # was upsized to small (~225 slots, 50 x Maximum Pool Size 4 = 200). Micro
+  # at concurrency 50 would recreate that outage, so the two move TOGETHER:
+  # 25 environments x Maximum Pool Size 4 = 100 direct connections, under
+  # micro's ~112-slot ceiling; bursts beyond 25 throttle at Lambda (429s on
+  # the burst edge) instead of 500ing every in-flight request. CloudFront's
+  # 24h tile caching (min_ttl, cloudfront.tf) is what makes 25 workable —
+  # steady-state demo traffic rarely fans past it. If throttling bites during
+  # rehearsals, flip db_instance_class back to db.t4g.small AND restore 50
+  # here in the same change.
+  lambda_reserved_concurrent_executions = 25
 
   # 60 s bounds abandoned work: API Gateway gives up at 30 s, but the Lambda
   # keeps executing until this timeout. During seeding this was raised to 600
@@ -74,12 +80,15 @@ module "honua" {
   # Secrets
   admin_password = var.honua_admin_password
 
-  # Database — db.t4g.small + PostGIS (upgraded from micro 2026-06-12 with
-  # founder approval, APPLIED LIVE: tile bursts exhausted micro's ~112
-  # connection slots — 4,400+ Npgsql 53300 errors in 48h while CPU never
-  # passed 48%; small doubles memory and the max_connections formula
-  # (~225 slots) for roughly +$12/mo).
-  db_instance_class    = "db.t4g.small"
+  # Database — PostGIS on db.t4g.micro by default (2026-07-24 cost round,
+  # downsized back from small). The 2026-06-12 micro->small upgrade was
+  # driven by connection-slot exhaustion at reserved concurrency 50 (4,400+
+  # Npgsql 53300 errors in 48h while CPU never passed 48% — a slots problem,
+  # not a CPU one); the downsize is only safe because reserved concurrency
+  # drops to 25 in the same change (see the comment above) so worst-case
+  # direct connections (100) stay under micro's ~112-slot ceiling. Flip
+  # db_instance_class + concurrency back together if bursts throttle.
+  db_instance_class    = var.db_instance_class
   db_allocated_storage = 20
   db_engine_version    = "15"
   db_password          = var.db_password
@@ -95,9 +104,11 @@ module "honua" {
   db_connection_string_options = "Maximum Pool Size=4;Connection Idle Lifetime=60;Connection Pruning Interval=30"
 
   # PostGIS + PostGIS Raster are required by Honua, but the module's
-  # enable_postgis local-exec needs psql plus a network path to the private
-  # RDS instance — neither exists here (no NAT, no VPN). The extensions are
-  # installed by the in-VPC bootstrap Lambda instead (postgis-bootstrap.tf).
+  # enable_postgis local-exec needs psql plus an INBOUND network path from the
+  # operator workstation to the private RDS instance — which doesn't exist
+  # (the fck-nat instance is egress for the VPC, not a bastion). The
+  # extensions are installed by the in-VPC bootstrap Lambda instead
+  # (postgis-bootstrap.tf).
   enable_postgis = false
 
   # Run Honua's own schema migrations on startup for the initial deploy.
@@ -154,26 +165,38 @@ module "honua" {
   # Grants the Lambda role least-privilege bedrock:InvokeModel /
   # InvokeModelWithResponseStream scoped to the configured Claude model and
   # routes the AI studio (WorkflowGeneration) to Amazon Bedrock in us-west-2.
-  # The no-NAT VPC reaches Bedrock through the bedrock-runtime interface VPC
-  # endpoint provisioned in vpc-endpoints.tf (also gated on enable_bedrock_ai).
+  # Bedrock is reached through the fck-nat egress (nat-instance.tf); the
+  # bedrock-runtime interface endpoint this used to require was removed in
+  # the 2026-07-24 cost round.
   enable_bedrock_ai = var.enable_bedrock_ai
   bedrock_ai_model  = var.bedrock_ai_model
   bedrock_ai_region = var.bedrock_ai_region
 
   # ---- Geocoding on Amazon Location — gated on var.enable_amazon_location_geocoding
-  # Replaces Nominatim (unreachable from this no-NAT VPC, honua-server#2948) with
-  # the server's built-in amazon-location provider against a place index reached
-  # through the `geo` VPC interface endpoint provisioned in vpc-endpoints.tf.
+  # Replaced Nominatim (honua-server#2948: unreachable before the VPC had any
+  # egress) with the server's built-in amazon-location provider. The place
+  # index is reached through the fck-nat egress (nat-instance.tf); the
+  # geo.places interface endpoint it used to need was removed in the
+  # 2026-07-24 cost round.
   enable_amazon_location_geocoding = var.enable_amazon_location_geocoding
   amazon_location_place_index_name = var.amazon_location_place_index_name
   amazon_location_data_source      = var.amazon_location_data_source
 
-  # Networking — no NAT gateway (~$33/mo + data saved). The public demo has
-  # no OIDC and needs no general internet egress; the only AWS services the
-  # Lambda needs at runtime are reached via VPC endpoints instead
-  # (Secrets Manager interface endpoint + S3 gateway endpoint, see
-  # vpc-endpoints.tf).
+  # Networking — no MANAGED NAT gateway (~$33/mo + data). Egress for the
+  # private subnets comes from the demo's own fck-nat t4g.nano instance
+  # (~$7.5/mo, nat-instance.tf) instead. That NAT replaced the previous
+  # interface-VPC-endpoint architecture (2026-07-24 cost round): the module's
+  # deploy-control endpoints (lambda/sts/monitoring/logs, disabled below) and
+  # the demo's secretsmanager/bedrock-runtime/geo.places endpoints together
+  # cost ~$110/mo in ENI-hours. Only the free S3 gateway endpoint remains
+  # (vpc-endpoints.tf).
   enable_nat_gateway = false
+
+  # Deploy-control interface endpoints (Lambda control API, STS, CloudWatch
+  # monitoring/logs) are only needed on a no-egress VPC; the fck-nat instance
+  # provides that path now, so drop the ~$88/mo of endpoint ENIs. The
+  # lambda:GetAlias/UpdateAlias IAM grant is unaffected (always created).
+  enable_deploy_control_vpc_endpoints = false
 
   # API Gateway throttling (replaces WAF; HTTP API does not support WAFv2)
   api_throttle_burst_limit = var.api_throttle_burst_limit

@@ -19,6 +19,16 @@ honua_admin_password = "REPLACE_WITH_STRONG_SECRET_MIN_32_CHARS"
 # Leave null to let Terraform auto-generate a secure password.
 # db_password = null
 
+# RDS size. db.t4g.micro (default) is paired with Lambda reserved concurrency
+# 25 (main.tf) to stay under micro's ~112 connection slots. Flip BOTH back
+# (db.t4g.small + concurrency 50) together if demo bursts throttle.
+# db_instance_class = "db.t4g.micro"
+
+# Cost controls: fck-nat instance size and the monthly budget alarm.
+# nat_instance_type         = "t4g.nano"
+# monthly_budget_amount     = 150
+# budget_notification_email = "mike@honua.io"
+
 # Route53 hosted zone ID for the zone that owns demo.honua.io.
 # See README.md — DNS prerequisites for the required hosted zone setup.
 route53_zone_id = "ZXXXXXXXXXXXXXXXXX"
@@ -60,17 +70,17 @@ route53_zone_id = "ZXXXXXXXXXXXXXXXXX"
 # tfvars and state — exactly what adopt-by-ARN exists to prevent.
 # enable_pro_license = true
 
-# Bedrock AI (WorkflowGeneration). Provisions the bedrock-runtime VPC endpoint
-# (this no-NAT VPC needs it) and the least-privilege InvokeModel grant.
-# bedrock_ai_region must equal region (the VPC's region).
+# Bedrock AI (WorkflowGeneration). Least-privilege InvokeModel grant; Bedrock
+# is reached via the fck-nat egress (nat-instance.tf). Keep bedrock_ai_region
+# equal to region (the VPC's region).
 # enable_bedrock_ai = true
 # bedrock_ai_model  = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 # bedrock_ai_region = "us-west-2"
 
 # Studio AI proxy (live Studio AI generation, honua-server#3000; demo issue #9).
-# Independent toggle/model/IAM grant from enable_bedrock_ai; shares the
-# bedrock-runtime VPC endpoint with it. studio_ai_region must equal region
-# (the VPC's region). Default model is the cross-region Claude Opus 5
+# Independent toggle/model/IAM grant from enable_bedrock_ai; Bedrock is
+# reached via the fck-nat egress (nat-instance.tf). Keep studio_ai_region
+# equal to region (the VPC's region). Default model is the cross-region Claude Opus 5
 # inference profile (agreement accepted 2026-07-24; entitlement can lag — run
 # the runbook smoke first). The IAM grant also covers studio_ai_fallback_models
 # (default: the verified Sonnet 4.6 profile), so studio_ai_model can be
