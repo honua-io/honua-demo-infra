@@ -67,6 +67,19 @@ route53_zone_id = "ZXXXXXXXXXXXXXXXXX"
 # bedrock_ai_model  = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 # bedrock_ai_region = "us-west-2"
 
+# Studio AI proxy (live Studio AI generation, honua-server#3000; demo issue #9).
+# Independent toggle/model/IAM grant from enable_bedrock_ai; shares the
+# bedrock-runtime VPC endpoint with it. studio_ai_region must equal region
+# (the VPC's region). Default model is the cross-region Claude Opus 5
+# inference profile (agreement accepted 2026-07-24; entitlement can lag — run
+# the runbook smoke first). The IAM grant also covers studio_ai_fallback_models
+# (default: the verified Sonnet 4.6 profile), so studio_ai_model can be
+# flipped between them without an IAM change — see the runbook.
+# enable_studio_ai = true
+# studio_ai_model  = "us.anthropic.claude-opus-5"
+# studio_ai_fallback_models = ["us.anthropic.claude-sonnet-4-6"]
+# studio_ai_region = "us-west-2"
+
 tags = {
   Owner      = "platform"
   CostCentre = "demo"

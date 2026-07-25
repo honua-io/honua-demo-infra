@@ -53,7 +53,7 @@ a data-isolation feature for production deployments.
 | Route53 A/AAAA records | `demo.honua.io` → CloudFront distribution (alias; → API Gateway custom domain and no AAAA while `route_demo_dns_to_cloudfront=false`) |
 | API Gateway custom domain | `demo.honua.io`, TLS 1.2, regional endpoint |
 | VPC | New VPC, **no NAT gateway** — VPC endpoints instead (see below) |
-| VPC endpoints | Secrets Manager interface endpoint (single-AZ) + free S3 gateway endpoint + bedrock-runtime interface endpoint (only when `enable_bedrock_ai`) + geo interface endpoint (only when `enable_amazon_location_geocoding`) |
+| VPC endpoints | Secrets Manager interface endpoint (single-AZ) + free S3 gateway endpoint + bedrock-runtime interface endpoint (when `enable_bedrock_ai` or `enable_studio_ai`) + geo interface endpoint (only when `enable_amazon_location_geocoding`) |
 | PostGIS bootstrap | One-shot in-VPC Lambda enables `postgis` + `postgis_raster` during apply |
 | CloudWatch Logs | 90-day retention for Lambda and API Gateway |
 | Secrets Manager | DB connection string, admin password, master key |
@@ -206,6 +206,61 @@ the full operator-approval remediation plan this PR is one part of, including
 the exact `terraform plan`/`apply` sequence and rollback (repoint
 `Geocoding__DefaultProvider` back to `nominatim` and destroy the place index +
 endpoint — additive, no coupling to the other tracks).
+
+### Studio AI proxy on Bedrock (`enable_studio_ai`) — not yet applied
+
+> Like the Amazon Location toggle above, this one is **not** live — it is new
+> wiring awaiting operator approval, not already-applied state to adopt or
+> import. Tracks issue #9 (REQ-002: Studio AI proxy configured with at least
+> one provider; keys server-side only) for the Studio pilot rehearsal.
+
+Off by default (`enable_studio_ai = false`). honua-server#3000's Studio AI
+proxy (`src/Honua.Ai/Features/StudioAiProxy`) powers live AI generation in
+Honua Studio; its `bedrock` adapter kind authenticates via the AWS credential
+chain and targets the regional bedrock-runtime endpoint derived from the
+provider's `Region` — no endpoint URL, no API key, so nothing secret enters
+Terraform, tfvars, or state.
+
+Setting `enable_studio_ai = true` (`studio-ai.tf`):
+
+- Grants the Lambda execution role a least-privilege inline policy
+  (`bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` — the
+  Converse/ConverseStream APIs authorize against these same actions) scoped to
+  `studio_ai_model`'s **and** `studio_ai_fallback_models`' inference-profile
+  ARNs (calling region, account-scoped) **plus** each model's underlying
+  foundation-model ARNs in every `us.` member region
+  (us-east-1/us-east-2/us-west-2) — both halves are required or the routed
+  invocation gets AccessDenied. Covering the fallback models up front means an
+  operator can flip `studio_ai_model` between them with a plain env change and
+  no IAM edit. Separate from the module's WorkflowGeneration grant so the two
+  AI add-ons toggle/model independently.
+- Injects the exact server config keys (`StudioAiProxy` section, ASP.NET Core
+  double-underscore form): `StudioAiProxy__Enabled=true`,
+  `StudioAiProxy__DefaultProvider=bedrock`,
+  `StudioAiProxy__Providers__bedrock__Kind=bedrock`,
+  `StudioAiProxy__Providers__bedrock__Model=<studio_ai_model>`,
+  `StudioAiProxy__Providers__bedrock__Region=<studio_ai_region>`.
+- Ensures the **bedrock-runtime interface VPC endpoint** exists — shared with
+  `enable_bedrock_ai` (`vpc-endpoints.tf` gates it on either toggle). If the
+  live endpoint `vpce-003090af73dc835fe` has not yet been imported (see the
+  drift section below), run those two imports before an apply with this
+  toggle on, or Terraform will try to create a duplicate.
+
+**Model**: defaults to the cross-region Claude Opus 5 inference profile
+`us.anthropic.claude-opus-5` (profile ACTIVE in this account; the
+foundation-model agreement for `anthropic.claude-opus-5` was accepted
+2026-07-24, and runtime entitlement can lag the agreement — smoke-test before
+a rehearsal). The IAM grant also covers `studio_ai_fallback_models`, default
+`us.anthropic.claude-sonnet-4-6` — verified invocable end-to-end on
+2026-07-24 (from us-east-1 and from us-west-2, the region the demo Lambda
+actually calls) — so flipping `studio_ai_model` to it is env-only.
+`us.anthropic.claude-haiku-4-5-20251001-v1:0` also invokes in this account.
+Validation smoke commands live in the repo runbook
+(`runbook/demo-honua-io-capability-runbook.md` → "Studio AI (Bedrock BYOM)").
+
+**Region**: `studio_ai_region` must equal `region` (the VPC's region) — the
+no-NAT VPC reaches Bedrock only through the interface endpoint, which can
+only front its own region's service.
 
 ### Pro + AI demo drift (Pro license, Bedrock AI, Redis)
 

@@ -182,6 +182,39 @@ variable "bedrock_ai_region" {
 }
 
 # ---------------------------------------------------------------------------
+# Studio AI proxy — live Honua Studio AI generation via Amazon Bedrock
+# (honua-server#3000; demo enablement tracked in #9). Off by default.
+# Distinct from enable_bedrock_ai (WorkflowGeneration): both reach the
+# Bedrock runtime through the same VPC interface endpoint (vpc-endpoints.tf
+# gates it on either toggle), but each has its own toggle, model, and IAM
+# grant so they can be tuned and rolled independently.
+# ---------------------------------------------------------------------------
+
+variable "enable_studio_ai" {
+  description = "Wire the demo Lambda for live Studio AI generation via Amazon Bedrock: grant the Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream scoped to studio_ai_model's inference-profile + foundation-model ARNs, inject the StudioAiProxy__* env (kind=bedrock), and ensure the bedrock-runtime VPC interface endpoint exists (shared with enable_bedrock_ai — this no-NAT VPC has no other path to Bedrock). Off by default."
+  type        = bool
+  default     = false
+}
+
+variable "studio_ai_model" {
+  description = "Bedrock model id the server's Studio AI proxy uses. Defaults to the cross-region Claude Opus 5 inference profile (the `us.` prefix routes across us-east-1/us-east-2/us-west-2; profile verified ACTIVE in this account 2026-07-24). The account's foundation-model agreement for anthropic.claude-opus-5 was accepted the same day; runtime entitlement can lag the agreement — run the runbook's converse smoke before a rehearsal, and if it still returns AccessDenied flip this to a studio_ai_fallback_models entry (no IAM change needed). The IAM grant covers this model plus studio_ai_fallback_models."
+  type        = string
+  default     = "us.anthropic.claude-opus-5"
+}
+
+variable "studio_ai_fallback_models" {
+  description = "Additional Bedrock model ids the Studio AI IAM grant ALSO covers (inference-profile + foundation-model ARNs), so studio_ai_model can be flipped between them with a plain env change and no IAM edit. Defaults to the cross-region Claude Sonnet 4.6 profile — verified invocable end-to-end in this account (2026-07-24, us-east-1 and us-west-2) and the rehearsal fallback while the Opus 5 entitlement propagates."
+  type        = list(string)
+  default     = ["us.anthropic.claude-sonnet-4-6"]
+}
+
+variable "studio_ai_region" {
+  description = "AWS region the server invokes Bedrock in for the Studio AI proxy (StudioAiProxy provider Region). Must equal var.region (the demo VPC's region): the no-NAT VPC reaches Bedrock only through the bedrock-runtime interface endpoint, and an interface endpoint can only front a service in its own region. Defaults to us-west-2, matching bedrock_ai_region."
+  type        = string
+  default     = "us-west-2"
+}
+
+# ---------------------------------------------------------------------------
 # Geocoding on Amazon Location Service — replaces the Nominatim provider,
 # which this no-NAT VPC cannot reach (honua-server#2948: every geocode call
 # failed after a consistent ~15.8s outbound-connect timeout — a categorical
