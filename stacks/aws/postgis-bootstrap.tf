@@ -167,14 +167,16 @@ resource "aws_lambda_function" "postgis_bootstrap" {
 }
 
 # Runs during apply, after the module (and therefore RDS + the connection
-# secret) is fully created and the Secrets Manager endpoint is reachable.
+# secret) is fully created and Secrets Manager is reachable from the private
+# subnets — via the fck-nat default route since the 2026-07 cost round
+# (previously via the Secrets Manager interface endpoint).
 resource "aws_lambda_invocation" "postgis_bootstrap" {
   function_name = aws_lambda_function.postgis_bootstrap.function_name
   input         = jsonencode({})
 
   depends_on = [
     module.honua,
-    aws_vpc_endpoint.secretsmanager,
+    aws_route.private_nat,
     aws_iam_role_policy.postgis_bootstrap_secret,
     aws_iam_role_policy_attachment.postgis_bootstrap_basic,
     aws_iam_role_policy_attachment.postgis_bootstrap_vpc,
