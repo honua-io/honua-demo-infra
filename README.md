@@ -29,8 +29,14 @@ stacks/aws/          The Phase A demo.honua.io Terraform root module
                         (SDK client-compat certification target)
   README.md             Full operational README for the stack (moved verbatim
                         from honua-iac; read this before touching anything)
+manifest/
+  demo-services.v1.json Generated public service manifest (#19) — see below
+  generate-demo-services.py
+                        Derives the manifest from the seed definitions
+  README.md             Manifest schema + publish-path documentation
 .github/workflows/
   drift-plan.yml        Scheduled read-only `terraform plan` (see below)
+  manifest-drift.yml    Fails PRs where the manifest is stale vs the seeds
 ```
 
 There is no application code here — Honua itself lives in
@@ -169,6 +175,17 @@ is exactly the same operation in reverse).
   seed path in this repo (it deliberately does *not* apply
   `tests/seed/client-compat-v1.sql` directly — see that script's header for
   why).
+
+## Service manifest (demo-services.v1.json)
+
+`manifest/demo-services.v1.json` is the generated, schema-versioned inventory
+of the demo's publicly discoverable services (issue #19) — derived from
+`stacks/aws/SEED_MANIFEST.md` and the pinned STAC seed above, never edited by
+hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
+public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
+wiring (`stacks/aws/demo-services-manifest.tf`) is **plan-only until the
+"Known drift" `terraform import` steps have been run** (issue #11). Consumer:
+honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook
 
