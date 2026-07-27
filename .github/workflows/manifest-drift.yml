@@ -1,0 +1,36 @@
+name: Manifest Drift
+
+# Regenerates manifest/demo-services.v1.json from the seed definitions
+# (stacks/aws/SEED_MANIFEST.md + the pinned honua-server STAC seed referenced
+# from README.md) and fails when the committed manifest is stale (#19).
+#
+# This keeps the manifest generated-only: any change to the seeds without a
+# matching `python3 manifest/generate-demo-services.py` run fails here, and
+# any hand edit to the manifest itself fails here too.
+#
+# Needs network egress to raw.githubusercontent.com (public, pinned ref) —
+# nothing else. No AWS credentials, read-only.
+
+on:
+  pull_request: {}
+  push:
+    branches: [trunk]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manifest-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifest-drift:
+    name: demo-services.v1.json matches seed definitions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Regenerate manifest and fail on drift
+        run: python3 manifest/generate-demo-services.py --check

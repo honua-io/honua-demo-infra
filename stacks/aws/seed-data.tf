@@ -33,8 +33,10 @@ resource "aws_s3_bucket" "demo_data" {
 }
 
 # Public access stays blocked except for the bucket policy that exposes the
-# fonts/ prefix (open-licensed glyph PBFs only — everything else in the bucket
-# remains private and is reached through the Lambda role or presigned URLs).
+# fonts/ prefix (open-licensed glyph PBFs) and the manifest/ prefix (the
+# generated demo-services.v1.json public service inventory, #19) — everything
+# else in the bucket remains private and is reached through the Lambda role
+# or presigned URLs.
 resource "aws_s3_bucket_public_access_block" "demo_data" {
   #checkov:skip=CKV_AWS_54: block_public_policy=false is required to allow the aws_s3_bucket_policy that exposes the fonts/ prefix; all other prefixes remain private via the IAM policy.
   #checkov:skip=CKV_AWS_56: restrict_public_buckets=false is required to serve the fonts/ prefix via the public bucket policy; the policy is scoped to s3:GetObject on fonts/* only.
@@ -61,7 +63,7 @@ resource "aws_s3_bucket_cors_configuration" "demo_data" {
 }
 
 resource "aws_s3_bucket_policy" "demo_data_fonts_public" {
-  #checkov:skip=CKV_AWS_70: Principal="*" is intentional; map glyph PBFs (open-licensed Noto Sans SDF fonts) must be world-readable so MapLibre can load them from any browser without authentication.
+  #checkov:skip=CKV_AWS_70: Principal="*" is intentional; map glyph PBFs (open-licensed Noto Sans SDF fonts) and the generated demo-services manifest (public service inventory, see manifest/README.md) must be world-readable without authentication.
   bucket = aws_s3_bucket.demo_data.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -72,6 +74,16 @@ resource "aws_s3_bucket_policy" "demo_data_fonts_public" {
         Principal = "*"
         Action    = "s3:GetObject"
         Resource  = "${aws_s3_bucket.demo_data.arn}/fonts/*"
+      },
+      {
+        # demo-services.v1.json (#19) — generated public service inventory,
+        # uploaded by demo-services-manifest.tf and proxied at
+        # GET /demo-services.v1.json. Only already-public capability metadata.
+        Sid       = "PublicReadDemoServicesManifest"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.demo_data.arn}/manifest/*"
       }
     ]
   })
