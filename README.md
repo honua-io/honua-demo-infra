@@ -183,8 +183,9 @@ of the demo's publicly discoverable services (issue #19) — derived from
 `stacks/aws/SEED_MANIFEST.md` and the pinned STAC seed above, never edited by
 hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
 public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
-wiring (`stacks/aws/demo-services-manifest.tf`) is **plan-only until the
-"Known drift" `terraform import` steps have been run** (issue #11). Consumer:
+wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
+the shared Terraform state since 2026-07-31. The scheduled public canary
+probes every declared service family and uploads its receipt. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook

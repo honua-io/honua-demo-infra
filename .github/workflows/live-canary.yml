@@ -1,0 +1,41 @@
+name: live demo canary
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [trunk]
+    paths:
+      - "manifest/**"
+      - "scripts/live-demo-canary.mjs"
+      - ".github/workflows/live-canary.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-demo-canary
+  cancel-in-progress: false
+
+jobs:
+  public-aws-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Probe every published demo service family
+        run: node scripts/live-demo-canary.mjs
+
+      - name: Upload live canary evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: live-demo-canary
+          path: .artifacts/live-demo-canary
+          if-no-files-found: error

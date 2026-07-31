@@ -21,23 +21,18 @@ breaking schema change ships as a **new** `demo-services.v2.json` at a new URL
 while v1 keeps serving, so consumers never break on upgrade. Additive,
 backward-compatible fields may land within v1 (bump `schemaVersion` minor).
 
-### Publish status — blocked on the state imports
+### Publish status — live
 
-The publish wiring is codified in `stacks/aws/demo-services-manifest.tf`
-(S3 object under the public `manifest/` prefix of the demo data bucket + an
-API Gateway `GET /demo-services.v1.json` proxy route, exactly the `/fonts`
-pattern) plus the `PublicReadDemoServicesManifest` bucket-policy statement in
-`stacks/aws/seed-data.tf`. **It is plan-only and must not be applied yet**:
-the stack has pending out-of-band drift that needs the operator-run
-`terraform import` steps first (repo README "Known drift", issue #11). Once
-those imports are done and a plan is clean, a normal `terraform apply`
-publishes the manifest — and every later apply republishes the current
+The publish wiring in `stacks/aws/demo-services-manifest.tf` is live and
+tracked in the shared Terraform state: an S3 object under the public
+`manifest/` prefix, an API Gateway `GET /demo-services.v1.json` proxy route,
+and the `PublicReadDemoServicesManifest` bucket-policy statement in
+`stacks/aws/seed-data.tf`. It was applied as an isolated saved plan on
+2026-07-31; every later apply republishes the current
 committed file, keeping the deploy/seed pipeline and the publish step one
 flow.
 
-Until then the manifest exists only in-repo; the sdk-js consumer can already
-vendor it from here, and its published-URL drift check goes live after the
-first apply.
+The sdk-js consumer can now drift-check the stable published URL directly.
 
 ## Generation sources
 
