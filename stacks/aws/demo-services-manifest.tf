@@ -1,15 +1,12 @@
 ###############################################################################
 # demo-services.v1.json — publish the generated service manifest (#19).
 #
-# >>> PLAN-ONLY FOR NOW — DO NOT APPLY <<<
-# The stack has pending out-of-band drift that must be `terraform import`ed
-# first (README.md "Known drift" / the drift-plan workflow; state-import work
-# tracked in #11). Until the operator has run those imports and a plan with
-# the real toggles shows zero unrelated changes, nothing in this file may be
-# applied. It is committed now so the publish path is codified and reviewed;
-# `terraform validate` / `fmt` / read-only `plan` are fine.
+# Live since 2026-07-31. These resources were applied with an explicit
+# four-resource target after a saved plan showed 3 creates, 1 in-place policy
+# update, and 0 destroys. They are tracked in the shared remote state; the
+# stack's unrelated hand-managed drift remains outside this manifest path.
 #
-# What it does once applied:
+# What it does:
 #   - Uploads the committed manifest/demo-services.v1.json (generated from the
 #     seed definitions by manifest/generate-demo-services.py, drift-gated by
 #     .github/workflows/manifest-drift.yml) to the demo data bucket under the
