@@ -1,7 +1,7 @@
 ###############################################################################
 # CloudFront CDN in front of demo.honua.io — tile caching at the edge.
 #
-# API Gateway + Lambda + db.t4g.micro handle demo traffic fine, but tile
+# API Gateway + Lambda + db.t4g.small handle demo traffic, but tile
 # bursts (a visitor panning the map) fan out into dozens of concurrent Lambda
 # invocations and database reads for bytes that never change between reseeds.
 # CloudFront absorbs those:

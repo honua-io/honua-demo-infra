@@ -35,9 +35,9 @@ variable "db_password" {
 }
 
 variable "db_instance_class" {
-  description = "RDS instance class. db.t4g.micro (default, ~$12/mo) fits demo traffic ONLY because lambda_reserved_concurrent_executions is sized to micro's ~112 connection-slot ceiling (25 x Maximum Pool Size 4 = 100 — see main.tf). The 2026-06 53300 connection-exhaustion outages that forced db.t4g.small happened at reserved concurrency 50 (200 potential connections). If demo bursts throttle too aggressively at 25, flip this back to db.t4g.small AND restore reserved concurrency to 50 together — never raise concurrency alone on micro."
+  description = "RDS instance class. db.t4g.small is the reliability floor for the public demo: on 2026-07-31 db.t4g.micro exhausted usable PostgreSQL connection slots at only 16 concurrent Lambda environments (72 reported database connections), returning HTTP 500 during the real Console browser journey. Keep the Lambda pool and reserved-concurrency budget in main.tf aligned with this size."
   type        = string
-  default     = "db.t4g.micro"
+  default     = "db.t4g.small"
 }
 
 variable "route53_zone_id" {

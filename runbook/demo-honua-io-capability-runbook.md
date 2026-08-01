@@ -652,9 +652,9 @@ on. Additive, no coupling to seeds, license, or geocoding.
 
 ---
 
-## Cost & network architecture (2026-07-24 cost round)
+## Cost & network architecture (2026-07-24 cost round; RDS correction 2026-07-31)
 
-Fixed spend was cut from ~$140/mo to ~$35–40/mo. Two changes, both in
+Fixed spend was cut from ~$140/mo to ~$46–51/mo. Two changes, both in
 `stacks/aws` (see `stacks/aws/README.md` → "fck-nat NAT instance" and "Estimated
 monthly cost" for the full tables):
 
@@ -666,11 +666,11 @@ monthly cost" for the full tables):
    private subnets' default route; only the free S3 gateway endpoint remains (it also
    keeps tile/import S3 bytes off the NAT). Side effect: the VPC has true internet
    egress for the first time — Nominatim/OIDC/webhooks are network-possible again.
-2. **RDS db.t4g.small → db.t4g.micro (~$23 → ~$12/mo), PAIRED with Lambda reserved
-   concurrency 50 → 25.** The 2026-06 53300 connection-exhaustion outage that forced
-   the small upgrade was a slots problem (50 envs × pool 4 = 200 > micro's ~112
-   slots); 25 × 4 = 100 fits micro. These two settings move together — never raise
-   concurrency alone on micro.
+2. **Lambda reserved concurrency remains 25; RDS is db.t4g.small.** The attempted
+   small → micro cost cut was reversed on 2026-07-31 after the real Console browser
+   journey reproduced PostgreSQL 53300 failures at only 16 concurrent environments
+   (72 reported DB connections). The small instance is the public-demo reliability
+   floor; the lower Lambda cap supplies additional connection headroom.
 
 **Redis / ElastiCache stays as-is**: `enable_redis` remains `false` in Terraform
 (nothing applied to remove) — honua-server hard-requires a durable feature-change

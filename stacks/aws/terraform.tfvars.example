@@ -19,10 +19,9 @@ honua_admin_password = "REPLACE_WITH_STRONG_SECRET_MIN_32_CHARS"
 # Leave null to let Terraform auto-generate a secure password.
 # db_password = null
 
-# RDS size. db.t4g.micro (default) is paired with Lambda reserved concurrency
-# 25 (main.tf) to stay under micro's ~112 connection slots. Flip BOTH back
-# (db.t4g.small + concurrency 50) together if demo bursts throttle.
-# db_instance_class = "db.t4g.micro"
+# RDS size. db.t4g.small is the public-demo reliability floor after a real
+# Console browser run exhausted db.t4g.micro's usable connection slots.
+# db_instance_class = "db.t4g.small"
 
 # Cost controls: fck-nat instance size and the monthly budget alarm.
 # nat_instance_type         = "t4g.nano"

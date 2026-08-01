@@ -1,7 +1,7 @@
 ###############################################################################
 # Phase-A Honua Demo Environment — demo.honua.io
 #
-# Lambda container (AOT) + API Gateway HTTP API + RDS db.t4g.micro + PostGIS.
+# Lambda container (AOT) + API Gateway HTTP API + RDS db.t4g.small + PostGIS.
 # Optional Pro+AI demo add-ons, all gated off by default (see README → "Pro +
 # AI demo drift"): a Secrets-Manager-delivered Pro license (enable_pro_license),
 # a least-privilege Bedrock InvokeModel grant + WorkflowGeneration env for the
@@ -55,24 +55,18 @@ module "honua" {
   # No provisioned concurrency: cold starts are acceptable for a demo.
   # The AOT image keeps cold start latency short (~200–400 ms typical).
   #
-  # Reserved concurrency 25 (2026-07-24, cost round): paired with the RDS
-  # downsize back to db.t4g.micro below. History: 20 -> 50 on 2026-06-12 when
-  # tile bursts exhausted micro's ~112 connection slots (53300) and the DB
-  # was upsized to small (~225 slots, 50 x Maximum Pool Size 4 = 200). Micro
-  # at concurrency 50 would recreate that outage, so the two move TOGETHER:
-  # 25 environments x Maximum Pool Size 4 = 100 direct connections, under
-  # micro's ~112-slot ceiling; bursts beyond 25 throttle at Lambda (429s on
-  # the burst edge) instead of 500ing every in-flight request. CloudFront's
-  # 24h tile caching (min_ttl, cloudfront.tf) is what makes 25 workable —
-  # steady-state demo traffic rarely fans past it. If throttling bites during
-  # rehearsals, flip db_instance_class back to db.t4g.small AND restore 50
-  # here in the same change.
+  # Reserved concurrency stays at 25 to bound direct RDS pools. A 2026-07-31
+  # real-Console browser run proved db.t4g.micro unsafe even at this cap: 16
+  # concurrent environments produced 72 reported DB connections and PostgreSQL
+  # 53300 failures. The database is therefore db.t4g.small again, while keeping
+  # this conservative cap for ample connection headroom. CloudFront's 24h tile
+  # caching keeps the cap practical for public browsing.
   lambda_reserved_concurrent_executions = 25
 
   # 60 s bounds abandoned work: API Gateway gives up at 30 s, but the Lambda
   # keeps executing until this timeout. During seeding this was raised to 600
   # (the county-parcels synchronous import needs ~5 min); steady-state it must
-  # stay LOW — a browser tile burst that outruns the db.t4g.micro otherwise
+  # stay LOW — a browser tile burst that outruns the database otherwise
   # leaves a pile of orphaned multi-minute queries that starve the database
   # and 500 every later request. Raise temporarily for future bulk re-seeds.
   lambda_timeout_seconds = 60
@@ -80,14 +74,10 @@ module "honua" {
   # Secrets
   admin_password = var.honua_admin_password
 
-  # Database — PostGIS on db.t4g.micro by default (2026-07-24 cost round,
-  # downsized back from small). The 2026-06-12 micro->small upgrade was
-  # driven by connection-slot exhaustion at reserved concurrency 50 (4,400+
-  # Npgsql 53300 errors in 48h while CPU never passed 48% — a slots problem,
-  # not a CPU one); the downsize is only safe because reserved concurrency
-  # drops to 25 in the same change (see the comment above) so worst-case
-  # direct connections (100) stay under micro's ~112-slot ceiling. Flip
-  # db_instance_class + concurrency back together if bursts throttle.
+  # Database — PostGIS on db.t4g.small. The attempted 2026-07-24 micro cost
+  # downsize was rolled back on 2026-07-31 after the integrated Console journey
+  # reproduced Npgsql/PostgreSQL 53300 failures at 16 Lambda environments.
+  # This is a sales demo reliability floor, not a CPU-sizing decision.
   db_instance_class    = var.db_instance_class
   db_allocated_storage = 20
   db_engine_version    = "15"
@@ -259,7 +249,7 @@ module "honua" {
     # Request budget pairs with lambda_timeout_seconds above. Raise both to
     # 10 minutes temporarily for bulk synchronous re-seeds (county parcels
     # needs it); steady-state keep them tight so orphaned tile queries get
-    # cancelled instead of starving db.t4g.micro for minutes after a burst.
+    # cancelled instead of starving PostgreSQL for minutes after a burst.
     Limits__Connections__RequestTimeout = "00:01:00"
 
     # Application-level CORS so https://honua.io/demo.html can call

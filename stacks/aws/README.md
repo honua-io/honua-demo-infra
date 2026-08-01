@@ -46,7 +46,7 @@ a data-isolation feature for production deployments.
 | CloudFront distribution | Tile caching at the edge — see "CDN layer" below |
 | Lambda function | `x86_64`, 1024 MiB RAM, no provisioned concurrency (arm64 blocked on cross-build, see main.tf) |
 | Lambda image | `*-lambda-aot` tag (AOT build); cold starts ~200–400 ms |
-| RDS PostgreSQL | `db.t4g.micro`, version 15, 20 GB gp3, PostGIS + PostGIS Raster enabled |
+| RDS PostgreSQL | `db.t4g.small`, version 15, 20 GB gp3, PostGIS + PostGIS Raster enabled |
 | ElastiCache | Off by default; `enable_redis = true` provisions `cache.t3.micro` in-VPC for the Production feature-change event store (see "Pro + AI demo drift") |
 | API Gateway | HTTP API (`protocol_type = "HTTP"`) with `$default` stage |
 | ACM certificate | Auto-provisioned and DNS-validated for `demo.honua.io` |
@@ -620,7 +620,7 @@ terraform output postgis_bootstrap_result
 
 | Component | Estimate |
 |---|---|
-| RDS db.t4g.micro, single-AZ (downsized back from small 2026-07-24, paired with reserved concurrency 25) | ~$12 |
+| RDS db.t4g.small, single-AZ (restored 2026-07-31 after a real Console run exhausted micro's usable connection slots) | ~$23 |
 | RDS storage, 20 GB gp3 | ~$2.50 |
 | fck-nat instance (t4g.nano + gp3 root + public IPv4) | ~$7.50 |
 | S3 gateway endpoint | $0 (free) |
@@ -631,14 +631,14 @@ terraform output postgis_bootstrap_result
 | CloudWatch Logs (90-day, low volume) | ~$1 |
 | Secrets Manager secrets, Route53 zone | ~$1.50 |
 | AWS Budget | $0 (first two budgets free) |
-| **Total** | **~$26 / month** stock; **~$35–40 / month** with the live add-ons (Pro license $1.50, Bedrock/Studio AI per-token, Amazon Location per-call, ElastiCache ~$9 if/when Redis is enabled) |
+| **Total** | **~$37 / month** stock; **~$46–51 / month** with the live add-ons (Pro license $1.50, Bedrock/Studio AI per-token, Amazon Location per-call, ElastiCache ~$9 if/when Redis is enabled) |
 
 This total is the **stock** apply (`enable_redis`, `enable_pro_license`,
 `enable_bedrock_ai`, `enable_studio_ai`, and
 `enable_amazon_location_geocoding` all default `false`). Before the
 2026-07-24 cost round the live environment's fixed spend was ~$140/mo — the
-delta is almost entirely interface-endpoint ENI-hours (~$110) plus the RDS
-small→micro downsize (~$12).
+delta is almost entirely interface-endpoint ENI-hours (~$110). The temporary
+RDS small→micro downsize was reversed after it produced connection-slot 500s.
 
 The RDS instance and the NAT instance now dominate fixed cost. Lambda + API
 Gateway are effectively free at demo traffic volumes. Compare to the ECS/ALB
