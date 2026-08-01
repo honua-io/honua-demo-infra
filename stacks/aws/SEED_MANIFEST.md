@@ -1,7 +1,7 @@
 # demo.honua.io — Maui Nui seed-data manifest
 
 Seeded 2026-06-12 against the live demo stack (Lambda `honua-demo-demo-honua`,
-RDS db.t4g.micro PostGIS 3.4.3, S3 `honua-demo-data-585192672263`). The demo
+RDS db.t4g.small PostGIS 3.4.3, S3 `honua-demo-data-585192672263`). The demo
 page contract is `assets/demo/layers.json` in honua-site (updated in the same
 change set, branch `demo/seed-contract-sync`).
 
@@ -86,7 +86,7 @@ Processing notes:
 | Service | Route | Source | Processing | License |
 |---|---|---|---|---|
 | maui-hillshade | /rest/services/maui-hillshade/ImageServer/tile/{z}/{y}/{x} | USGS 3DEP 1/3 arc-second, 5 tiles covering Maui Nui (s3://prd-tnm/.../n21w156, n21w157, n21w158, n22w157, n22w158) | gdalwarp → 20 m EPSG:3857 → gdaldem hillshade -z 1.3 → 6 chunks ≤8 MB → POST /api/v1/admin/import/raster → ST_Tile(256) | Public domain (USGS) |
-| maui-terrain | /terrain/maui-terrain/{z}/{x}/{y}.png (Mapbox Terrain-RGB) | same 3DEP DEM | 20 m DEM resampled to 80 m (terrain endpoint samples per-pixel; 80 m + 256-px DB tiles + EXTERNAL TOAST storage keeps db.t4g.micro latency tolerable) → 2 chunks → raster import → ST_Tile(256) | Public domain (USGS) |
+| maui-terrain | /terrain/maui-terrain/{z}/{x}/{y}.png (Mapbox Terrain-RGB) | same 3DEP DEM | 20 m DEM resampled to 80 m (terrain endpoint samples per-pixel; 80 m + 256-px DB tiles + EXTERNAL TOAST storage keeps database latency tolerable) → 2 chunks → raster import → ST_Tile(256) | Public domain (USGS) |
 | maui-imagery | /rest/services/maui-imagery/ImageServer/tile/{z}/{y}/{x} | NAIP 2021 Hawaii 60 cm via NOAA Digital Coast (coastalimagery.blob.core.windows.net/digitalcoast/HI_NAIP_2021_9668, provider VRTs, EPSG:26904+26905) | gdalwarp overview reads → 20 m RGB EPSG:3857 → 16 chunks ≤8 MB → raster import → ST_Tile(256) | Public domain (USDA NAIP) |
 
 DB-side raster post-processing (postgis-bootstrap Lambda maintenance mode):
