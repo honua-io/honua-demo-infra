@@ -196,12 +196,13 @@ module "honua" {
 
   # GP over AWS Batch (Fargate Spot) — off unless var.enable_gp_batch is set.
   # Scales to zero between jobs; pay only for the seconds a job's container runs.
-  # Batch keeps an explicit x86_64 contract because its worker artifact is
-  # independent of the arm64 Lambda image. The GP job role gets read/write on
-  # the demo data bucket so imports can stage to S3 the same way the Lambda does.
+  # Match the arm64 Lambda image because gp_batch_image defaults to reusing it.
+  # Callers that supply a different worker image must keep its architecture in
+  # sync here. The GP job role gets read/write on the demo data bucket so
+  # imports can stage to S3 the same way the Lambda does.
   enable_gp_batch              = var.enable_gp_batch
   gp_batch_image               = var.gp_batch_image
-  gp_batch_cpu_architecture    = "X86_64"
+  gp_batch_cpu_architecture    = "ARM64"
   gp_batch_data_bucket_arn     = aws_s3_bucket.demo_data.arn
   gp_batch_data_bucket_enabled = true
 
