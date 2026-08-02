@@ -37,19 +37,18 @@ module "honua" {
   # needs git credentials that can fetch it — see README.md → "Module source
   # (private repo auth)". Bump the ref deliberately (and re-run the drift
   # plan) when picking up module changes; do not float on a branch.
-  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=32112c417c30413752294f0cac5d152d50a11058"
+  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=a4a1ea52336549e4e7beb6864f115cb335cdc43b"
 
   # Identity
   name_prefix = var.name_prefix
   environment = var.environment
 
   # Lambda container — use the AOT image variant for fast cold starts.
-  # x86_64, not Graviton: the demo image is AOT-built on an amd64 workstation
-  # and .NET AOT under QEMU arm64 emulation fails (MSBuild MSB4223 node spawn
-  # error). Function and image architecture must match. Revisit when images
-  # come from CI's native arm64 runners.
+  # The certified Lambda AOT artifact is built on CI's native arm64 runner.
+  # Function and image architecture must match, so keep this aligned with the
+  # release manifest's awsLambdaArchitecture pin.
   image                = var.honua_image
-  lambda_architectures = ["x86_64"]
+  lambda_architectures = ["arm64"]
   lambda_memory_size   = var.lambda_memory_size
 
   # No provisioned concurrency: cold starts are acceptable for a demo.
@@ -197,12 +196,13 @@ module "honua" {
 
   # GP over AWS Batch (Fargate Spot) — off unless var.enable_gp_batch is set.
   # Scales to zero between jobs; pay only for the seconds a job's container runs.
-  # Architecture matches the demo's x86_64 image (see lambda_architectures note
-  # above). The GP job role gets read/write on the demo data bucket so imports
-  # can stage to S3 the same way the Lambda does.
+  # Match the arm64 Lambda image because gp_batch_image defaults to reusing it.
+  # Callers that supply a different worker image must keep its architecture in
+  # sync here. The GP job role gets read/write on the demo data bucket so
+  # imports can stage to S3 the same way the Lambda does.
   enable_gp_batch              = var.enable_gp_batch
   gp_batch_image               = var.gp_batch_image
-  gp_batch_cpu_architecture    = "X86_64"
+  gp_batch_cpu_architecture    = "ARM64"
   gp_batch_data_bucket_arn     = aws_s3_bucket.demo_data.arn
   gp_batch_data_bucket_enabled = true
 
