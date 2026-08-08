@@ -249,6 +249,31 @@ resource "aws_cloudfront_function" "forwarded_host" {
   code = <<-EOT
     function handler(event) {
       var request = event.request;
+      // The public host is an environment surface, not a sample application.
+      // Keep its root useful even when the application has no root endpoint:
+      // status and discovery stay one click away, while developer learning
+      // remains at samples.honua.io. Generate this tiny page at the edge so it
+      // has no Lambda, database, S3, or application-release dependency.
+      if ((request.method === 'GET' || request.method === 'HEAD') && request.uri === '/') {
+        var response = {
+          statusCode: 200,
+          statusDescription: 'OK',
+          headers: {
+            'content-type': { value: 'text/html; charset=utf-8' },
+            'cache-control': { value: 'no-store' },
+            'content-security-policy': { value: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" },
+            'x-content-type-options': { value: 'nosniff' },
+            'referrer-policy': { value: 'no-referrer' }
+          }
+        };
+        if (request.method === 'GET') {
+          response.body = {
+            encoding: 'text',
+            data: '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Honua demo environment</title></head><body><main><h1>Honua demo environment</h1><p>Live status and machine-readable capability discovery for the shared Honua demonstration environment.</p><nav aria-label="Environment links"><ul><li><a href="/healthz/live">Live status</a></li><li><a href="/healthz/ready">Readiness</a></li><li><a href="/api/v1/capabilities/manifest">Runtime capabilities</a></li><li><a href="/demo-services.v1.json">Seeded services</a></li><li><a href="/stac">STAC catalog</a></li><li><a href="https://samples.honua.io/">Developer examples, walkthroughs, and projects</a></li></ul></nav></main></body></html>'
+          };
+        }
+        return response;
+      }
       // MCP standalone SSE stream (GET /mcp): this stack cannot serve it —
       // API Gateway HTTP APIs do not stream responses, so the GET hangs at
       // the origin until timeout, and the server currently tears down the

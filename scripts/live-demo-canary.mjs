@@ -12,6 +12,7 @@ const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
 
 async function main() {
   const results = [];
+  await probeLanding(results);
   const manifest = await probeJson(results, "manifest", "/demo-services.v1.json");
   if (manifest.format !== "honua.demo-services.v1" || manifest.schemaVersion !== "1.0.0") {
     throw new Error(`unexpected manifest contract ${manifest.format}@${manifest.schemaVersion}`);
@@ -83,6 +84,32 @@ async function main() {
     if (result.error) process.stdout.write(`  ${result.error}\n`);
   }
   if (receipt.summary.failed > 0) process.exitCode = 1;
+}
+
+async function probeLanding(results) {
+  const response = await probe(results, "environment-landing", "/", { accept: "text/html" }, [200]);
+  if (!response.ok) return;
+
+  const contentType = response.result.contentType ?? "";
+  const html = response.body.toString("utf8");
+  const requiredFragments = [
+    "<!doctype html>",
+    "<main>",
+    "<h1>Honua demo environment</h1>",
+    'href="/healthz/live"',
+    'href="/healthz/ready"',
+    'href="/api/v1/capabilities/manifest"',
+    'href="/demo-services.v1.json"',
+    'href="/stac"',
+    'href="https://samples.honua.io/"',
+  ];
+  const missing = requiredFragments.filter((fragment) => !html.includes(fragment));
+  if (!contentType.toLowerCase().startsWith("text/html")) {
+    missing.unshift(`content-type text/html (received ${contentType || "none"})`);
+  }
+  if (missing.length > 0) {
+    failResult(response.result, `landing contract missing: ${missing.join(", ")}`);
+  }
 }
 
 async function probeJson(results, name, urlPath) {
