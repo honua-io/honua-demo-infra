@@ -1,4 +1,4 @@
-# honua-demo
+# honua-demo-infra
 
 Infrastructure-as-code for **demo.honua.io** — the live, public, hosted
 Honua demo environment. This repo was extracted from
@@ -10,6 +10,21 @@ demo-ops churn was polluting the honua-iac backlog. This repo is **private**
 (unlike honua-iac and honua-server, which are public) because it holds
 account IDs, VPC/security-group/subnet IDs, and other operational detail
 about a real running AWS account.
+
+## Repository and domain responsibilities
+
+This repository owns the Terraform root, data seeding, published service
+manifest, operational runbooks, and deployment operations for the live demo
+environment. It contains no sample application or developer-gallery code.
+
+- `demo.honua.io` is the live environment surface. It exposes health, runtime
+  capabilities, and the seeded-service manifest consumed by clients and
+  canaries.
+- `samples.honua.io` is the developer learning center and gallery. Its
+  examples, walkthroughs, projects, and publication checks live in
+  [honua-io/honua-samples](https://github.com/honua-io/honua-samples).
+- Product-story demos embedded on `honua.io` remain owned by
+  [honua-io/honua-site](https://github.com/honua-io/honua-site).
 
 ## What's here
 
@@ -206,7 +221,7 @@ It ships **disabled** because the AWS OIDC role it needs does not exist yet:
 
 1. Provision an AWS OIDC role for this repo — mirror honua-iac's
    `infrastructure/terraform/components/aws-github-oidc` component (trust
-   `repo:honua-io/honua-demo:*` or a tighter `environment:` subject; grant it
+   `repo:honua-io/honua-demo-infra:*` or a tighter `environment:` subject; grant it
    read-only Describe/Get/List on the demo stack's resources, plus
    `s3:GetObject`/`s3:PutObject` scoped to the `demo/aws-demo/` state key for
    backend init/locking — **not** broad write access).

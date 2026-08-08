@@ -9,7 +9,7 @@ name: Demo Drift Plan
 # repo README "Drift-plan CI: one-time operator setup"):
 #   1. Provision an AWS OIDC role for this repo (mirror honua-iac's
 #      infrastructure/terraform/components/aws-github-oidc component —
-#      trust `repo:honua-io/honua-demo:*` or a tighter `environment:` subject,
+#      trust `repo:honua-io/honua-demo-infra:*` or a tighter `environment:` subject,
 #      permissions scoped to read-only Describe/Get/List on the demo stack's
 #      resources plus s3:GetObject/s3:PutObject on the tfstate key for
 #      backend init). Put the resulting role ARN in the repo variable

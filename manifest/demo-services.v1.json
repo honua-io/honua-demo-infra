@@ -1,7 +1,7 @@
 {
   "format": "honua.demo-services.v1",
   "schemaVersion": "1.0.0",
-  "description": "Publicly discoverable seeded services of the demo.honua.io demo environment. Generated from seed definitions by manifest/generate-demo-services.py (honua-demo#19) — never edit by hand.",
+  "description": "Publicly discoverable seeded services of the demo.honua.io demo environment. Generated from seed definitions by manifest/generate-demo-services.py (honua-demo-infra#19) — never edit by hand.",
   "baseUrl": "https://demo.honua.io",
   "publishUrl": "https://demo.honua.io/demo-services.v1.json",
   "sources": {
