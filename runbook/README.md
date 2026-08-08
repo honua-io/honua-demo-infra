@@ -12,7 +12,7 @@ honua-server backlog).
 > train). The honua-server original has been replaced with a pointer stub.
 > Applied-state notes beyond the runbook: geocoding infra (place index +
 > `geo.places` endpoint) is live and serving is on v35 — see
-> stacks/aws/vpc-endpoints.tf and honua-demo#11 for the remaining
+> stacks/aws/vpc-endpoints.tf and honua-demo-infra#11 for the remaining
 > enablement items (Redis stays off pending honua-server#3011; geocoding
 > e2e pending the next image with the AOT config-binding fix).
 
@@ -24,7 +24,7 @@ DB-inclusive rollback sequence), with their helper scripts
 `scripts/demo-b-probes.sh` (read-only live probes against demo.honua.io) and
 `scripts/demo-b-safe-rollback.sh` (drives the safe-rollback loop against a
 running server). Imported from honua-server `docs/internal/demo/` at trunk
-`5814d1099` as part of the demo backlog/code alignment (honua-demo#17 is the
+`5814d1099` as part of the demo backlog/code alignment (honua-demo-infra#17 is the
 transferred demo-capability program epic); the honua-server originals are
 replaced with a pointer stub, and the one code reference
 (`MetadataReleaseOperationOptions` XML docs) now points here.

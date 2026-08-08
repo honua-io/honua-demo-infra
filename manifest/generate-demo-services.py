@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate manifest/demo-services.v1.json from the demo seed definitions.
 
-The manifest is NEVER hand-maintained (honua-demo#19). It is derived from the
+The manifest is NEVER hand-maintained (honua-demo-infra#19). It is derived from the
 two seed sources of truth this repo already has:
 
   1. stacks/aws/SEED_MANIFEST.md — the Maui Nui seed-data manifest. Its three
@@ -331,7 +331,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
         "description": (
             "Publicly discoverable seeded services of the demo.honua.io demo "
             "environment. Generated from seed definitions by "
-            "manifest/generate-demo-services.py (honua-demo#19) — never edit "
+            "manifest/generate-demo-services.py (honua-demo-infra#19) — never edit "
             "by hand."
         ),
         "baseUrl": BASE_URL,

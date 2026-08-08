@@ -327,7 +327,7 @@ because the backend was commented out; that has not been true since #122.)
 
 Run the imports below so Terraform adopts the existing resources instead of
 trying to create duplicates. Run from this directory (`stacks/aws` in
-honua-demo) with the toggles set in `terraform.tfvars`:
+honua-demo-infra) with the toggles set in `terraform.tfvars`:
 
 ```bash
 # --- Pro license secret — NO IMPORT REQUIRED ------------------------------
