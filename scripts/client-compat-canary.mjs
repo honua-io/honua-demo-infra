@@ -167,7 +167,6 @@ function buildDeploymentEvidence(descriptor, descriptorSha256, server) {
     },
     access: {
       allowAnonymous: descriptor.access.allowAnonymous,
-      apiKeyHeader: descriptor.access.apiKeyHeader,
       credentialRecorded: false,
     },
     source: {
