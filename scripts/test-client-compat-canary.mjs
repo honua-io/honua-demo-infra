@@ -46,10 +46,36 @@ test("canary always proves denial and conditionally proves typed authentication"
   }
 });
 
+test("canary rejects HTTP 200 anonymous metadata instead of treating it as denial", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "honua-client-compat-leak-"));
+  const server = http.createServer((_request, response) => {
+    response.statusCode = 200;
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ fields: [{ name: "objectid" }] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const evidencePath = path.join(temp, "leak.json");
+
+  try {
+    await assert.rejects(runCanary({
+      HONUA_DEMO_BASE_URL: `http://127.0.0.1:${port}`,
+      HONUA_DEMO_TIMEOUT_MS: "2000",
+      HONUA_CLIENT_COMPAT_EVIDENCE_PATH: evidencePath,
+    }), /canary exited 1/u);
+    const receipt = JSON.parse(await readFile(evidencePath, "utf8"));
+    assert.equal(receipt.results[0].passed, false);
+    assert.equal(receipt.results[0].error, "anonymous response exposed protected metadata or features");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 function handleRequest(request, response) {
   response.setHeader("content-type", "application/json");
   if (request.headers["x-api-key"] !== apiKey) {
-    response.statusCode = 499;
+    response.statusCode = 200;
     response.end(JSON.stringify({ error: { code: 499, message: "Unauthorized" } }));
     return;
   }
@@ -75,7 +101,7 @@ function fixtureFeatures() {
       count: index + 1,
       ratio: (index + 1) * 1.25,
       uid: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
-      active: index % 2 === 0,
+      active: index % 2 === 0 ? 1 : 0,
     },
   }));
 }
