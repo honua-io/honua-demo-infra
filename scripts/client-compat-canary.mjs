@@ -103,10 +103,46 @@ function serverLineage() {
 
 async function probeAnonymousDenial(results, url) {
   const result = await request("anonymous-denial", url, {});
-  result.passed = [401, 403, 499].includes(result.status);
-  if (!result.passed) result.error = "protected fixture returned a status other than 401, 403, or 499";
+  let payload = null;
+  if (result.body) {
+    try {
+      payload = JSON.parse(result.body);
+    } catch {
+      // A transport-level 401/403 does not require a GeoServices JSON body.
+    }
+  }
+
+  const exposesProtectedData = hasProtectedData(payload);
+  const transportDenied = [401, 403].includes(result.status);
+  const geoServicesErrorCode = Number(payload?.error?.code);
+  const geoServicesDenied = result.status === 200 && geoServicesErrorCode === 499;
+
+  result.passed = (transportDenied || geoServicesDenied) && !exposesProtectedData;
+  if (geoServicesDenied) {
+    result.denialMode = "geoservices-error";
+    result.geoServicesErrorCode = geoServicesErrorCode;
+  } else if (transportDenied) {
+    result.denialMode = "http-status";
+  }
+  if (exposesProtectedData) {
+    result.error = "anonymous response exposed protected metadata or features";
+  } else if (!result.passed) {
+    result.error = "expected HTTP 401/403 or HTTP 200 with GeoServices error code 499";
+  }
   delete result.body;
   results.push(result);
+}
+
+function hasProtectedData(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  return [
+    payload.layers,
+    payload.fields,
+    payload.features,
+    payload.data?.layers,
+    payload.data?.fields,
+    payload.data?.features,
+  ].some(Array.isArray);
 }
 
 async function probeJson(results, name, url, apiKey) {
