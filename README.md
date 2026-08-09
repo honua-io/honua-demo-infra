@@ -220,6 +220,11 @@ honua-server `docs/internal/demo/`) and its verification scripts, if present
 honua-server#3009 runbook v2 or a provisional pre-merge import (see that
 runbook for which).
 
+The planned Maui WMS image promotion, semantic canary, admission, and exact
+Lambda alias rollback are defined in
+[`runbook/wms-release-promotion.md`](./runbook/wms-release-promotion.md). It
+must remain fail-closed until both runtime and source-governance gates pass.
+
 ## Drift-plan CI: one-time operator setup
 
 `.github/workflows/drift-plan.yml` runs a scheduled, **read-only**

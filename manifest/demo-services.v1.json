@@ -1,12 +1,40 @@
 {
   "format": "honua.demo-services.v1",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "description": "Publicly discoverable seeded services of the demo.honua.io demo environment. Generated from seed definitions by manifest/generate-demo-services.py (honua-demo-infra#19) — never edit by hand.",
   "baseUrl": "https://demo.honua.io",
   "publishUrl": "https://demo.honua.io/demo-services.v1.json",
   "sources": {
     "seedManifest": "stacks/aws/SEED_MANIFEST.md",
-    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql"
+    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql",
+    "wmsRelease": "manifest/wms-release.v1.json"
+  },
+  "releaseContracts": {
+    "wms": {
+      "status": "planned",
+      "definition": "manifest/wms-release.v1.json",
+      "definitionSha256": "77f090086e4c2f44ce23ebd89eaac9fc432a7a80d3646bc62070a6dad38b919f",
+      "requiredServer": {
+        "imageDigest": "sha256:e4844922ee698dd8898beff6bdfd5479e95f75be660a5e89607822fbec64d532",
+        "sourceCommit": "6ad71ac701ca709ec671afd09257217e8d17a149",
+        "platform": {
+          "os": "linux",
+          "architecture": "arm64"
+        },
+        "requiredFix": {
+          "pullRequest": "https://github.com/honua-io/honua-server/pull/3120",
+          "mergeCommit": "8e162e46476191297b5ad03b8a523c322742d8b3",
+          "isAncestorOfServerCommit": true
+        }
+      },
+      "requiredChecks": [
+        "deployed immutable image digest, source commit, and arm64 architecture match this contract",
+        "WMS GetCapabilities names the exact governed layer without an exception",
+        "bounded WMS GetMap returns a 512x512 image/png with nonblank semantic pixels",
+        "canary receipt records the sha256 digest of the published demo-services manifest",
+        "every binding has approved source-specific redistribution and attribution governance"
+      ]
+    }
   },
   "services": [
     {
@@ -281,6 +309,133 @@
         "NotoSansRegular"
       ],
       "source": "github.com/openmaptiles/fonts v2.0 (OFL 1.1)"
+    }
+  },
+  "releaseCandidates": {
+    "wms": {
+      "status": "planned",
+      "bindings": [
+        {
+          "serviceId": "maui-flood-hazard",
+          "wms": {
+            "path": "/rest/services/maui-flood-hazard/MapServer/WMS",
+            "layerName": "maui-flood-hazard",
+            "capabilitiesVersion": "1.3.0",
+            "expectedMap": {
+              "version": "1.1.1",
+              "srs": "EPSG:4326",
+              "bbox": [
+                -157.4,
+                20.45,
+                -155.95,
+                21.25
+              ],
+              "width": 512,
+              "height": 512,
+              "format": "image/png",
+              "transparent": true,
+              "minDistinctColors": 2,
+              "minNonTransparentPixels": 64
+            }
+          },
+          "governance": {
+            "status": "blocked",
+            "source": {
+              "title": "Maui County DFIRM",
+              "publisher": "Hawaii Statewide GIS Program; source metadata identifies FEMA",
+              "url": "https://geodata.hawaii.gov/arcgis/rest/services/Hazards/MapServer/4?f=pjson",
+              "sha256": "0640a697d760ed825b6608081e01711d660127432ac7bc1909528960efd8a78f",
+              "refreshCadence": "monthly per source metadata"
+            },
+            "license": {
+              "classification": null,
+              "redistributionAllowed": null,
+              "termsUrl": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+              "termsSha256": "5a1298787cb0cbce14a7ce03f0a0ed4031a7bc06f2f874abd35a428fba00f92b",
+              "blocker": "Exact seeded artifact and vintage are not yet immutably bound to source-specific redistribution terms."
+            },
+            "attribution": {
+              "text": "Federal Emergency Management Agency (FEMA); Hawaii Statewide GIS Program",
+              "obligation": "unverified"
+            },
+            "evidence": [
+              {
+                "kind": "source-metadata",
+                "url": "https://geodata.hawaii.gov/arcgis/rest/services/Hazards/MapServer/4?f=pjson",
+                "sha256": "0640a697d760ed825b6608081e01711d660127432ac7bc1909528960efd8a78f"
+              },
+              {
+                "kind": "portal-terms",
+                "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+                "sha256": "5a1298787cb0cbce14a7ce03f0a0ed4031a7bc06f2f874abd35a428fba00f92b"
+              }
+            ]
+          }
+        },
+        {
+          "serviceId": "maui-sea-level-rise",
+          "wms": {
+            "path": "/rest/services/maui-sea-level-rise/MapServer/WMS",
+            "layerName": "maui-sea-level-rise",
+            "capabilitiesVersion": "1.3.0",
+            "expectedMap": {
+              "version": "1.1.1",
+              "srs": "EPSG:4326",
+              "bbox": [
+                -157.4,
+                20.45,
+                -155.95,
+                21.25
+              ],
+              "width": 512,
+              "height": 512,
+              "format": "image/png",
+              "transparent": true,
+              "minDistinctColors": 2,
+              "minNonTransparentPixels": 64
+            }
+          },
+          "governance": {
+            "status": "blocked",
+            "source": {
+              "title": "SLR Exposure Area - 3.2 Ft. Scenario",
+              "publisher": "UH SOEST Coastal Geology Group, PacIOOS, and Tetra Tech, Inc.",
+              "url": "https://geodata.hawaii.gov/arcgis/rest/services/Climate/MapServer/45?f=pjson",
+              "sha256": "01220ffa55f5bfb7217369b63924e9cfba425c3591b12353eae9c8a59b0c35e2",
+              "refreshCadence": "no published fixed cadence; manual verification required"
+            },
+            "license": {
+              "classification": null,
+              "redistributionAllowed": null,
+              "termsUrl": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+              "termsSha256": "5a1298787cb0cbce14a7ce03f0a0ed4031a7bc06f2f874abd35a428fba00f92b",
+              "blocker": "The exact seeded artifact/version and each contributing publisher's source-specific redistribution terms are not yet immutably bound."
+            },
+            "attribution": {
+              "text": "SOEST, UH CGG, PacIOOS, Tetra Tech, Inc.",
+              "obligation": "unverified",
+              "suggestedCitationUrl": "https://www.pacioos.hawaii.edu/shoreline/slr-hawaii/"
+            },
+            "evidence": [
+              {
+                "kind": "source-metadata",
+                "url": "https://geodata.hawaii.gov/arcgis/rest/services/Climate/MapServer/45?f=pjson",
+                "sha256": "01220ffa55f5bfb7217369b63924e9cfba425c3591b12353eae9c8a59b0c35e2"
+              },
+              {
+                "kind": "methodology-citation-and-limitations",
+                "url": "https://www.pacioos.hawaii.edu/shoreline/slr-hawaii/",
+                "sha256": "976eb33f4113ccae1c01dbeed2b3681f586dc7ca2e12f50dc9acc1affe9ca38b"
+              },
+              {
+                "kind": "portal-terms",
+                "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+                "sha256": "5a1298787cb0cbce14a7ce03f0a0ed4031a7bc06f2f874abd35a428fba00f92b"
+              }
+            ]
+          }
+        }
+      ]
     }
   }
 }

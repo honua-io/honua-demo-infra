@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import re
 import sys
@@ -47,6 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SEED_MANIFEST = REPO_ROOT / "stacks" / "aws" / "SEED_MANIFEST.md"
 REPO_README = REPO_ROOT / "README.md"
 OUTPUT = Path(__file__).resolve().parent / "demo-services.v1.json"
+WMS_RELEASE = Path(__file__).resolve().parent / "wms-release.v1.json"
 
 BASE_URL = "https://demo.honua.io"
 PUBLISH_URL = f"{BASE_URL}/demo-services.v1.json"
@@ -64,6 +66,8 @@ OGC_TILES_TEMPLATE = (
 MVT_SOURCE_LAYER = "layer"
 
 STAC_SEED_FILE = "tests/seed/demo-stac-imagery-v1.sql"
+
+WMS_SERVICE_IDS = {"maui-flood-hazard", "maui-sea-level-rise"}
 
 
 def fail(msg: str) -> "SystemExit":
@@ -307,6 +311,86 @@ def stac_service(sql: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Planned WMS release contract
+# ---------------------------------------------------------------------------
+
+def load_wms_release() -> tuple[dict, str]:
+    raw = WMS_RELEASE.read_bytes()
+    definition = json.loads(raw)
+    if definition.get("format") != "honua.demo.wms-release.v1":
+        raise fail("unexpected WMS release format")
+    if definition.get("schemaVersion") != "1.0.0":
+        raise fail("unexpected WMS release schemaVersion")
+
+    admission = definition.get("admission", {})
+    status = admission.get("status")
+    if status not in {"planned", "live"}:
+        raise fail("WMS admission.status must be planned or live")
+
+    server = definition.get("serverImage", {})
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", server.get("digest", "")):
+        raise fail("WMS server image must use an immutable sha256 digest")
+    if not re.fullmatch(r"[0-9a-f]{40}", server.get("sourceCommit", "")):
+        raise fail("WMS server sourceCommit must be a full commit")
+    if server.get("platform") != {"os": "linux", "architecture": "arm64"}:
+        raise fail("WMS release is admitted only for linux/arm64")
+
+    fix = definition.get("requiredFix", {})
+    if not re.fullmatch(r"[0-9a-f]{40}", fix.get("mergeCommit", "")):
+        raise fail("WMS requiredFix.mergeCommit must be a full commit")
+    if fix.get("isAncestorOfServerCommit") is not True:
+        raise fail("WMS release must carry a positive fix ancestry proof")
+
+    bindings = definition.get("bindings", [])
+    if {binding.get("serviceId") for binding in bindings} != WMS_SERVICE_IDS:
+        raise fail("WMS release must bind exactly the two governed Maui hazard services")
+    for binding in bindings:
+        service_id = binding["serviceId"]
+        wms = binding.get("wms", {})
+        expected_path = f"/rest/services/{service_id}/MapServer/WMS"
+        if wms.get("path") != expected_path or wms.get("layerName") != service_id:
+            raise fail(f"unexpected WMS path/layer binding for {service_id}")
+        expected_map = wms.get("expectedMap", {})
+        if expected_map.get("width") != 512 or expected_map.get("height") != 512:
+            raise fail(f"WMS canary map must remain bounded at 512x512 for {service_id}")
+        governance = binding.get("governance", {})
+        if governance.get("status") not in {"blocked", "approved"}:
+            raise fail(f"WMS governance status is invalid for {service_id}")
+        for evidence in governance.get("evidence", []):
+            if not evidence.get("url", "").startswith("https://"):
+                raise fail(f"WMS governance evidence must use HTTPS for {service_id}")
+            if not re.fullmatch(r"[0-9a-f]{64}", evidence.get("sha256", "")):
+                raise fail(f"WMS governance evidence needs a sha256 digest for {service_id}")
+        if status == "live" and governance.get("status") != "approved":
+            raise fail(f"cannot admit live WMS with blocked governance for {service_id}")
+
+    return definition, hashlib.sha256(raw).hexdigest()
+
+
+def public_wms_release(definition: dict, definition_sha256: str) -> tuple[dict, list[dict]]:
+    server = definition["serverImage"]
+    fix = definition["requiredFix"]
+    release = {
+        "status": definition["admission"]["status"],
+        "definition": "manifest/wms-release.v1.json",
+        "definitionSha256": definition_sha256,
+        "requiredServer": {
+            "imageDigest": server["digest"],
+            "sourceCommit": server["sourceCommit"],
+            "platform": server["platform"],
+            "requiredFix": {
+                "pullRequest": fix["pullRequest"],
+                "mergeCommit": fix["mergeCommit"],
+                "isAncestorOfServerCommit": fix["isAncestorOfServerCommit"],
+            },
+        },
+        "requiredChecks": definition["admission"]["requiredChecks"],
+    }
+    bindings = json.loads(json.dumps(definition["bindings"]))
+    return release, bindings
+
+
+# ---------------------------------------------------------------------------
 # Assembly
 # ---------------------------------------------------------------------------
 
@@ -325,9 +409,25 @@ def build_manifest(stac_sql_path: str | None) -> dict:
     stac_sql, stac_url = fetch_stac_seed(stac_sql_path)
     stac = stac_service(stac_sql)
 
-    return {
+    services = vectors + rasters + basemaps + [stac]
+    wms_definition, wms_definition_sha256 = load_wms_release()
+    wms_release, wms_bindings = public_wms_release(
+        wms_definition, wms_definition_sha256
+    )
+    if wms_release["status"] == "live":
+        services_by_id = {service["id"]: service for service in services}
+        for binding in wms_bindings:
+            service = services_by_id.get(binding["serviceId"])
+            if service is None:
+                raise fail(f"WMS service {binding['serviceId']!r} is not in the seed manifest")
+            service["protocols"]["wms"] = {
+                **binding["wms"],
+                "governance": binding["governance"],
+            }
+
+    manifest = {
         "format": "honua.demo-services.v1",
-        "schemaVersion": "1.0.0",
+        "schemaVersion": "1.1.0",
         "description": (
             "Publicly discoverable seeded services of the demo.honua.io demo "
             "environment. Generated from seed definitions by "
@@ -339,10 +439,20 @@ def build_manifest(stac_sql_path: str | None) -> dict:
         "sources": {
             "seedManifest": "stacks/aws/SEED_MANIFEST.md",
             "stacSeed": stac_url,
+            "wmsRelease": "manifest/wms-release.v1.json",
         },
-        "services": vectors + rasters + basemaps + [stac],
+        "releaseContracts": {"wms": wms_release},
+        "services": services,
         "assets": assets,
     }
+    if wms_release["status"] == "planned":
+        manifest["releaseCandidates"] = {
+            "wms": {
+                "status": "planned",
+                "bindings": wms_bindings,
+            }
+        }
+    return manifest
 
 
 def render(manifest: dict) -> str:

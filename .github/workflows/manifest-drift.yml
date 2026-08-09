@@ -39,3 +39,6 @@ jobs:
         run: |
           python3 manifest/generate-client-compat.py --check
           node --test scripts/test-client-compat-canary.mjs
+
+      - name: Validate planned WMS release and semantic canary
+        run: node --test scripts/test-wms-live-contract.mjs
