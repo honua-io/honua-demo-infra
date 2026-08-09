@@ -34,10 +34,32 @@ NAME_PREFIX="${NAME_PREFIX:-honua-demo}"
 ENVIRONMENT="${ENVIRONMENT:-demo}"
 BOOTSTRAP_FN="${BOOTSTRAP_FN:-${NAME_PREFIX}-${ENVIRONMENT}-postgis-bootstrap}"
 ADMIN_SECRET="${ADMIN_SECRET:-${NAME_PREFIX}-${ENVIRONMENT}/admin-password}"
-BASE_URL="${BASE_URL:-https://demo.honua.io}"
 CONNECTION_ID="${CONNECTION_ID:-4f468b76-9937-4835-9e64-ddc8012b30c1}" # demo-rds secure connection
-SERVICE_NAME="${SERVICE_NAME:-test_service}"
-TABLE="${TABLE:-test_service_features}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SEED_DEFINITION="${CLIENT_COMPAT_SEED_DEFINITION:-${SCRIPT_DIR}/../client-compat-seed.v1.json}"
+
+mapfile -t fixture_config < <(python3 - "$SEED_DEFINITION" <<'PY'
+import json, sys
+definition = json.load(open(sys.argv[1], encoding="utf-8"))
+deployment = definition["deployment"]
+storage = definition["storage"]
+print(deployment["baseUrl"])
+print(deployment["serviceName"])
+print(deployment["layerId"])
+print(storage["table"])
+print(str(deployment["accessPolicy"]["allowAnonymous"]).lower())
+PY
+)
+BASE_URL="${BASE_URL:-${fixture_config[0]}}"
+SERVICE_NAME="${fixture_config[1]}"
+EXPECTED_LAYER_ID="${fixture_config[2]}"
+TABLE="${fixture_config[3]}"
+ALLOW_ANONYMOUS="${fixture_config[4]}"
+
+if [[ "$ALLOW_ANONYMOUS" != "false" ]]; then
+  echo "refusing to seed: client-compat must remain allowAnonymous=false" >&2
+  exit 1
+fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -88,15 +110,26 @@ publish_out="$(curl -fsS -X POST -H "X-API-Key: $PW" -H "Content-Type: applicati
 echo "    $publish_out"
 layer_id="$(printf '%s' "$publish_out" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("data",{}).get("layerId",""))' 2>/dev/null || true)"
 
-echo "==> 3/3 enable anonymous read on ${SERVICE_NAME}"
+echo "==> 3/3 enforce protected read on ${SERVICE_NAME}"
+python3 - "$SEED_DEFINITION" "$tmp/access.json" <<'PY'
+import json, sys
+definition = json.load(open(sys.argv[1], encoding="utf-8"))
+json.dump(definition["deployment"]["accessPolicy"], open(sys.argv[2], "w", encoding="utf-8"))
+PY
 curl -fsS -X PUT -H "X-API-Key: $PW" -H "Content-Type: application/json" \
-  -d '{"allowAnonymous":true}' \
+  -d @"$tmp/access.json" \
   "${BASE_URL}/api/v1/admin/services/${SERVICE_NAME}/access-policy" >/dev/null
-echo "    done."
+echo "    protected access policy applied."
+
+if [[ -n "$layer_id" && "$layer_id" != "$EXPECTED_LAYER_ID" ]]; then
+  echo "published layer ${layer_id} differs from governed layer ${EXPECTED_LAYER_ID}." >&2
+  echo "The service remains protected. Update the seed definition and complete the rotation runbook." >&2
+  exit 1
+fi
 
 echo
-echo "test_service published. FeatureServer layer id: ${layer_id:-<see publish output>}"
-echo "Set HONUA_LAYER_ID in the honua-sdk-python 'staging' environment to this id."
+echo "test_service published as protected FeatureServer layer ${layer_id:-$EXPECTED_LAYER_ID}."
+echo "Use runbook/client-compat-rotation.md before changing SDK bindings."
 echo "NOTE: FeatureServer applyEdits (write smoke) needs the Pro"
 echo "      'editing.featureserver-edits' entitlement; the demo runs Community"
 echo "      edition, so the SDK write smoke is opt-out on this target."

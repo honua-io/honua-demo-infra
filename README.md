@@ -191,6 +191,15 @@ is exactly the same operation in reverse).
   `tests/seed/client-compat-v1.sql` directly — see that script's header for
   why).
 
+## Protected client-compat fixture
+
+The protected SDK fixture is governed by
+`stacks/aws/client-compat-seed.v1.json` and the generated non-secret
+`manifest/client-compat.v1.json` descriptor. Rotate server/image/service/layer
+and credential bindings only through
+[`runbook/client-compat-rotation.md`](./runbook/client-compat-rotation.md).
+The public `demo-services.v1.json` continues to exclude this fixture.
+
 ## Service manifest (demo-services.v1.json)
 
 `manifest/demo-services.v1.json` is the generated, schema-versioned inventory

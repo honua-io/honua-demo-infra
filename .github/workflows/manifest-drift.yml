@@ -34,3 +34,8 @@ jobs:
 
       - name: Regenerate manifest and fail on drift
         run: python3 manifest/generate-demo-services.py --check
+
+      - name: Validate protected client-compat descriptor and canary
+        run: |
+          python3 manifest/generate-client-compat.py --check
+          node --test scripts/test-client-compat-canary.mjs
