@@ -9,6 +9,8 @@ on:
     paths:
       - "manifest/**"
       - "scripts/live-demo-canary.mjs"
+      - "scripts/client-compat-canary.mjs"
+      - "stacks/aws/client-compat-seed.v1.json"
       - ".github/workflows/live-canary.yml"
 
 permissions:
@@ -32,10 +34,17 @@ jobs:
       - name: Probe every published demo service family
         run: node scripts/live-demo-canary.mjs
 
+      - name: Prove protected client-compat behavior
+        env:
+          HONUA_CLIENT_COMPAT_API_KEY: ${{ secrets.HONUA_CLIENT_COMPAT_API_KEY }}
+          HONUA_CLIENT_COMPAT_SERVER_COMMIT: ${{ vars.HONUA_CLIENT_COMPAT_SERVER_COMMIT }}
+          HONUA_CLIENT_COMPAT_SERVER_IMAGE: ${{ vars.HONUA_CLIENT_COMPAT_SERVER_IMAGE }}
+        run: node scripts/client-compat-canary.mjs
+
       - name: Upload live canary evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: live-demo-canary
-          path: .artifacts/live-demo-canary
+          path: .artifacts
           if-no-files-found: error

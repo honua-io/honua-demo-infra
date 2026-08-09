@@ -136,7 +136,7 @@ Seeded by `scripts/seed-test-service.sh` for the honua-sdk-python staging
 smoke (honua-sdk-python#53). It is a single Point layer on a dedicated
 `public.test_service_features` table with the client-compat attribute set
 {objectid, name, description, status, count, ratio, uid, active} and 10
-deterministic features, published `allowAnonymous: true`. Additive — it does
+deterministic features, published `allowAnonymous: false`. The versioned source is `client-compat-seed.v1.json`; `manifest/client-compat.v1.json` is its generated non-secret consumer descriptor. Additive — it does
 not touch the Maui showcase layers.
 
 | Service | Route | Table | Fields | License |
@@ -154,7 +154,12 @@ Notes:
   Maui preserved) and materializes `public.features`.
 - The publish auto-assigns the FeatureServer layer id (a large monotonic id,
   e.g. 68823 — NOT 0); set `HONUA_LAYER_ID` in the honua-sdk-python `staging`
-  environment to the id printed by the script.
+  environment only through the atomic rotation runbook. The script fails closed
+  when the publish response differs from the governed descriptor.
+- **Protected policy:** `test_service` is never part of the anonymous public
+  inventory. The seed script always applies `allowAnonymous: false`; the live
+  canary always proves anonymous denial and runs typed schema/query proof only
+  when its credential and immutable server lineage are configured.
 - **Write smoke:** FeatureServer `applyEdits` requires the Pro
   `editing.featureserver-edits` entitlement; the demo runs Community edition
   (`validationState: NoLicenseConfigured`), so anonymous/admin edits return

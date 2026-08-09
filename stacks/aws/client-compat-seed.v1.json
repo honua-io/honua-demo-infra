@@ -1,0 +1,35 @@
+{
+  "format": "honua.demo.client-compat-seed.v1",
+  "schemaVersion": "1.0.0",
+  "fixtureProfile": "client-compat",
+  "deployment": {
+    "baseUrl": "https://demo.honua.io",
+    "serviceName": "test_service",
+    "layerId": 68823,
+    "layerName": "Test Layer",
+    "accessPolicy": {
+      "allowAnonymous": false
+    }
+  },
+  "storage": {
+    "schema": "public",
+    "table": "test_service_features",
+    "geometryColumn": "geometry",
+    "geometryType": "Point",
+    "srid": 4326,
+    "primaryKey": "objectid"
+  },
+  "fixture": {
+    "expectedFeatureCount": 10,
+    "fields": [
+      { "name": "objectid", "sourceType": "bigint", "semanticType": "integer", "nullable": false },
+      { "name": "name", "sourceType": "text", "semanticType": "string", "nullable": true },
+      { "name": "description", "sourceType": "text", "semanticType": "string", "nullable": true },
+      { "name": "status", "sourceType": "text", "semanticType": "string", "nullable": true },
+      { "name": "count", "sourceType": "integer", "semanticType": "integer", "nullable": true },
+      { "name": "ratio", "sourceType": "double precision", "semanticType": "number", "nullable": true },
+      { "name": "uid", "sourceType": "text", "semanticType": "uuid", "nullable": true },
+      { "name": "active", "sourceType": "boolean", "semanticType": "boolean", "nullable": true }
+    ]
+  }
+}

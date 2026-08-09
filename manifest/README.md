@@ -66,6 +66,24 @@ constants in the generator, not per-service hand-maintained data.
   resource ids, connection ids) — by construction the generator never emits
   them.
 
+## Protected client-compat descriptor
+
+`client-compat.v1.json` is a separate, non-secret governed descriptor for the
+protected `test_service` certification fixture. It is generated from
+`stacks/aws/client-compat-seed.v1.json`; it is not published as the anonymous
+demo-services inventory and does not make a GA claim. Its drift validator also
+fails if the seed policy becomes anonymous or if `test_service` appears in
+`demo-services.v1.json`.
+
+```bash
+python3 manifest/generate-client-compat.py
+python3 manifest/generate-client-compat.py --check
+```
+
+The descriptor stores only secret/variable names. Fresh authenticated
+evidence comes from `scripts/client-compat-canary.mjs` with an exact server
+commit and immutable image digest.
+
 ## Schema (`honua.demo-services.v1`)
 
 Top level:

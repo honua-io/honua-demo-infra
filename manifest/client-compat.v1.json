@@ -1,0 +1,107 @@
+{
+  "format": "honua.demo.client-compat.v1",
+  "schemaVersion": "1.0.0",
+  "supportClaim": "Protected SDK certification fixture. This descriptor is not a public-demo inventory entry and is not GA evidence without a fresh canary receipt.",
+  "baseUrl": "https://demo.honua.io",
+  "service": {
+    "name": "test_service",
+    "layerId": 68823,
+    "layerName": "Test Layer",
+    "featureServerMetadataPath": "/rest/services/test_service/FeatureServer/68823",
+    "featureServerQueryPath": "/rest/services/test_service/FeatureServer/68823/query"
+  },
+  "access": {
+    "allowAnonymous": false,
+    "apiKeyHeader": "X-API-Key",
+    "canarySecret": "HONUA_CLIENT_COMPAT_API_KEY"
+  },
+  "fixture": {
+    "profile": "client-compat",
+    "expectedFeatureCount": 10,
+    "primaryKey": "objectid",
+    "geometry": {
+      "column": "geometry",
+      "type": "Point",
+      "srid": 4326
+    },
+    "fields": [
+      {
+        "name": "objectid",
+        "sourceType": "bigint",
+        "semanticType": "integer",
+        "nullable": false
+      },
+      {
+        "name": "name",
+        "sourceType": "text",
+        "semanticType": "string",
+        "nullable": true
+      },
+      {
+        "name": "description",
+        "sourceType": "text",
+        "semanticType": "string",
+        "nullable": true
+      },
+      {
+        "name": "status",
+        "sourceType": "text",
+        "semanticType": "string",
+        "nullable": true
+      },
+      {
+        "name": "count",
+        "sourceType": "integer",
+        "semanticType": "integer",
+        "nullable": true
+      },
+      {
+        "name": "ratio",
+        "sourceType": "double precision",
+        "semanticType": "number",
+        "nullable": true
+      },
+      {
+        "name": "uid",
+        "sourceType": "text",
+        "semanticType": "uuid",
+        "nullable": true
+      },
+      {
+        "name": "active",
+        "sourceType": "boolean",
+        "semanticType": "boolean",
+        "nullable": true
+      }
+    ]
+  },
+  "consumerBinding": {
+    "repository": "honua-io/honua-sdk-python",
+    "environment": "staging",
+    "variables": {
+      "HONUA_BASE_URL": "https://demo.honua.io",
+      "HONUA_SERVICE_ID": "test_service",
+      "HONUA_LAYER_ID": "68823",
+      "HONUA_SEED_PROFILE": "client-compat",
+      "HONUA_SERVER_COMMIT": "required external rotation value",
+      "HONUA_SERVER_IMAGE": "required immutable @sha256 external rotation value",
+      "HONUA_API_KEY": "secret; never stored in this descriptor"
+    }
+  },
+  "canaryBinding": {
+    "serverCommitVariable": "HONUA_CLIENT_COMPAT_SERVER_COMMIT",
+    "serverImageVariable": "HONUA_CLIENT_COMPAT_SERVER_IMAGE",
+    "requiredAnonymousOutcome": "HTTP 401, 403, or 499",
+    "authenticatedChecks": [
+      "metadata field contract",
+      "10-row typed query contract"
+    ]
+  },
+  "provenance": {
+    "seedDefinition": "stacks/aws/client-compat-seed.v1.json",
+    "seedDefinitionSha256": "62886dd21079305c1f77715e6c71177c177999c6a1a2673c673ab68a69c20e07",
+    "generator": "manifest/generate-client-compat.py",
+    "issue": "https://github.com/honua-io/honua-demo-infra/issues/28"
+  },
+  "containsSecrets": false
+}
