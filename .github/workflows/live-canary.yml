@@ -48,3 +48,4 @@ jobs:
           name: live-demo-canary
           path: .artifacts
           if-no-files-found: error
+          include-hidden-files: true
