@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -18,6 +19,9 @@ test("canary always proves denial and conditionally proves typed authentication"
   const common = {
     HONUA_DEMO_BASE_URL: `http://127.0.0.1:${port}`,
     HONUA_DEMO_TIMEOUT_MS: "2000",
+    GITHUB_REPOSITORY: "honua-io/honua-demo-infra",
+    GITHUB_RUN_ID: "123456789",
+    GITHUB_SHA: "a".repeat(40),
   };
 
   try {
@@ -37,9 +41,24 @@ test("canary always proves denial and conditionally proves typed authentication"
     });
     const text = await readFile(authenticatedPath, "utf8");
     const authenticated = JSON.parse(text);
+    const deploymentPath = path.join(temp, "client-compat-deployment.v1.json");
+    const deploymentBytes = await readFile(deploymentPath);
+    const deployment = JSON.parse(deploymentBytes.toString("utf8"));
     assert.deepEqual(authenticated.summary, { total: 3, passed: 3, failed: 0, skipped: 0 });
     assert.equal(authenticated.authentication.credentialRecorded, false);
     assert.equal(text.includes(apiKey), false);
+    assert.equal(deployment.format, "honua.demo.client-compat-deployment.v1");
+    assert.equal(deployment.owner.repository, "honua-io/honua-demo-infra");
+    assert.equal(deployment.target.server.commit, "0123456789abcdef0123456789abcdef01234567");
+    assert.equal(deployment.access.allowAnonymous, false);
+    assert.equal(deployment.access.credentialRecorded, false);
+    assert.ok(Date.parse(deployment.expiresAt) > Date.parse(deployment.generatedAt));
+    assert.equal(
+      authenticated.target.deploymentEvidence.sha256,
+      createHash("sha256").update(deploymentBytes).digest("hex"),
+    );
+    assert.equal(authenticated.target.descriptorUrl, deployment.descriptor.url);
+    assert.equal(authenticated.target.descriptorSha256, deployment.descriptor.sha256);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(temp, { recursive: true, force: true });

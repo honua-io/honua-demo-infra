@@ -9,11 +9,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const descriptorPath = path.join(repoRoot, "manifest", "client-compat.v1.json");
 const evidencePath = process.env.HONUA_CLIENT_COMPAT_EVIDENCE_PATH
   ?? path.join(repoRoot, ".artifacts", "client-compat-canary", "client-compat-canary.v1.json");
+const deploymentEvidencePath = path.join(path.dirname(evidencePath), "client-compat-deployment.v1.json");
 const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
+const deploymentEvidenceTtlSeconds = Number(process.env.HONUA_CLIENT_COMPAT_EVIDENCE_TTL_SECONDS ?? 604_800);
 
 async function main() {
   const descriptorBytes = await readFile(descriptorPath);
   const descriptor = JSON.parse(descriptorBytes.toString("utf8"));
+  const descriptorSha256 = createHash("sha256").update(descriptorBytes).digest("hex");
   if (descriptor.format !== "honua.demo.client-compat.v1" || descriptor.access?.allowAnonymous !== false) {
     throw new Error("client-compat descriptor is not the protected v1 contract");
   }
@@ -27,12 +30,26 @@ async function main() {
 
   await probeAnonymousDenial(results, metadataUrl);
   let server = null;
+  let deploymentEvidence = null;
+  let deploymentEvidenceBytes = null;
+  let deploymentEvidenceIdentity = null;
   if (apiKey) {
     const lineage = serverLineage();
     server = lineage.server;
     if (lineage.error) {
       results.push({ name: "authenticated-lineage", status: 0, latencyMs: 0, bytes: 0, passed: false, error: lineage.error });
     } else {
+      deploymentEvidence = buildDeploymentEvidence(descriptor, descriptorSha256, server);
+      deploymentEvidenceBytes = canonicalJsonBytes(deploymentEvidence);
+      deploymentEvidenceIdentity = {
+        path: path.basename(deploymentEvidencePath),
+        sha256: createHash("sha256").update(deploymentEvidenceBytes).digest("hex"),
+        format: deploymentEvidence.format,
+        generatedAt: deploymentEvidence.generatedAt,
+        expiresAt: deploymentEvidence.expiresAt,
+        owner: deploymentEvidence.owner,
+      };
+
       const metadata = await probeJson(results, "authenticated-metadata", metadataUrl, apiKey);
       if (metadata) validateMetadata(results.at(-1), metadata, descriptor.fixture.fields);
 
@@ -62,7 +79,9 @@ async function main() {
       baseUrl,
       serviceName: descriptor.service.name,
       layerId: descriptor.service.layerId,
-      descriptorSha256: createHash("sha256").update(descriptorBytes).digest("hex"),
+      descriptorSha256,
+      descriptorUrl: deploymentEvidence?.descriptor.url ?? null,
+      deploymentEvidence: deploymentEvidenceIdentity,
       server,
     },
     authentication: {
@@ -79,6 +98,7 @@ async function main() {
     skipped,
   };
   await mkdir(path.dirname(evidencePath), { recursive: true });
+  if (deploymentEvidenceBytes) await writeFile(deploymentEvidencePath, deploymentEvidenceBytes);
   await writeFile(evidencePath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(receipt.summary)}\n`);
   for (const result of results) {
@@ -99,6 +119,72 @@ function serverLineage() {
     return { server: null, error: "authenticated proof requires an image pinned by @sha256 digest" };
   }
   return { server: { commit, image }, error: null };
+}
+
+function buildDeploymentEvidence(descriptor, descriptorSha256, server) {
+  if (!Number.isInteger(deploymentEvidenceTtlSeconds)
+    || deploymentEvidenceTtlSeconds < 300
+    || deploymentEvidenceTtlSeconds > 2_592_000) {
+    throw new Error("HONUA_CLIENT_COMPAT_EVIDENCE_TTL_SECONDS must be an integer from 300 through 2592000");
+  }
+  const producerCommit = process.env.GITHUB_SHA ?? "";
+  if (!/^[0-9a-f]{40}$/u.test(producerCommit)) {
+    throw new Error("deployment evidence requires the full demo-infra GITHUB_SHA");
+  }
+  const descriptorUrl = process.env.HONUA_CLIENT_COMPAT_DESCRIPTOR_URL
+    ?? `https://raw.githubusercontent.com/honua-io/honua-demo-infra/${producerCommit}/manifest/client-compat.v1.json`;
+  if (!/^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-demo-infra\/[0-9a-f]{40}\/manifest\/client-compat\.v1\.json$/u.test(descriptorUrl)) {
+    throw new Error("deployment evidence requires a commit-pinned honua-demo-infra descriptor URL");
+  }
+
+  const generatedAt = new Date();
+  const expiresAt = new Date(generatedAt.getTime() + deploymentEvidenceTtlSeconds * 1000);
+  const runId = process.env.GITHUB_RUN_ID ?? "";
+  const workflowRunUrl = /^\d+$/u.test(runId)
+    ? `https://github.com/honua-io/honua-demo-infra/actions/runs/${runId}`
+    : null;
+  return {
+    format: "honua.demo.client-compat-deployment.v1",
+    schemaVersion: "1.0.0",
+    generatedAt: generatedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    owner: {
+      repository: "honua-io/honua-demo-infra",
+      issue: "https://github.com/honua-io/honua-demo-infra/issues/28",
+    },
+    descriptor: {
+      format: descriptor.format,
+      schemaVersion: descriptor.schemaVersion,
+      url: descriptorUrl,
+      sha256: descriptorSha256,
+    },
+    target: {
+      baseUrl: descriptor.baseUrl,
+      serviceName: descriptor.service.name,
+      layerId: descriptor.service.layerId,
+      seedProfile: descriptor.fixture.profile,
+      server,
+    },
+    access: {
+      allowAnonymous: descriptor.access.allowAnonymous,
+      credentialRecorded: false,
+    },
+    source: {
+      repository: "honua-io/honua-demo-infra",
+      commit: producerCommit,
+      workflowRunUrl,
+    },
+  };
+}
+
+function canonicalJsonBytes(value) {
+  return Buffer.from(`${JSON.stringify(sortJson(value))}\n`, "utf8");
+}
+
+function sortJson(value) {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortJson(value[key])]));
 }
 
 async function probeAnonymousDenial(results, url) {
