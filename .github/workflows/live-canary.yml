@@ -3,12 +3,22 @@ name: live demo canary
 on:
   schedule:
     - cron: "17 */6 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      wms_admission:
+        description: "Probe live WMS, or planned WMS during an approved promotion"
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - planned
   push:
     branches: [trunk]
     paths:
       - "manifest/**"
       - "scripts/live-demo-canary.mjs"
+      - "scripts/test-wms-live-contract.mjs"
       - "scripts/client-compat-canary.mjs"
       - "stacks/aws/client-compat-seed.v1.json"
       - ".github/workflows/live-canary.yml"
@@ -32,6 +42,11 @@ jobs:
           node-version: "22"
 
       - name: Probe every published demo service family
+        env:
+          HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'live' }}
+          HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}
+          HONUA_DEMO_WMS_SERVER_COMMIT: ${{ vars.HONUA_DEMO_WMS_SERVER_COMMIT }}
+          HONUA_DEMO_WMS_SERVER_ARCHITECTURE: ${{ vars.HONUA_DEMO_WMS_SERVER_ARCHITECTURE }}
         run: node scripts/live-demo-canary.mjs
 
       - name: Prove protected client-compat behavior
