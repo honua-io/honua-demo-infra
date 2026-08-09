@@ -101,7 +101,7 @@ function fixtureFeatures() {
       count: index + 1,
       ratio: (index + 1) * 1.25,
       uid: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
-      active: index % 2 === 0,
+      active: index % 2 === 0 ? 1 : 0,
     },
   }));
 }

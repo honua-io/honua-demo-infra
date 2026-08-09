@@ -91,7 +91,7 @@
   "canaryBinding": {
     "serverCommitVariable": "HONUA_CLIENT_COMPAT_SERVER_COMMIT",
     "serverImageVariable": "HONUA_CLIENT_COMPAT_SERVER_IMAGE",
-    "requiredAnonymousOutcome": "HTTP 401, 403, or 499",
+    "requiredAnonymousOutcome": "HTTP 401/403 or HTTP 200 with GeoServices error.code 499; no protected metadata or features",
     "authenticatedChecks": [
       "metadata field contract",
       "10-row typed query contract"

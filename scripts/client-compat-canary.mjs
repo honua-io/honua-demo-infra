@@ -209,7 +209,7 @@ function validateQuery(result, payload, descriptor) {
       && Number.isInteger(attributes.count)
       && typeof attributes.ratio === "number"
       && uuidPattern.test(attributes.uid)
-      && typeof attributes.active === "boolean";
+      && (typeof attributes.active === "boolean" || attributes.active === 0 || attributes.active === 1);
     if (!valid) {
       fail(result, `feature ${index} violates the typed client-compat contract`);
       return;
