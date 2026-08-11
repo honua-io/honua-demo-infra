@@ -10,11 +10,12 @@ on:
         required: true
         type: string
       wms_admission:
-        description: "Probe live WMS, or planned WMS during an approved promotion"
+        description: "Probe optional advertised live WMS, require live WMS, or probe an approved planned candidate"
         required: true
-        default: live
+        default: optional-live
         type: choice
         options:
+          - optional-live
           - live
           - planned
   push:
@@ -73,7 +74,7 @@ jobs:
           HONUA_DEMO_EXPECTED_STAC_SEED_URL: ${{ steps.contract.outputs.stac_seed_url }}
           HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
           HONUA_DEMO_EXPECTED_MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
-          HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'live' }}
+          HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'optional-live' }}
           HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}
           HONUA_DEMO_WMS_SERVER_COMMIT: ${{ vars.HONUA_DEMO_WMS_SERVER_COMMIT }}
           HONUA_DEMO_WMS_SERVER_ARCHITECTURE: ${{ vars.HONUA_DEMO_WMS_SERVER_ARCHITECTURE }}

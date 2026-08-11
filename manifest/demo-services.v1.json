@@ -6,7 +6,7 @@
   "publishUrl": "https://demo.honua.io/demo-services.v1.json",
   "sources": {
     "seedManifest": "stacks/aws/SEED_MANIFEST.md",
-    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/189aa7f54e777c672ce61d69c4cb2f899cee49fe/tests/seed/demo-stac-imagery-v1.sql",
+    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/aa37645427470049d3156804549dc3923749dfcb/tests/seed/demo-stac-imagery-v1.sql",
     "wmsRelease": "manifest/wms-release.v1.json"
   },
   "releaseContracts": {

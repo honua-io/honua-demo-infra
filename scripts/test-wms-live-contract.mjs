@@ -8,12 +8,12 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
-import { inspectPng, validateWmsCapabilities } from "./live-demo-canary.mjs";
+import { inspectPng, selectWmsBindings, validateWmsCapabilities } from "./live-demo-canary.mjs";
 
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
-const stacServerCommit = "189aa7f54e777c672ce61d69c4cb2f899cee49fe";
+const stacServerCommit = "aa37645427470049d3156804549dc3923749dfcb";
 const stacCollectionId = "90810";
 
 test("planned WMS canary binds deployment, manifest, capabilities, and semantic PNG", async () => {
@@ -57,6 +57,14 @@ test("PNG semantic gate rejects a same-color blank map", () => {
     () => inspectPng(blank, { width: 8, height: 8, minDistinctColors: 2, minNonTransparentPixels: 1 }),
     /distinct color/u,
   );
+});
+
+test("explicit live WMS admission requires at least one advertised live binding", () => {
+  assert.throws(() => selectWmsBindings(fixtureManifest(), "live"), /at least one advertised live WMS binding/u);
+});
+
+test("optional-live WMS admission permits no binding without selecting planned WMS", () => {
+  assert.deepEqual(selectWmsBindings(fixtureManifest(), "optional-live"), []);
 });
 
 test("capabilities gate requires the governed layer and rejects exceptions", () => {
