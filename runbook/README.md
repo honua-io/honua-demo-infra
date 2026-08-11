@@ -39,9 +39,9 @@ stays in honua-server per the seed-data policy (see the repo-root README →
 "Seed data") — pinned reference:
 
 ```
-https://raw.githubusercontent.com/honua-io/honua-server/597bc0fd2ab4b6fc3926abf742357dd15b34fd57/tests/seed/apply-demo-stac-seed.sh
+https://raw.githubusercontent.com/honua-io/honua-server/e083376c4ab6e496174af4cd6f1798397aaf6c75/tests/seed/apply-demo-stac-seed.sh
 ```
 
 (and the sibling `tests/seed/demo-*.sql` / `client-compat-v1.sql` fixtures at
-the same ref). Bump `30d6d6f1…` deliberately when a newer seed fixture is
+the same ref). Bump the pinned commit deliberately when a newer seed fixture is
 needed — do not float on `trunk`.

@@ -316,7 +316,8 @@ def stac_service(sql: str) -> dict:
 
 def load_wms_release() -> tuple[dict, str]:
     raw = WMS_RELEASE.read_bytes()
-    definition = json.loads(raw)
+    canonical_raw = raw.replace(b"\r\n", b"\n")
+    definition = json.loads(canonical_raw)
     if definition.get("format") != "honua.demo.wms-release.v1":
         raise fail("unexpected WMS release format")
     if definition.get("schemaVersion") != "1.0.0":
@@ -364,7 +365,7 @@ def load_wms_release() -> tuple[dict, str]:
         if status == "live" and governance.get("status") != "approved":
             raise fail(f"cannot admit live WMS with blocked governance for {service_id}")
 
-    return definition, hashlib.sha256(raw).hexdigest()
+    return definition, hashlib.sha256(canonical_raw).hexdigest()
 
 
 def public_wms_release(definition: dict, definition_sha256: str) -> tuple[dict, list[dict]]:

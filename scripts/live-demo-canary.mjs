@@ -15,14 +15,26 @@ const baseUrl = (process.env.HONUA_DEMO_BASE_URL ?? "https://demo.honua.io").rep
 const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
 const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "live";
 const expectedDeploymentRevision = (process.env.HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION ?? "").trim();
+const requireDeploymentBinding = process.env.HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING === "true";
+const expectedStacSeedUrl = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_URL ?? "").trim();
+const expectedStacServerCommit = (process.env.HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT ?? "").trim();
+const expectedManifestSha256 = (process.env.HONUA_DEMO_EXPECTED_MANIFEST_SHA256 ?? "").trim();
 const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
+const results = [];
 
 async function main() {
   if (!["live", "planned"].includes(wmsAdmission)) {
     throw new Error("HONUA_DEMO_WMS_ADMISSION must be live or planned");
   }
+  if (requireDeploymentBinding) {
+    if (!/^[0-9a-f]{40}$/u.test(expectedDeploymentRevision)) {
+      throw new Error("dispatch requires an exact 40-character HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION");
+    }
+    if (!expectedStacSeedUrl || !/^[0-9a-f]{40}$/u.test(expectedStacServerCommit) || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)) {
+      throw new Error("dispatch requires exact checked-out STAC seed URL, server commit, and manifest SHA-256 bindings");
+    }
+  }
 
-  const results = [];
   await probeLanding(results);
   const capabilityManifest = await probeJson(results, "capability-manifest", "/api/v1/capabilities/manifest");
   const deploymentRevision = capabilityManifest.server?.deploymentRevision;
@@ -41,9 +53,30 @@ async function main() {
   if (!Array.isArray(manifest.services) || manifest.services.length === 0) {
     throw new Error("published demo manifest contains no services");
   }
-  const manifestSha256 = results.find((result) => result.name === "manifest")?.sha256;
+  const manifestResult = results.find((result) => result.name === "manifest");
+  const manifestSha256 = manifestResult?.sha256;
+  const stacSeedUrl = manifest.sources?.stacSeed;
+  const stacSeedMatch = /^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-server\/([0-9a-f]{40})\/tests\/seed\/demo-stac-imagery-v1\.sql$/u.exec(stacSeedUrl ?? "");
+  const stacServerCommit = stacSeedMatch?.[1] ?? null;
+  if (!stacSeedMatch) {
+    failResult(manifestResult, "manifest sources.stacSeed is not an immutable honua-server commit URL");
+  } else if (expectedStacSeedUrl && stacSeedUrl !== expectedStacSeedUrl) {
+    failResult(manifestResult, "published manifest STAC seed URL does not match the checked-out contract");
+  } else if (expectedStacServerCommit && stacServerCommit !== expectedStacServerCommit) {
+    failResult(manifestResult, "published manifest STAC seed commit does not match the checked-out contract");
+  } else if (expectedManifestSha256 && manifestSha256 !== expectedManifestSha256) {
+    failResult(manifestResult, "published manifest digest does not match the checked-out contract");
+  }
+  if (manifestResult) {
+    manifestResult.semantic = { ...(manifestResult.semantic ?? {}), stacSeedUrl, stacServerCommit };
+  }
 
   await probeText(results, "readiness", "/healthz/ready");
+  const stacServices = manifest.services.filter((service) => service.protocols?.stac);
+  if (stacServices.length === 0) {
+    throw new Error("published demo manifest contains no advertised STAC service");
+  }
+  const canaryBindings = [];
   for (const service of manifest.services) {
     const protocols = service.protocols ?? {};
     if (protocols.featureServer) {
@@ -73,29 +106,33 @@ async function main() {
       }
       const canaryCollection = (protocols.stac.collections ?? [])
         .find((collection) => collection.id === stacCanaryCollectionId);
-      if (!canaryCollection) {
-        throw new Error(`published STAC service ${service.id} does not declare canary collection ${stacCanaryCollectionId}`);
+      if (canaryCollection) {
+        canaryBindings.push({ service, collection: canaryCollection });
       }
-      await probeStacFeatureCollection(
-        results,
-        `${service.id}:stac:${stacCanaryCollectionId}:items`,
-        `${canaryCollection.path}/items?limit=2`,
-        stacCanaryCollectionId,
-        2,
-      );
-      await probeStacFeatureCollection(
-        results,
-        `${service.id}:stac:${stacCanaryCollectionId}:search`,
-        protocols.stac.searchPath,
-        stacCanaryCollectionId,
-        2,
-        {
-          method: "POST",
-          body: JSON.stringify({ collections: [stacCanaryCollectionId], limit: 2 }),
-        },
-      );
     }
   }
+  if (canaryBindings.length !== 1) {
+    throw new Error(`published STAC contract must declare exact canary collection ${stacCanaryCollectionId} once; found ${canaryBindings.length}`);
+  }
+  const stacCanary = canaryBindings[0];
+  await probeStacFeatureCollection(
+    results,
+    `${stacCanary.service.id}:stac:${stacCanaryCollectionId}:items`,
+    `${stacCanary.collection.path}/items?limit=2`,
+    stacCanaryCollectionId,
+    2,
+  );
+  await probeStacFeatureCollection(
+    results,
+    `${stacCanary.service.id}:stac:${stacCanaryCollectionId}:search`,
+    stacCanary.service.protocols.stac.searchPath,
+    stacCanaryCollectionId,
+    2,
+    {
+      method: "POST",
+      body: JSON.stringify({ collections: [stacCanaryCollectionId], limit: 2 }),
+    },
+  );
 
   const wmsBindings = selectWmsBindings(manifest, wmsAdmission);
   const wmsRelease = manifest.releaseContracts?.wms;
@@ -127,9 +164,15 @@ async function main() {
       schemaVersion: manifest.schemaVersion,
       serviceCount: manifest.services.length,
       sha256: manifestSha256,
+      expectedSha256: expectedManifestSha256 || null,
+      stacSeedUrl,
+      expectedStacSeedUrl: expectedStacSeedUrl || null,
+      stacServerCommit,
+      expectedStacServerCommit: expectedStacServerCommit || null,
     },
     stac: {
       canaryCollectionId: stacCanaryCollectionId,
+      serviceId: stacCanary.service.id,
     },
     wms: {
       admission: wmsAdmission,
@@ -513,9 +556,14 @@ function failResult(result, error) { result.passed = false; result.error = error
 
 async function writeFatal(error) {
   await mkdir(path.dirname(evidencePath), { recursive: true });
+  const summary = {
+    total: results.length,
+    passed: results.filter((result) => result.passed).length,
+    failed: results.filter((result) => !result.passed).length,
+  };
   await writeFile(
     evidencePath,
-    `${JSON.stringify({ format: "honua.demo.live-canary.v1", generatedAt: new Date().toISOString(), baseUrl, fatal: error instanceof Error ? error.message : String(error) }, null, 2)}\n`,
+    `${JSON.stringify({ format: "honua.demo.live-canary.v1", generatedAt: new Date().toISOString(), baseUrl, fatal: error instanceof Error ? error.message : String(error), summary, results }, null, 2)}\n`,
     "utf8",
   );
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
