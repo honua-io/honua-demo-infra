@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-  https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/597bc0fd2ab4b6fc3926abf742357dd15b34fd57/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
@@ -208,8 +208,10 @@ of the demo's publicly discoverable services (issue #19) — derived from
 hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
 public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
 wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
-the shared Terraform state since 2026-07-31. The scheduled public canary
-probes every declared service family and uploads its receipt. Consumer:
+the shared Terraform state since 2026-07-31. The scheduled and deploy-dispatch
+public canary records the exact runtime revision, probes every declared service
+family, and requires non-empty item and bounded POST search results tied to STAC
+collection `90810` before its receipt passes. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook

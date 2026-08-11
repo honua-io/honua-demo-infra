@@ -14,6 +14,8 @@ const evidencePath = process.env.HONUA_DEMO_CANARY_EVIDENCE_PATH
 const baseUrl = (process.env.HONUA_DEMO_BASE_URL ?? "https://demo.honua.io").replace(/\/$/u, "");
 const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
 const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "live";
+const expectedDeploymentRevision = (process.env.HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION ?? "").trim();
+const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
 
 async function main() {
   if (!["live", "planned"].includes(wmsAdmission)) {
@@ -22,6 +24,16 @@ async function main() {
 
   const results = [];
   await probeLanding(results);
+  const capabilityManifest = await probeJson(results, "capability-manifest", "/api/v1/capabilities/manifest");
+  const deploymentRevision = capabilityManifest.server?.deploymentRevision;
+  const capabilityResult = results.find((result) => result.name === "capability-manifest");
+  if (!/^[0-9a-f]{40}$/u.test(deploymentRevision ?? "")) {
+    failResult(capabilityResult, "capability manifest has no exact 40-character deployment revision");
+  } else if (expectedDeploymentRevision && deploymentRevision !== expectedDeploymentRevision) {
+    failResult(capabilityResult, `deployment revision ${deploymentRevision} does not match expected revision ${expectedDeploymentRevision}`);
+  } else if (capabilityResult) {
+    capabilityResult.semantic = { deploymentRevision };
+  }
   const manifest = await probeJson(results, "manifest", "/demo-services.v1.json");
   if (manifest.format !== "honua.demo-services.v1" || !/^1\.\d+\.\d+$/u.test(manifest.schemaVersion ?? "")) {
     throw new Error(`unexpected manifest contract ${manifest.format}@${manifest.schemaVersion}`);
@@ -59,6 +71,29 @@ async function main() {
       for (const collection of protocols.stac.collections ?? []) {
         await probeJson(results, `${service.id}:stac:${collection.id}`, collection.path);
       }
+      const canaryCollection = (protocols.stac.collections ?? [])
+        .find((collection) => collection.id === stacCanaryCollectionId);
+      if (!canaryCollection) {
+        throw new Error(`published STAC service ${service.id} does not declare canary collection ${stacCanaryCollectionId}`);
+      }
+      await probeStacFeatureCollection(
+        results,
+        `${service.id}:stac:${stacCanaryCollectionId}:items`,
+        `${canaryCollection.path}/items?limit=2`,
+        stacCanaryCollectionId,
+        2,
+      );
+      await probeStacFeatureCollection(
+        results,
+        `${service.id}:stac:${stacCanaryCollectionId}:search`,
+        protocols.stac.searchPath,
+        stacCanaryCollectionId,
+        2,
+        {
+          method: "POST",
+          body: JSON.stringify({ collections: [stacCanaryCollectionId], limit: 2 }),
+        },
+      );
     }
   }
 
@@ -83,11 +118,18 @@ async function main() {
     format: "honua.demo.live-canary.v1",
     generatedAt: new Date().toISOString(),
     baseUrl,
+    deployment: {
+      revision: deploymentRevision ?? null,
+      expectedRevision: expectedDeploymentRevision || null,
+    },
     manifest: {
       format: manifest.format,
       schemaVersion: manifest.schemaVersion,
       serviceCount: manifest.services.length,
       sha256: manifestSha256,
+    },
+    stac: {
+      canaryCollectionId: stacCanaryCollectionId,
     },
     wms: {
       admission: wmsAdmission,
@@ -369,16 +411,88 @@ async function probeJson(results, name, urlPath) {
   }
 }
 
+async function probeStacFeatureCollection(
+  results,
+  name,
+  urlPath,
+  collectionId,
+  limit,
+  requestOptions = {},
+) {
+  const response = await probe(
+    results,
+    name,
+    urlPath,
+    {
+      accept: "application/geo+json,application/json",
+      ...(requestOptions.body ? { "content-type": "application/json" } : {}),
+    },
+    [200],
+    requestOptions,
+  );
+  if (!response.ok) return {};
+
+  let payload;
+  try {
+    payload = JSON.parse(response.body.toString("utf8"));
+  } catch (error) {
+    failResult(response.result, `invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return {};
+  }
+
+  const features = payload.type === "FeatureCollection" && Array.isArray(payload.features)
+    ? payload.features
+    : null;
+  if (!features) {
+    failResult(response.result, "expected a STAC FeatureCollection");
+    return payload;
+  }
+  if (features.length === 0) {
+    failResult(response.result, `expected a non-empty result for STAC collection ${collectionId}`);
+    return payload;
+  }
+  if (features.length > limit) {
+    failResult(response.result, `expected at most ${limit} STAC features (received ${features.length})`);
+    return payload;
+  }
+
+  const invalidFeature = features.find((feature) =>
+    typeof feature?.id !== "string" || feature.id.length === 0 || feature.collection !== collectionId);
+  if (invalidFeature) {
+    failResult(response.result, `STAC result is not identity-bound to collection ${collectionId}`);
+    return payload;
+  }
+
+  response.result.semantic = {
+    collectionId,
+    featureCount: features.length,
+    itemIds: features.map((feature) => feature.id),
+  };
+  return payload;
+}
+
 async function probeText(results, name, urlPath) { return probe(results, name, urlPath, {}, [200]); }
 async function probeBinary(results, name, urlPath) { return probe(results, name, urlPath, {}, [200]); }
 async function probeRange(results, name, urlPath) { return probe(results, name, urlPath, { range: "bytes=0-126" }, [206]); }
 
-async function probe(results, name, urlPath, headers, expectedStatuses) {
+async function probe(results, name, urlPath, headers, expectedStatuses, requestOptions = {}) {
   const started = performance.now();
-  const result = { name, url: `${baseUrl}${urlPath}`, passed: false, status: 0, latencyMs: 0, bytes: 0 };
+  const result = {
+    name,
+    method: requestOptions.method ?? "GET",
+    url: `${baseUrl}${urlPath}`,
+    passed: false,
+    status: 0,
+    latencyMs: 0,
+    bytes: 0,
+  };
   results.push(result);
   try {
-    const response = await fetch(result.url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetch(result.url, {
+      ...requestOptions,
+      headers: { ...(requestOptions.headers ?? {}), ...headers },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     const body = Buffer.from(await response.arrayBuffer());
     result.status = response.status;
     result.latencyMs = Math.round(performance.now() - started);

@@ -42,3 +42,6 @@ jobs:
 
       - name: Validate planned WMS release and semantic canary
         run: node --test scripts/test-wms-live-contract.mjs
+
+      - name: Validate STAC deployment semantic canary
+        run: node --test scripts/test-stac-live-contract.mjs
