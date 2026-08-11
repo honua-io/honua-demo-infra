@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/aa37645427470049d3156804549dc3923749dfcb/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/510e663fb09b0712c7d1670ab79a773fe0c4e187/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
