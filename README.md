@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/189aa7f54e777c672ce61d69c4cb2f899cee49fe/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/aa37645427470049d3156804549dc3923749dfcb/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
@@ -214,7 +214,9 @@ wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
   collection `90810` before its receipt passes. There is no repository-side
   `demo-deployed` producer: the alias promotion and seed are outside this repo's
   GitHub OIDC trust, so the runbook requires a post-seed/publication operator gate
-  instead of claiming an unsafe automatic trigger. Consumer:
+  instead of claiming an unsafe automatic trigger. Scheduled and push canaries use
+  `optional-live` WMS admission, which permits no live WMS binding without reporting
+  one; explicit `live` admission requires at least one advertised live binding. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook

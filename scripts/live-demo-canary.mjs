@@ -13,7 +13,7 @@ const evidencePath = process.env.HONUA_DEMO_CANARY_EVIDENCE_PATH
   ?? path.join(evidenceDir, "live-demo-canary.v1.json");
 const baseUrl = (process.env.HONUA_DEMO_BASE_URL ?? "https://demo.honua.io").replace(/\/$/u, "");
 const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
-const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "live";
+const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "optional-live";
 const expectedDeploymentRevision = (process.env.HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION ?? "").trim();
 const requireDeploymentBinding = process.env.HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING === "true";
 const expectedStacSeedUrl = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_URL ?? "").trim();
@@ -23,8 +23,8 @@ const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID 
 const results = [];
 
 async function main() {
-  if (!["live", "planned"].includes(wmsAdmission)) {
-    throw new Error("HONUA_DEMO_WMS_ADMISSION must be live or planned");
+  if (!["live", "planned", "optional-live"].includes(wmsAdmission)) {
+    throw new Error("HONUA_DEMO_WMS_ADMISSION must be live, planned, or optional-live");
   }
   if (requireDeploymentBinding) {
     if (!/^[0-9a-f]{40}$/u.test(expectedDeploymentRevision)) {
@@ -136,9 +136,10 @@ async function main() {
 
   const wmsBindings = selectWmsBindings(manifest, wmsAdmission);
   const wmsRelease = manifest.releaseContracts?.wms;
+  const wmsContractAdmission = wmsAdmission === "optional-live" ? "live" : wmsAdmission;
   let deployment = null;
   if (wmsBindings.length > 0) {
-    deployment = validateWmsDeployment(wmsRelease, wmsAdmission);
+    deployment = validateWmsDeployment(wmsRelease, wmsContractAdmission);
     for (const binding of wmsBindings) {
       await probeWmsCapabilities(results, binding);
       await probeWmsMap(results, binding);
@@ -176,6 +177,7 @@ async function main() {
     },
     wms: {
       admission: wmsAdmission,
+      contractAdmission: wmsContractAdmission,
       bindingCount: wmsBindings.length,
       deployment,
       releaseDefinitionSha256: wmsRelease?.definitionSha256 ?? null,
@@ -197,7 +199,7 @@ async function main() {
   if (receipt.summary.failed > 0) process.exitCode = 1;
 }
 
-function selectWmsBindings(manifest, admission) {
+export function selectWmsBindings(manifest, admission) {
   if (admission === "planned") {
     const candidate = manifest.releaseCandidates?.wms;
     if (!candidate || candidate.status !== "planned" || !Array.isArray(candidate.bindings)) {
@@ -205,9 +207,13 @@ function selectWmsBindings(manifest, admission) {
     }
     return candidate.bindings;
   }
-  return manifest.services
+  const liveBindings = manifest.services
     .filter((service) => service.protocols?.wms)
     .map((service) => ({ serviceId: service.id, wms: service.protocols.wms }));
+  if (admission === "live" && liveBindings.length === 0) {
+    throw new Error("live WMS admission requires at least one advertised live WMS binding");
+  }
+  return liveBindings;
 }
 
 function validateWmsDeployment(release, admission) {

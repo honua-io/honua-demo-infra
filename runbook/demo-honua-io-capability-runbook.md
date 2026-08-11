@@ -176,7 +176,7 @@ deploy or application roles.
 ```bash
 # [OPERATOR] render and invoke the in-VPC seed transaction
 : "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-seed_ref=189aa7f54e777c672ce61d69c4cb2f899cee49fe
+seed_ref=aa37645427470049d3156804549dc3923749dfcb
 curl --fail --location \
   "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
   --output /tmp/demo-stac-imagery-v1.sql
@@ -229,7 +229,7 @@ gh workflow run live-canary.yml \
   --repo honua-io/honua-demo-infra \
   --ref trunk \
   -f deployment_revision="$DEPLOYMENT_REVISION" \
-  -f wms_admission=live
+  -f wms_admission=optional-live
 ```
 
 The workflow derives the expected STAC seed URL, server commit, and manifest SHA-256
