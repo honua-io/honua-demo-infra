@@ -59,6 +59,23 @@ class RenderDemoStacSeedTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("PostgreSQL identifier", result.stderr)
 
+    def test_requires_environment(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".sql", delete=False) as handle:
+            handle.write("BEGIN;\nSELECT 1;\nCOMMIT;\n")
+            seed_path = Path(handle.name)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(RENDERER), "--seed-file", str(seed_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            seed_path.unlink()
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("--environment", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
