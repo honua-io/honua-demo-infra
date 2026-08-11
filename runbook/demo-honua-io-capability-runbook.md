@@ -149,7 +149,7 @@ activates it. Existing graph entities (the 11 `maui-*` layers) are preserved.
 > Before any repeat apply, inspect `Metadata__Environment` / `Environment` on the
 > serving Lambda version or query the active environment in `metadata_v2_current`.
 
-**[OPERATOR]** Set `HONUA_SEED_ENV` to the env id the demo Lambda is configured with —
+**[OPERATOR]** Set mandatory `SEED_ENV` to the env id the serving Lambda is configured with —
 this MUST match the server's `Metadata__Environment` / `Environment` setting (it defaults
 to `default`; confirm against the serving Lambda's environment variables or the active
 `metadata_v2_current` row — the capabilities manifest's host-environment field is not
@@ -157,26 +157,32 @@ the metadata environment):
 
 ```bash
 # Local / direct-psql target:
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
 PGHOST=... PGPORT=5432 PGUSER=honua PGDATABASE=honua PGPASSWORD=... \
-HONUA_SEED_ENV=default HONUA_SEED_SCHEMA=honua \
+HONUA_SEED_ENV="$SEED_ENV" HONUA_SEED_SCHEMA=honua \
   tests/seed/apply-demo-stac-seed.sh
 ```
 
 For `demo.honua.io` the DB is in-VPC only. Fetch the immutable server seed and use the
 checked-in renderer to remove psql directives and safely substitute all `env`/`schema`
 variables. The renderer emits the bootstrap Lambda's supported `statements` payload;
-do not send the raw psql file. The invoking principal needs only
-`lambda:InvokeFunction` on this exact bootstrap function ARN.
+do not send the raw psql file. Because this Lambda accepts arbitrary SQL and executes it
+with the database bootstrap credential, invoking it is effective database-administrator
+privilege. Only an already-authorized break-glass DBA operator/role may perform this step.
+Its IAM policy must scope `lambda:InvokeFunction` to this exact bootstrap function ARN,
+but that AWS permission alone is not sufficient authorization; do not grant it to routine
+deploy or application roles.
 
 ```bash
 # [OPERATOR] render and invoke the in-VPC seed transaction
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
 seed_ref=e083376c4ab6e496174af4cd6f1798397aaf6c75
 curl --fail --location \
   "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
   --output /tmp/demo-stac-imagery-v1.sql
 python3 stacks/aws/scripts/render-demo-stac-seed.py \
   --seed-file /tmp/demo-stac-imagery-v1.sql \
-  --environment default \
+  --environment "$SEED_ENV" \
   --schema honua \
   > /tmp/demo-stac-seed-payload.json
 aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
