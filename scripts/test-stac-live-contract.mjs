@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const deploymentRevision = "6ad71ac701ca709ec671afd09257217e8d17a149";
 const collectionId = "90810";
-const stacServerCommit = "e083376c4ab6e496174af4cd6f1798397aaf6c75";
+const stacServerCommit = "189aa7f54e777c672ce61d69c4cb2f899cee49fe";
 const stacSeedUrl = `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`;
 
 test("STAC canary binds deployment revision and non-empty collection results", async () => {

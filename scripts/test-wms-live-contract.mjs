@@ -13,7 +13,7 @@ import { inspectPng, validateWmsCapabilities } from "./live-demo-canary.mjs";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
-const stacServerCommit = "e083376c4ab6e496174af4cd6f1798397aaf6c75";
+const stacServerCommit = "189aa7f54e777c672ce61d69c4cb2f899cee49fe";
 const stacCollectionId = "90810";
 
 test("planned WMS canary binds deployment, manifest, capabilities, and semantic PNG", async () => {
