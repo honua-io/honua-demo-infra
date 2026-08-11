@@ -6,14 +6,14 @@
   "publishUrl": "https://demo.honua.io/demo-services.v1.json",
   "sources": {
     "seedManifest": "stacks/aws/SEED_MANIFEST.md",
-    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql",
+    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/597bc0fd2ab4b6fc3926abf742357dd15b34fd57/tests/seed/demo-stac-imagery-v1.sql",
     "wmsRelease": "manifest/wms-release.v1.json"
   },
   "releaseContracts": {
     "wms": {
       "status": "planned",
       "definition": "manifest/wms-release.v1.json",
-      "definitionSha256": "77f090086e4c2f44ce23ebd89eaac9fc432a7a80d3646bc62070a6dad38b919f",
+      "definitionSha256": "c8906441c03cf9e5ab73a3b77795222446bbd1b5ae3147bda468eaae26185159",
       "requiredServer": {
         "imageDigest": "sha256:e4844922ee698dd8898beff6bdfd5479e95f75be660a5e89607822fbec64d532",
         "sourceCommit": "6ad71ac701ca709ec671afd09257217e8d17a149",

@@ -39,7 +39,7 @@ stays in honua-server per the seed-data policy (see the repo-root README →
 "Seed data") — pinned reference:
 
 ```
-https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/apply-demo-stac-seed.sh
+https://raw.githubusercontent.com/honua-io/honua-server/597bc0fd2ab4b6fc3926abf742357dd15b34fd57/tests/seed/apply-demo-stac-seed.sh
 ```
 
 (and the sibling `tests/seed/demo-*.sql` / `client-compat-v1.sql` fixtures at

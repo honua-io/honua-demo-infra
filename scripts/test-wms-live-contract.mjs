@@ -100,6 +100,9 @@ function handleRequest(request, response, manifestBytes, png) {
   } else if (request.url === "/demo-services.v1.json") {
     response.setHeader("content-type", "application/json");
     response.end(manifestBytes);
+  } else if (request.url === "/api/v1/capabilities/manifest") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ server: { deploymentRevision: sourceCommit } }));
   } else if (request.url === "/healthz/ready") {
     response.end("ready");
   } else if (request.url.includes("REQUEST=GetCapabilities")) {
