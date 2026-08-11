@@ -180,11 +180,11 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/597bc0fd2ab4b6fc3926abf742357dd15b34fd57/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/e083376c4ab6e496174af4cd6f1798397aaf6c75/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
-  `30d6d6f1…` ref deliberately when picking up newer seed fixtures; don't
+  pinned commit deliberately when picking up newer seed fixtures; don't
   float on `trunk`. See `stacks/aws/SEED_MANIFEST.md` for which fixtures apply
   to which layers and `stacks/aws/scripts/seed-test-service.sh` for the one
   seed path in this repo (it deliberately does *not* apply
@@ -208,10 +208,13 @@ of the demo's publicly discoverable services (issue #19) — derived from
 hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
 public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
 wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
-the shared Terraform state since 2026-07-31. The scheduled and deploy-dispatch
-public canary records the exact runtime revision, probes every declared service
-family, and requires non-empty item and bounded POST search results tied to STAC
-collection `90810` before its receipt passes. Consumer:
+  the shared Terraform state since 2026-07-31. The scheduled and explicit
+  operator-dispatched public canary records the exact runtime revision, probes every declared service
+  family, and requires non-empty item and bounded POST search results tied to STAC
+  collection `90810` before its receipt passes. There is no repository-side
+  `demo-deployed` producer: the alias promotion and seed are outside this repo's
+  GitHub OIDC trust, so the runbook requires a post-seed/publication operator gate
+  instead of claiming an unsafe automatic trigger. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook

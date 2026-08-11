@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -10,6 +11,8 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const deploymentRevision = "6ad71ac701ca709ec671afd09257217e8d17a149";
 const collectionId = "90810";
+const stacServerCommit = "e083376c4ab6e496174af4cd6f1798397aaf6c75";
+const stacSeedUrl = `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`;
 
 test("STAC canary binds deployment revision and non-empty collection results", async () => {
   const harness = await createHarness(false);
@@ -21,6 +24,9 @@ test("STAC canary binds deployment revision and non-empty collection results", a
     assert.equal(receipt.summary.failed, 0);
     assert.equal(receipt.deployment.revision, deploymentRevision);
     assert.equal(receipt.stac.canaryCollectionId, collectionId);
+    assert.equal(receipt.stac.serviceId, "demo-stac");
+    assert.equal(receipt.manifest.stacSeedUrl, stacSeedUrl);
+    assert.equal(receipt.manifest.stacServerCommit, stacServerCommit);
     for (const suffix of ["items", "search"]) {
       const proof = receipt.results.find((entry) => entry.name === `demo-stac:stac:${collectionId}:${suffix}`);
       assert.equal(proof.semantic.collectionId, collectionId);
@@ -47,7 +53,60 @@ test("STAC canary rejects an empty collection-bound search", async () => {
   }
 });
 
-async function createHarness(emptySearch) {
+test("STAC dispatch binding rejects seed URL, commit, and manifest digest drift", async (t) => {
+  for (const [name, override] of [
+    ["seed URL", { HONUA_DEMO_EXPECTED_STAC_SEED_URL: `${stacSeedUrl}?drift=1` }],
+    ["server commit", { HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: "f".repeat(40) }],
+    ["manifest digest", { HONUA_DEMO_EXPECTED_MANIFEST_SHA256: "f".repeat(64) }],
+  ]) {
+    await t.test(name, async () => {
+      const harness = await createHarness(false);
+      try {
+        const result = await runCanary(harness.baseUrl, harness.evidencePath, override);
+        assert.notEqual(result.code, 0);
+        const receipt = JSON.parse(await readFile(harness.evidencePath, "utf8"));
+        const proof = receipt.results.find((entry) => entry.name === "manifest");
+        assert.equal(proof.passed, false);
+        assert.match(proof.error, /checked-out contract/u);
+      } finally {
+        await harness.close();
+      }
+    });
+  }
+});
+
+test("fatal STAC advertisement failure preserves accumulated request evidence", async () => {
+  const harness = await createHarness(false, false);
+  try {
+    const result = await runCanary(harness.baseUrl, harness.evidencePath);
+    assert.notEqual(result.code, 0);
+    const receipt = JSON.parse(await readFile(harness.evidencePath, "utf8"));
+    assert.match(receipt.fatal, /no advertised STAC service/u);
+    assert.deepEqual(receipt.results.map((entry) => entry.name), [
+      "environment-landing",
+      "capability-manifest",
+      "manifest",
+      "readiness",
+    ]);
+    assert.equal(receipt.summary.total, receipt.results.length);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("STAC advertisement must contain the exact canary collection", async () => {
+  const harness = await createHarness(false, true, null);
+  try {
+    const result = await runCanary(harness.baseUrl, harness.evidencePath);
+    assert.notEqual(result.code, 0);
+    const receipt = JSON.parse(await readFile(harness.evidencePath, "utf8"));
+    assert.match(receipt.fatal, /exact canary collection 90810 once; found 0/u);
+  } finally {
+    await harness.close();
+  }
+});
+
+async function createHarness(emptySearch, advertiseStac = true, advertisedCollectionId = collectionId) {
   const temp = await mkdtemp(path.join(os.tmpdir(), "honua-stac-canary-"));
   const evidencePath = path.join(temp, "receipt.json");
   const searchBodies = [];
@@ -56,7 +115,7 @@ async function createHarness(emptySearch) {
     if (request.method === "POST" && request.url === "/stac/search") {
       searchBodies.push(JSON.parse(body));
     }
-    const payload = route(request, emptySearch);
+    const payload = route(request, emptySearch, advertiseStac, advertisedCollectionId);
     response.statusCode = payload.status ?? 200;
     response.setHeader("content-type", payload.contentType ?? "application/json");
     response.end(typeof payload.body === "string" ? payload.body : JSON.stringify(payload.body));
@@ -74,7 +133,7 @@ async function createHarness(emptySearch) {
   };
 }
 
-function route(request, emptySearch) {
+function route(request, emptySearch, advertiseStac, advertisedCollectionId) {
   if (request.url === "/") {
     return {
       contentType: "text/html",
@@ -83,7 +142,7 @@ function route(request, emptySearch) {
   }
   if (request.url === "/healthz/ready") return { contentType: "text/plain", body: "Ready" };
   if (request.url === "/api/v1/capabilities/manifest") return { body: { server: { deploymentRevision } } };
-  if (request.url === "/demo-services.v1.json") return { body: fixtureManifest() };
+  if (request.url === "/demo-services.v1.json") return { body: fixtureManifest(advertiseStac, advertisedCollectionId) };
   if (request.url === "/stac") return { body: { type: "Catalog" } };
   if (request.url === "/stac/collections") return { body: { collections: [{ id: collectionId }] } };
   if (request.url === `/stac/collections/${collectionId}`) return { body: { type: "Collection", id: collectionId } };
@@ -94,21 +153,24 @@ function route(request, emptySearch) {
   return { status: 404, body: { error: "missing" } };
 }
 
-function fixtureManifest() {
+function fixtureManifest(advertiseStac = true, advertisedCollectionId = collectionId) {
   return {
     format: "honua.demo-services.v1",
     schemaVersion: "1.1.0",
-    services: [{
+    sources: { stacSeed: stacSeedUrl },
+    services: advertiseStac ? [{
       id: "demo-stac",
       protocols: {
         stac: {
           path: "/stac",
           collectionsPath: "/stac/collections",
           searchPath: "/stac/search",
-          collections: [{ id: collectionId, path: `/stac/collections/${collectionId}` }],
+          collections: advertisedCollectionId === null
+            ? []
+            : [{ id: advertisedCollectionId, path: `/stac/collections/${advertisedCollectionId}` }],
         },
       },
-    }],
+    }] : [{ id: "non-stac", protocols: {} }],
   };
 }
 
@@ -132,7 +194,8 @@ function readRequestBody(request) {
   });
 }
 
-function runCanary(baseUrl, evidencePath) {
+function runCanary(baseUrl, evidencePath, envOverride = {}) {
+  const manifestBytes = Buffer.from(JSON.stringify(fixtureManifest()));
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [script], {
       env: {
@@ -141,6 +204,11 @@ function runCanary(baseUrl, evidencePath) {
         HONUA_DEMO_TIMEOUT_MS: "2000",
         HONUA_DEMO_CANARY_EVIDENCE_PATH: evidencePath,
         HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION: deploymentRevision,
+        HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING: "true",
+        HONUA_DEMO_EXPECTED_STAC_SEED_URL: stacSeedUrl,
+        HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: stacServerCommit,
+        HONUA_DEMO_EXPECTED_MANIFEST_SHA256: createHash("sha256").update(manifestBytes).digest("hex"),
+        ...envOverride,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

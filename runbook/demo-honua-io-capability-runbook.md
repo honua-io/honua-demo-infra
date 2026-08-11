@@ -162,18 +162,38 @@ HONUA_SEED_ENV=default HONUA_SEED_SCHEMA=honua \
   tests/seed/apply-demo-stac-seed.sh
 ```
 
-For `demo.honua.io` the DB is in-VPC only. Send the **entire** contents of
-`tests/seed/demo-stac-imagery-v1.sql` (it is one transaction) as a single statement to the
-bootstrap Lambda, with the `env`/`schema` psql vars pre-substituted (the file reads them
-via `:'env'` / `:"schema"`; when going through the Lambda, replace those tokens with the
-literal env/schema before sending, or wrap the body so `set_config('honua.seed_env', ...)`
-is set first):
+For `demo.honua.io` the DB is in-VPC only. Fetch the immutable server seed and use the
+checked-in renderer to remove psql directives and safely substitute all `env`/`schema`
+variables. The renderer emits the bootstrap Lambda's supported `statements` payload;
+do not send the raw psql file. The invoking principal needs only
+`lambda:InvokeFunction` on this exact bootstrap function ARN.
 
 ```bash
-# [OPERATOR] example: invoke the bootstrap Lambda with the seed body
+# [OPERATOR] render and invoke the in-VPC seed transaction
+seed_ref=e083376c4ab6e496174af4cd6f1798397aaf6c75
+curl --fail --location \
+  "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
+  --output /tmp/demo-stac-imagery-v1.sql
+python3 stacks/aws/scripts/render-demo-stac-seed.py \
+  --seed-file /tmp/demo-stac-imagery-v1.sql \
+  --environment default \
+  --schema honua \
+  > /tmp/demo-stac-seed-payload.json
 aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
-  --payload "$(jq -Rs '{query: .}' < tests/seed/demo-stac-imagery-v1.sql)" \
-  --cli-binary-format raw-in-base64-out /dev/stdout
+  --payload fileb:///tmp/demo-stac-seed-payload.json \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/demo-stac-seed-response.json
+jq -e '.statements | length == 1 and all(.[]; .ok == true)' \
+  /tmp/demo-stac-seed-response.json
+
+# Prove the physical table exists through the same in-VPC path.
+jq -n --arg query "SELECT to_regclass('honua.features')::text" '{query: $query}' \
+  > /tmp/demo-stac-check-payload.json
+aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
+  --payload fileb:///tmp/demo-stac-check-payload.json \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/demo-stac-check-response.json
+jq -e '.rows == [["honua.features"]]' /tmp/demo-stac-check-response.json
 ```
 
 The seed is **idempotent**: re-running advances the snapshot revision and re-applies the
@@ -185,6 +205,30 @@ Open `https://demo.honua.io/stac/collections` in a browser and confirm it contai
 
 Acceptance: Imagery & Terrain Studio (`demo-imagery-terrain.html`) shows a live STAC
 catalog instead of the bundled sample lane.
+
+### Post-deploy semantic gate **[OPERATOR]**
+
+This repository cannot safely produce a `demo-deployed` event: the production alias
+promotion and database seed happen outside its GitHub OIDC trust. After the seed command
+above succeeds and the generated `demo-services.v1.json` is published through the normal
+Terraform deployment, bind the public canary to the exact runtime SHA from that deployment:
+
+```bash
+# Set this from the successful deployment output, not from an untrusted public response.
+DEPLOYMENT_REVISION=<exact-40-character-runtime-sha>
+test "$(printf '%s' "$DEPLOYMENT_REVISION" | wc -c)" -eq 40
+test "$(curl --fail --silent https://demo.honua.io/api/v1/capabilities/manifest \
+  | jq -r '.server.deploymentRevision')" = "$DEPLOYMENT_REVISION"
+gh workflow run live-canary.yml \
+  --repo honua-io/honua-demo-infra \
+  --ref trunk \
+  -f deployment_revision="$DEPLOYMENT_REVISION" \
+  -f wms_admission=live
+```
+
+The workflow derives the expected STAC seed URL, server commit, and manifest SHA-256
+from the checked-out contract. It passes only when those exact bindings and a non-empty
+collection `90810` item/search result are all present on the deployed runtime.
 
 ---
 

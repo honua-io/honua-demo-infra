@@ -13,6 +13,8 @@ import { inspectPng, validateWmsCapabilities } from "./live-demo-canary.mjs";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
+const stacServerCommit = "e083376c4ab6e496174af4cd6f1798397aaf6c75";
+const stacCollectionId = "90810";
 
 test("planned WMS canary binds deployment, manifest, capabilities, and semantic PNG", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "honua-wms-canary-"));
@@ -82,7 +84,23 @@ function fixtureManifest() {
   return {
     format: "honua.demo-services.v1",
     schemaVersion: "1.1.0",
-    services: [{ id: "maui-flood-hazard", protocols: {} }],
+    sources: {
+      stacSeed: `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`,
+    },
+    services: [
+      { id: "maui-flood-hazard", protocols: {} },
+      {
+        id: "demo-stac",
+        protocols: {
+          stac: {
+            path: "/stac",
+            collectionsPath: "/stac/collections",
+            searchPath: "/stac/search",
+            collections: [{ id: stacCollectionId, path: `/stac/collections/${stacCollectionId}` }],
+          },
+        },
+      },
+    ],
     releaseContracts: {
       wms: {
         status: "planned", definitionSha256: "c".repeat(64),
@@ -105,6 +123,21 @@ function handleRequest(request, response, manifestBytes, png) {
     response.end(JSON.stringify({ server: { deploymentRevision: sourceCommit } }));
   } else if (request.url === "/healthz/ready") {
     response.end("ready");
+  } else if (request.url === "/stac") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ type: "Catalog" }));
+  } else if (request.url === "/stac/collections") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ collections: [{ id: stacCollectionId }] }));
+  } else if (request.url === `/stac/collections/${stacCollectionId}`) {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ type: "Collection", id: stacCollectionId }));
+  } else if (request.url === `/stac/collections/${stacCollectionId}/items?limit=2` || (request.method === "POST" && request.url === "/stac/search")) {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", id: "fixture-item", collection: stacCollectionId, geometry: null, properties: {} }],
+    }));
   } else if (request.url.includes("REQUEST=GetCapabilities")) {
     response.setHeader("content-type", "application/xml");
     response.end('<?xml version="1.0"?><WMS_Capabilities><Capability><Layer><Name>maui-flood-hazard</Name></Layer></Capability></WMS_Capabilities>');
