@@ -39,6 +39,30 @@ class StacRunbookContractTests(unittest.TestCase):
         github_policy = iac[iac.index('resource "aws_iam_role_policy" "github_stac_seed_receipt"') :]
         self.assertNotIn("stac_seed_manager.arn", github_policy)
 
+    def test_lambdas_have_separate_functional_nat_and_database_egress(self) -> None:
+        iac = IAC.read_text(encoding="utf-8")
+        bootstrap = (ROOT / "stacks" / "aws" / "postgis-bootstrap.tf").read_text(encoding="utf-8")
+        for resource, attachment in [
+            ("stac_seed_manager", "aws_security_group.stac_seed_manager.id"),
+            ("stac_seed_receipt", "aws_security_group.stac_seed_receipt.id"),
+        ]:
+            start = iac.index(f'resource "aws_security_group" "{resource}"')
+            end = iac.index('\nresource "', start + 1)
+            block = iac[start:end]
+            self.assertIn('from_port   = 5432', block)
+            self.assertIn('cidr_blocks = [local.vpc_cidr]', block)
+            self.assertIn('from_port   = 443', block)
+            self.assertIn('cidr_blocks = ["0.0.0.0/0"]', block)
+            self.assertIn(f"security_group_ids = [{attachment}]", iac)
+
+        self.assertNotIn(
+            "security_group_ids = [aws_security_group.postgis_bootstrap.id]",
+            iac,
+            "managed/query-only functions must not share the arbitrary-SQL bootstrap SG",
+        )
+        self.assertIn('public Secrets Manager through the private-subnet NAT route', bootstrap)
+        self.assertIn('cidr_blocks = ["0.0.0.0/0"]', bootstrap)
+
 
 if __name__ == "__main__":
     unittest.main()

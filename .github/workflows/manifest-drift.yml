@@ -49,4 +49,42 @@ jobs:
       - name: Validate in-VPC STAC seed renderer
         run: |
           python3 scripts/test-render-demo-stac-seed.py
+          python3 scripts/test-stac-seed-handler.py
           python3 scripts/test-stac-runbook-contract.py
+
+  terraform-contract:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HONUA_IAC_READ_TOKEN: ${{ secrets.HONUA_IAC_READ_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Require private module read credential
+        shell: bash
+        run: test -n "$HONUA_IAC_READ_TOKEN"
+
+      - name: Configure private module credential
+        shell: bash
+        run: git config --global url."https://x-access-token:${HONUA_IAC_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+
+      - name: Terraform init without live backend
+        run: terraform -chdir=stacks/aws init -backend=false -input=false -no-color
+
+      - name: Terraform format and validate
+        run: |
+          terraform fmt -check -recursive stacks/aws
+          terraform -chdir=stacks/aws validate -no-color
+
+      - name: Remove private module credential
+        if: always()
+        shell: bash
+        run: git config --global --unset-all url."https://x-access-token:${HONUA_IAC_READ_TOKEN}@github.com/".insteadOf || true
