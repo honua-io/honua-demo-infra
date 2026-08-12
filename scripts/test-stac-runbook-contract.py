@@ -7,28 +7,37 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 RUNBOOK = ROOT / "runbook" / "demo-honua-io-capability-runbook.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "live-canary.yml"
+IAC = ROOT / "stacks" / "aws" / "stac-seed-gate.tf"
 
 
 class StacRunbookContractTests(unittest.TestCase):
-    def test_break_glass_gate_reads_durable_marker_before_dispatch(self) -> None:
+    def test_managed_seed_is_separate_from_break_glass_sql(self) -> None:
         runbook = RUNBOOK.read_text(encoding="utf-8")
-        marker_query = "FROM honua.demo_seed_revisions"
-        query_position = runbook.index(marker_query, runbook.index("Post-deploy semantic gate"))
-        dispatch_position = runbook.index("gh workflow run live-canary.yml")
+        self.assertIn("honua-demo-demo-stac-seed-manager", runbook)
+        self.assertIn("apply-demo-stac-seed", runbook)
+        self.assertIn("already-authorized break-glass", runbook)
+        self.assertIn("effective database-administrator", runbook)
+        self.assertIn("break-glass-sql", runbook)
+        self.assertIn(': "${SEED_ENV:?', runbook)
+        self.assertIn("--expected-source-sha256", runbook)
 
-        self.assertLess(query_position, dispatch_position)
-        self.assertIn("EXPECTED_SEED_SHA256", runbook)
-        self.assertIn("JOIN honua.metadata_v2_current", runbook)
-        self.assertIn(".rows[0][3] == .rows[0][4]", runbook)
-        self.assertIn("demo-stac-deployment-gate-receipt.json", runbook)
-        self.assertIn("already-authorized break-glass DBA", runbook)
-        self.assertIn("arbitrary-SQL/database-admin", runbook)
-
-    def test_public_dispatch_binds_seed_source_digest_without_claiming_db_access(self) -> None:
+    def test_dispatch_consumes_query_only_receipt(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("manifest.sources?.stacSeedSha256", workflow)
-        self.assertIn("HONUA_DEMO_EXPECTED_STAC_SEED_SHA256", workflow)
-        self.assertNotIn("aws lambda invoke", workflow)
+        self.assertIn("id-token: write", workflow)
+        self.assertIn("read-demo-stac-seed-receipt", workflow)
+        self.assertIn("managed-seed-receipt.json", workflow)
+        self.assertIn("receipt.metadataRevision !== receipt.currentRevision", workflow)
+        self.assertIn("HONUA_DEMO_STAC_RECEIPT_ROLE_ARN", workflow)
+        self.assertNotIn("apply-demo-stac-seed", workflow)
+
+    def test_iac_enforces_invocation_and_database_privilege_split(self) -> None:
+        iac = IAC.read_text(encoding="utf-8")
+        self.assertIn("read-query-only-db-secret", iac)
+        self.assertIn("aws_secretsmanager_secret.stac_seed_receipt_connection.arn", iac)
+        self.assertIn("repo:honua-io/honua-demo-infra:ref:refs/heads/trunk", iac)
+        self.assertIn("Resource = [aws_lambda_function.stac_seed_receipt.arn]", iac)
+        github_policy = iac[iac.index('resource "aws_iam_role_policy" "github_stac_seed_receipt"') :]
+        self.assertNotIn("stac_seed_manager.arn", github_policy)
 
 
 if __name__ == "__main__":

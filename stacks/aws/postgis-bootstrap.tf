@@ -159,7 +159,8 @@ resource "aws_lambda_function" "postgis_bootstrap" {
 
   environment {
     variables = {
-      DB_SECRET_ARN = module.honua.db_connection_secret_arn
+      DB_SECRET_ARN  = module.honua.db_connection_secret_arn
+      OPERATION_MODE = "break-glass-bootstrap"
     }
   }
 

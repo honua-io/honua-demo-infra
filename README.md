@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/0cf6f44d30da16fd0f8881e3606e91ef81e21110/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/8a8ad337bfb9246a8f8b02d93164f2a2df52294d/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
@@ -212,11 +212,11 @@ wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
   operator-dispatched public canary records the exact runtime revision, probes every declared service
   family, and requires non-empty item and bounded POST search results tied to STAC
   collection `90810` before its receipt passes. Its checked-out contract also binds
-  the exact seed source SHA-256; the separate in-VPC operator gate compares that digest
-  with the durable marker written by the seed transaction. There is no repository-side
-  `demo-deployed` producer: the alias promotion and seed are outside this repo's
-  GitHub OIDC trust, so the runbook requires a post-seed/publication operator gate
-  instead of claiming an unsafe automatic trigger. Scheduled and push canaries use
+  the exact seed source SHA-256. A managed in-VPC executor independently hashes the
+  source and rendered bytes it executes and writes a transactional marker; the explicit
+  dispatch workflow reads that marker through a separate query-only Lambda/DB role.
+  There is no automatic `demo-deployed` producer: alias promotion and the authorized
+  seed-manager invocation remain an explicit operator gate. Scheduled and push canaries use
   `optional-live` WMS admission, which permits no live WMS binding without reporting
   one; explicit `live` admission requires at least one advertised live binding. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
