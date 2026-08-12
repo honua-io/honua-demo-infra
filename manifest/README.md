@@ -95,7 +95,7 @@ Top level:
 | `description` | string | Human note incl. the generated-only rule |
 | `baseUrl` | string | `https://demo.honua.io` — all `path`/`tileTemplate` values are relative to it |
 | `publishUrl` | string | The stable public URL above |
-| `sources` | object | Provenance: `seedManifest` (repo path) and `stacSeed` (pinned raw URL) |
+| `sources` | object | Provenance: `seedManifest` (repo path), `stacSeed` (pinned raw URL), and `stacSeedSha256` (digest of those exact source bytes) |
 | `services` | array | One entry per publicly discoverable service (below) |
 | `assets` | object | Non-service public assets; currently `glyphs` (`path` template + `fontstacks`) |
 
@@ -157,4 +157,6 @@ python3 manifest/generate-demo-services.py --check  # what CI runs
 Generation fetches the pinned STAC seed SQL from raw.githubusercontent.com
 (public, pinned ref — deterministic). Offline, pass
 `--stac-sql /path/to/demo-stac-imagery-v1.sql` with a copy of the pinned
-file.
+file. The generated source digest is also the value the trusted in-VPC
+operator gate must observe in `honua.demo_seed_revisions`; URL equality alone
+is not evidence that those bytes were applied.

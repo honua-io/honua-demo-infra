@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/c5b9ffaf47a8b7dad25c5546b973eb427665fde1/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/0cf6f44d30da16fd0f8881e3606e91ef81e21110/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   honua-server is public, so that raw URL works without auth. Bump the
@@ -211,7 +211,9 @@ wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
   the shared Terraform state since 2026-07-31. The scheduled and explicit
   operator-dispatched public canary records the exact runtime revision, probes every declared service
   family, and requires non-empty item and bounded POST search results tied to STAC
-  collection `90810` before its receipt passes. There is no repository-side
+  collection `90810` before its receipt passes. Its checked-out contract also binds
+  the exact seed source SHA-256; the separate in-VPC operator gate compares that digest
+  with the durable marker written by the seed transaction. There is no repository-side
   `demo-deployed` producer: the alias promotion and seed are outside this repo's
   GitHub OIDC trust, so the runbook requires a post-seed/publication operator gate
   instead of claiming an unsafe automatic trigger. Scheduled and push canaries use

@@ -47,4 +47,6 @@ jobs:
         run: node --test scripts/test-stac-live-contract.mjs
 
       - name: Validate in-VPC STAC seed renderer
-        run: python3 scripts/test-render-demo-stac-seed.py
+        run: |
+          python3 scripts/test-render-demo-stac-seed.py
+          python3 scripts/test-stac-runbook-contract.py
