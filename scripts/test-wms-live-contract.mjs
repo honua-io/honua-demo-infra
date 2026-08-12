@@ -13,7 +13,7 @@ import { inspectPng, selectWmsBindings, validateWmsCapabilities } from "./live-d
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
-const stacServerCommit = "8a8ad337bfb9246a8f8b02d93164f2a2df52294d";
+const stacServerCommit = "f1423465a7572f41af6d12b1b7cd1b584b82ce99";
 const stacSeedSha256 = "d".repeat(64);
 const stacCollectionId = "90810";
 

@@ -41,6 +41,61 @@ resource "aws_secretsmanager_secret_version" "stac_seed_receipt_connection" {
   secret_string = local.stac_seed_receipt_connection_string
 }
 
+# Security groups are deliberately separate from the arbitrary-SQL bootstrap and
+# from each other. The VPC no longer has Secrets Manager interface endpoints, so
+# HTTPS must follow the existing private-subnet NAT route. Port 443 is the narrow
+# functional network contract for Secrets Manager and, for the manager only, the
+# immutable raw.githubusercontent.com source. Database egress remains VPC-local.
+#checkov:skip=CKV2_AWS_5: Attached directly to aws_lambda_function.stac_seed_manager.
+resource "aws_security_group" "stac_seed_manager" {
+  name_prefix = "${var.name_prefix}-${var.environment}-stacseed-"
+  description = "Managed STAC seed Lambda network boundary"
+  vpc_id      = module.honua.vpc_id
+
+  egress {
+    description = "PostgreSQL access inside the dedicated VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
+  egress {
+    description = "HTTPS to Secrets Manager and immutable GitHub source through NAT"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = local.common_tags
+}
+
+#checkov:skip=CKV2_AWS_5: Attached directly to aws_lambda_function.stac_seed_receipt.
+resource "aws_security_group" "stac_seed_receipt" {
+  name_prefix = "${var.name_prefix}-${var.environment}-stacreceipt-"
+  description = "Query-only STAC seed receipt Lambda network boundary"
+  vpc_id      = module.honua.vpc_id
+
+  egress {
+    description = "PostgreSQL access inside the dedicated VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [local.vpc_cidr]
+  }
+
+  egress {
+    description = "HTTPS to public Secrets Manager through NAT"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = local.common_tags
+}
+
 resource "aws_iam_role" "stac_seed_manager" {
   name_prefix        = "${var.name_prefix}-${var.environment}-stacseed-"
   assume_role_policy = data.aws_iam_policy_document.postgis_bootstrap_assume.json
@@ -91,7 +146,7 @@ resource "aws_lambda_function" "stac_seed_manager" {
 
   vpc_config {
     subnet_ids         = module.honua.private_subnet_ids
-    security_group_ids = [aws_security_group.postgis_bootstrap.id]
+    security_group_ids = [aws_security_group.stac_seed_manager.id]
   }
 
   environment {
@@ -161,7 +216,7 @@ resource "aws_lambda_function" "stac_seed_receipt" {
 
   vpc_config {
     subnet_ids         = module.honua.private_subnet_ids
-    security_group_ids = [aws_security_group.postgis_bootstrap.id]
+    security_group_ids = [aws_security_group.stac_seed_receipt.id]
   }
 
   environment {

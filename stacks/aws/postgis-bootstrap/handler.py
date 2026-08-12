@@ -206,11 +206,23 @@ def _managed_seed(event):
                 DO $database$
                 BEGIN
                     EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
+                    -- PostgreSQL's default PUBLIC TEMP privilege cannot be denied to one
+                    -- role while PUBLIC retains it. Remove any direct privilege here; the
+                    -- Lambda executes one fixed query and accepts no caller SQL, so a temp
+                    -- schema cannot be used as an escalation path through this surface.
+                    EXECUTE format('REVOKE CREATE, TEMPORARY ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
                     EXECUTE format('GRANT CONNECT ON DATABASE %I TO {_RECEIPT_ROLE}', current_database());
                 END
                 $database$;
+                REVOKE ALL ON SCHEMA public FROM {_RECEIPT_ROLE};
                 REVOKE ALL ON SCHEMA honua FROM {_RECEIPT_ROLE};
                 GRANT USAGE ON SCHEMA honua TO {_RECEIPT_ROLE};
+                REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA honua FROM {_RECEIPT_ROLE};
+                REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA honua FROM {_RECEIPT_ROLE};
+                REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA honua FROM {_RECEIPT_ROLE};
+                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON TABLES FROM {_RECEIPT_ROLE};
+                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON SEQUENCES FROM {_RECEIPT_ROLE};
+                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON FUNCTIONS FROM {_RECEIPT_ROLE};
                 REVOKE ALL ON honua.demo_seed_revisions, honua.metadata_v2_current FROM {_RECEIPT_ROLE};
                 GRANT SELECT ON honua.demo_seed_revisions, honua.metadata_v2_current TO {_RECEIPT_ROLE};
                 DO $privileges$
@@ -221,6 +233,12 @@ def _managed_seed(event):
                        ) OR EXISTS (
                            SELECT 1 FROM pg_namespace
                             WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+                       ) OR EXISTS (
+                           SELECT 1 FROM pg_proc
+                            WHERE proowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+                       ) OR EXISTS (
+                           SELECT 1 FROM pg_database
+                            WHERE datdba = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
                        ) OR has_schema_privilege('{_RECEIPT_ROLE}', 'honua', 'CREATE')
                        OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.demo_seed_revisions', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                        OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.metadata_v2_current', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') THEN

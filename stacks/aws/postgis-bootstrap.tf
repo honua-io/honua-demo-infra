@@ -79,11 +79,11 @@ resource "aws_security_group" "postgis_bootstrap" {
   }
 
   egress {
-    description = "HTTPS to the Secrets Manager interface endpoint"
+    description = "HTTPS to public Secrets Manager through the private-subnet NAT route"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [local.vpc_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = local.common_tags

@@ -102,6 +102,9 @@ class StacSeedHandlerTests(unittest.TestCase):
         all_sql = "\n".join(call[0] for call in connection.calls)
         self.assertIn("INSERT INTO honua.demo_seed_revisions", all_sql)
         self.assertIn("NOSUPERUSER NOCREATEDB NOCREATEROLE", all_sql)
+        self.assertIn("REVOKE CREATE, TEMPORARY ON DATABASE", all_sql)
+        self.assertIn("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA honua", all_sql)
+        self.assertIn("SELECT 1 FROM pg_proc", all_sql)
         self.assertIn("GRANT SELECT ON honua.demo_seed_revisions", all_sql)
 
     def test_managed_seed_rejects_caller_controlled_fields(self):
