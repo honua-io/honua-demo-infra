@@ -54,9 +54,12 @@ def main() -> None:
         args.seed_file.read_text(encoding="utf-8"), args.environment, args.schema
     )
     marker_query = (
-        "SELECT seed_id, source_sha256, metadata_environment, metadata_revision::text "
-        "FROM honua.demo_seed_revisions "
-        "WHERE seed_id = 'demo-stac-imagery-v1'"
+        "SELECT marker.seed_id, marker.source_sha256, marker.metadata_environment, "
+        "marker.metadata_revision::text, current.revision::text "
+        "FROM honua.demo_seed_revisions AS marker "
+        "JOIN honua.metadata_v2_current AS current "
+        "ON current.environment = marker.metadata_environment "
+        "WHERE marker.seed_id = 'demo-stac-imagery-v1'"
     )
     print(json.dumps({
         "statements": [statement],

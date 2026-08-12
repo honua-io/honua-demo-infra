@@ -58,6 +58,7 @@ class RenderDemoStacSeedTests(unittest.TestCase):
         self.assertRegex(payload["seedSourceSha256"], r"^[0-9a-f]{64}$")
         self.assertIn(payload["seedSourceSha256"], statement)
         self.assertIn("honua.demo_seed_revisions", payload["query"])
+        self.assertIn("JOIN honua.metadata_v2_current", payload["query"])
 
     def test_digest_is_derived_from_source_bytes(self) -> None:
         source = "\\set seed_sha256 required\nBEGIN;\nSELECT :'seed_sha256';\nCOMMIT;\n"
