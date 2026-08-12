@@ -63,6 +63,16 @@ class StacRunbookContractTests(unittest.TestCase):
         self.assertIn('public Secrets Manager through the private-subnet NAT route', bootstrap)
         self.assertIn('cidr_blocks = ["0.0.0.0/0"]', bootstrap)
 
+    def test_ci_runs_handler_contracts_and_real_terraform_validation(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "manifest-drift.yml").read_text(encoding="utf-8")
+        validator = (ROOT / "scripts" / "validate-terraform-root.py").read_text(encoding="utf-8")
+
+        self.assertIn("python3 scripts/test-stac-seed-handler.py", workflow)
+        self.assertIn("python3 scripts/validate-terraform-root.py", workflow)
+        self.assertIn('["terraform", "init", "-backend=false", "-input=false", "-no-color"]', validator)
+        self.assertIn('["terraform", "validate", "-no-color"]', validator)
+        self.assertNotIn("HONUA_IAC_READ_TOKEN", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
