@@ -195,7 +195,7 @@ jq -e --arg sha "$seed_sha256" --arg env "$SEED_ENV" \
   '(.statements | length == 1 and all(.[]; .ok == true)) and
    (.rows | length == 1) and .rows[0][0] == "demo-stac-imagery-v1" and
    .rows[0][1] == $sha and .rows[0][2] == $env and
-   (.rows[0][3] | test("^[1-9][0-9]*$"))' \
+   (.rows[0][3] | test("^[1-9][0-9]*$")) and .rows[0][3] == .rows[0][4]' \
   /tmp/demo-stac-seed-response.json
 
 # Prove the physical table exists through the same in-VPC path.
@@ -234,7 +234,7 @@ to the same already-authorized break-glass DBA role described above.
 EXPECTED_SEED_SHA256="$(jq -er '.sources.stacSeedSha256 | select(test("^[0-9a-f]{64}$"))' \
   manifest/demo-services.v1.json)"
 : "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-marker_query="SELECT seed_id, source_sha256, metadata_environment, metadata_revision::text FROM honua.demo_seed_revisions WHERE seed_id = 'demo-stac-imagery-v1'"
+marker_query="SELECT marker.seed_id, marker.source_sha256, marker.metadata_environment, marker.metadata_revision::text, current.revision::text FROM honua.demo_seed_revisions AS marker JOIN honua.metadata_v2_current AS current ON current.environment = marker.metadata_environment WHERE marker.seed_id = 'demo-stac-imagery-v1'"
 jq -n --arg query "$marker_query" '{query: $query}' > /tmp/demo-stac-marker-payload.json
 aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
   --payload fileb:///tmp/demo-stac-marker-payload.json \
@@ -245,7 +245,7 @@ jq -e '.StatusCode == 200 and (.FunctionError | not)' /tmp/demo-stac-marker-invo
 jq -e --arg sha "$EXPECTED_SEED_SHA256" --arg env "$SEED_ENV" \
   '(.rows | length == 1) and .rows[0][0] == "demo-stac-imagery-v1" and
    .rows[0][1] == $sha and .rows[0][2] == $env and
-   (.rows[0][3] | test("^[1-9][0-9]*$"))' \
+   (.rows[0][3] | test("^[1-9][0-9]*$")) and .rows[0][3] == .rows[0][4]' \
   /tmp/demo-stac-marker-response.json
 
 # Set this from the successful deployment output, not from an untrusted public response.

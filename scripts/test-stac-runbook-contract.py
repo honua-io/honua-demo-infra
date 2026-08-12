@@ -18,6 +18,8 @@ class StacRunbookContractTests(unittest.TestCase):
 
         self.assertLess(query_position, dispatch_position)
         self.assertIn("EXPECTED_SEED_SHA256", runbook)
+        self.assertIn("JOIN honua.metadata_v2_current", runbook)
+        self.assertIn(".rows[0][3] == .rows[0][4]", runbook)
         self.assertIn("demo-stac-deployment-gate-receipt.json", runbook)
         self.assertIn("already-authorized break-glass DBA", runbook)
         self.assertIn("arbitrary-SQL/database-admin", runbook)
