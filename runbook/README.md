@@ -39,8 +39,11 @@ stays in honua-server per the seed-data policy (see the repo-root README →
 "Seed data") — pinned reference:
 
 ```
-https://raw.githubusercontent.com/honua-io/honua-server/c5b9ffaf47a8b7dad25c5546b973eb427665fde1/tests/seed/apply-demo-stac-seed.sh
+https://raw.githubusercontent.com/honua-io/honua-server/4be2e65042701464d649aa30a7f5eb88cdb13a1d/tests/seed/apply-demo-stac-seed.sh
 ```
+
+The sibling STAC SQL at this ref has exact SHA-256
+`de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687`.
 
 (and the sibling `tests/seed/demo-*.sql` / `client-compat-v1.sql` fixtures at
 the same ref). Bump the pinned commit deliberately when a newer seed fixture is

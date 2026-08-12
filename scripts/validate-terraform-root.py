@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Validate the AWS root stack without downloading the private honua-iac module.
+"""Validate the AWS root and pinned private-module caller interface.
 
-The root resources and provider schemas remain real. Only the private module is
-replaced, in a temporary copy, by an explicit output-interface stub. This makes
-CI validation independent of repository credentials while failing closed when
-the root stack consumes a module output not represented here.
+The root resources and provider schemas remain real. CI replaces only the
+credential-inaccessible private module with a checked-in typed caller-interface
+stub pinned to the same source ref. This does not validate private module
+implementation behavior.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -19,29 +20,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 STACK = REPOSITORY_ROOT / "stacks" / "aws"
-
-MODULE_OUTPUTS = {
-    "api_endpoint": '"https://validation.execute-api.us-east-1.amazonaws.com"',
-    "control_plane_backend_name": '"validation-backend"',
-    "control_plane_target_id": '"validation-target"',
-    "control_plane_target_kind": '"lambda"',
-    "db_connection_secret_arn": '"arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-db"',
-    "db_connection_string": '"Host=validation.cluster.local;Database=honua;Username=honua;Password=validation"',
-    "db_endpoint": '"validation.cluster.local"',
-    "gp_batch_enabled": "false",
-    "gp_job_definition_arns": "{}",
-    "gp_job_queue_arn": '"arn:aws:batch:us-east-1:000000000000:job-queue/validation"',
-    "lambda_alias_arn": '"arn:aws:lambda:us-east-1:000000000000:function:validation:live"',
-    "lambda_alias_name": '"live"',
-    "lambda_function_arn": '"arn:aws:lambda:us-east-1:000000000000:function:validation"',
-    "lambda_function_name": '"validation"',
-    "private_route_table_ids": '["rtb-00000000000000000"]',
-    "private_subnet_ids": '["subnet-00000000000000000", "subnet-00000000000000001"]',
-    "pro_license_enabled": "false",
-    "pro_license_secret_arn": '"arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-pro"',
-    "redis_connection_secret_arn": '"arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-redis"',
-    "vpc_id": '"vpc-00000000000000000"',
-}
+INTERFACE_STUB = STACK / "validation" / "honua-module-interface"
 
 
 def honua_module_span(text: str) -> tuple[int, int]:
@@ -60,47 +39,26 @@ def honua_module_span(text: str) -> tuple[int, int]:
     raise RuntimeError('module "honua" has no closing brace')
 
 
-def write_interface_stub(stack: Path) -> None:
+def bind_interface_stub(stack: Path) -> None:
+    contract = json.loads(
+        (stack / "validation" / "honua-module-interface" / "interface-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
     main_path = stack / "main.tf"
     main_text = main_path.read_text(encoding="utf-8")
     start, end = honua_module_span(main_text)
     block = main_text[start:end]
-
-    arguments = set(re.findall(r"(?m)^  ([A-Za-z_][A-Za-z0-9_]*)\s*=", block))
-    arguments -= {"source", "version", "providers", "count", "for_each", "depends_on"}
-
-    block, replacements = re.subn(
-        r'(?m)^(  source\s*=\s*)"[^"]+"\s*$',
-        r'\1"./validation-honua-module"',
-        block,
-        count=1,
-    )
-    if replacements != 1:
-        raise RuntimeError('module "honua" must have exactly one single-line source')
-    block = re.sub(r"(?m)^  version\s*=.*\n?", "", block)
-    main_path.write_text(main_text[:start] + block + main_text[end:], encoding="utf-8")
-
-    referenced_outputs: set[str] = set()
-    for terraform_file in stack.glob("*.tf"):
-        referenced_outputs.update(
-            re.findall(
-                r"module\.honua\.([A-Za-z_][A-Za-z0-9_]*)",
-                terraform_file.read_text(encoding="utf-8"),
-            )
+    source_match = re.search(r'(?m)^  source\s*=\s*"([^"]+)"\s*$', block)
+    if source_match is None:
+        raise RuntimeError('module "honua" must have one single-line source')
+    if source_match.group(1) != contract["source"]:
+        raise RuntimeError(
+            "honua-iac source changed without refreshing the checked-in typed interface contract"
         )
-    unknown = referenced_outputs - MODULE_OUTPUTS.keys()
-    if unknown:
-        raise RuntimeError(f"validation stub lacks module outputs: {', '.join(sorted(unknown))}")
 
-    stub = stack / "validation-honua-module"
-    stub.mkdir()
-    variables = "\n".join(f'variable "{name}" {{\n  type = any\n}}\n' for name in sorted(arguments))
-    outputs = "\n".join(
-        f'output "{name}" {{\n  value = {MODULE_OUTPUTS[name]}\n}}\n'
-        for name in sorted(referenced_outputs)
-    )
-    (stub / "variables.tf").write_text(variables, encoding="utf-8")
-    (stub / "outputs.tf").write_text(outputs, encoding="utf-8")
+    block = block[: source_match.start(1)] + "./validation/honua-module-interface" + block[source_match.end(1) :]
+    main_path.write_text(main_text[:start] + block + main_text[end:], encoding="utf-8")
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -109,7 +67,58 @@ def run(command: list[str], *, cwd: Path | None = None) -> None:
     subprocess.run(command, cwd=cwd, env=environment, check=True)
 
 
+def assert_invalid_contract(stack: Path, mutated_main: str, expected_diagnostic: str) -> None:
+    main_path = stack / "main.tf"
+    original = main_path.read_text(encoding="utf-8")
+    main_path.write_text(mutated_main, encoding="utf-8")
+    environment = os.environ.copy()
+    environment["TF_IN_AUTOMATION"] = "1"
+    try:
+        result = subprocess.run(
+            ["terraform", "validate", "-no-color"],
+            cwd=stack,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        main_path.write_text(original, encoding="utf-8")
+
+    diagnostics = result.stdout + result.stderr
+    if result.returncode == 0:
+        raise RuntimeError("typed interface negative regression unexpectedly validated")
+    if expected_diagnostic not in diagnostics:
+        raise RuntimeError(
+            f"typed interface negative regression lacked {expected_diagnostic!r}:\n{diagnostics}"
+        )
+
+
+def validate_negative_contracts(stack: Path) -> None:
+    main_text = (stack / "main.tf").read_text(encoding="utf-8")
+
+    unknown_argument = main_text.replace(
+        "  name_prefix = var.name_prefix",
+        "  unsupported_name_prefix = var.name_prefix",
+        1,
+    )
+    if unknown_argument == main_text:
+        raise RuntimeError("could not inject unknown module argument regression")
+    assert_invalid_contract(stack, unknown_argument, "Unsupported argument")
+
+    wrong_type = main_text.replace(
+        "  lambda_memory_size   = var.lambda_memory_size",
+        '  lambda_memory_size   = "wrong-type"',
+        1,
+    )
+    if wrong_type == main_text:
+        raise RuntimeError("could not inject wrong-type module argument regression")
+    assert_invalid_contract(stack, wrong_type, "Invalid value for input variable")
+
+
 def main() -> None:
+    if not INTERFACE_STUB.is_dir():
+        raise RuntimeError("checked-in honua module interface stub is missing")
     run(["terraform", "fmt", "-check", "-recursive", str(STACK)])
     with tempfile.TemporaryDirectory(prefix="honua-terraform-validate-") as temporary:
         validation_root = Path(temporary) / "repository"
@@ -120,12 +129,10 @@ def main() -> None:
             ignore=shutil.ignore_patterns(".terraform", "terraform.tfstate", "terraform.tfstate.*"),
         )
         shutil.copytree(REPOSITORY_ROOT / "manifest", validation_root / "manifest")
-        write_interface_stub(validation_stack)
-        run(
-            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
-            cwd=validation_stack,
-        )
+        bind_interface_stub(validation_stack)
+        run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=validation_stack)
         run(["terraform", "validate", "-no-color"], cwd=validation_stack)
+        validate_negative_contracts(validation_stack)
 
 
 if __name__ == "__main__":
