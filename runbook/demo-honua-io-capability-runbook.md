@@ -176,7 +176,7 @@ deploy or application roles.
 ```bash
 # [OPERATOR] render and invoke the in-VPC seed transaction
 : "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-seed_ref=6ef2637670e41c065571c9290d0b8c326317e5c8
+seed_ref=c5b9ffaf47a8b7dad25c5546b973eb427665fde1
 curl --fail --location \
   "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
   --output /tmp/demo-stac-imagery-v1.sql
