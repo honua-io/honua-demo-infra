@@ -272,3 +272,13 @@ variable "budget_notification_email" {
   type        = string
   default     = "mike@honua.io"
 }
+
+variable "stac_seed_metadata_environment" {
+  description = "Exact Metadata v2 environment served by the deployed Lambda (Metadata__Environment, Environment, or the active metadata_v2_current row). Required for the managed STAC seed; never infer it from ASPNETCORE_ENVIRONMENT."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.stac_seed_metadata_environment))
+    error_message = "stac_seed_metadata_environment must be a non-empty Metadata v2 environment identifier."
+  }
+}

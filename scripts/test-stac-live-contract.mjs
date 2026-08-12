@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const deploymentRevision = "6ad71ac701ca709ec671afd09257217e8d17a149";
 const collectionId = "90810";
-const stacServerCommit = "0cf6f44d30da16fd0f8881e3606e91ef81e21110";
+const stacServerCommit = "8a8ad337bfb9246a8f8b02d93164f2a2df52294d";
 const stacSeedUrl = `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`;
 const stacSeedSha256 = "d".repeat(64);
 
