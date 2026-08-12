@@ -57,13 +57,18 @@ jobs:
           const bytes = readFileSync("manifest/demo-services.v1.json");
           const manifest = JSON.parse(bytes);
           const seedUrl = manifest.sources?.stacSeed;
+          const seedSha256 = manifest.sources?.stacSeedSha256;
           const match = /^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-server\/([0-9a-f]{40})\/tests\/seed\/demo-stac-imagery-v1\.sql$/.exec(seedUrl ?? "");
           if (!match) {
             throw new Error("manifest sources.stacSeed must be an immutable honua-server commit URL");
           }
+          if (!/^[0-9a-f]{64}$/.test(seedSha256 ?? "")) {
+            throw new Error("manifest sources.stacSeedSha256 must be an exact source digest");
+          }
           const digest = createHash("sha256").update(bytes).digest("hex");
           appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_url=${seedUrl}\n`);
           appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_server_commit=${match[1]}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_sha256=${seedSha256}\n`);
           appendFileSync(process.env.GITHUB_OUTPUT, `manifest_sha256=${digest}\n`);
           NODE
 
@@ -73,6 +78,7 @@ jobs:
           HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING: ${{ github.event_name == 'workflow_dispatch' }}
           HONUA_DEMO_EXPECTED_STAC_SEED_URL: ${{ steps.contract.outputs.stac_seed_url }}
           HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
+          HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: ${{ steps.contract.outputs.stac_seed_sha256 }}
           HONUA_DEMO_EXPECTED_MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
           HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'optional-live' }}
           HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}

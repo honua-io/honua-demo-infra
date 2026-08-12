@@ -243,13 +243,15 @@ def pinned_stac_seed_url() -> str:
     return m.group(0)
 
 
-def fetch_stac_seed(sql_path: str | None) -> tuple[str, str]:
+def fetch_stac_seed(sql_path: str | None) -> tuple[str, str, str]:
     if sql_path:
-        return Path(sql_path).read_text(encoding="utf-8"), pinned_stac_seed_url()
+        raw = Path(sql_path).read_bytes()
+        return raw.decode("utf-8"), pinned_stac_seed_url(), hashlib.sha256(raw).hexdigest()
     url = pinned_stac_seed_url()
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 - pinned public raw URL
-            return resp.read().decode("utf-8"), url
+            raw = resp.read()
+            return raw.decode("utf-8"), url, hashlib.sha256(raw).hexdigest()
     except OSError as exc:
         raise fail(
             f"could not fetch pinned STAC seed SQL from {url}: {exc}. "
@@ -407,7 +409,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
     vectors = vector_services(section("Vector layers"))
     rasters = raster_services(section("Raster layers"))
     basemaps, assets = basemap_and_glyphs(section("Basemap + glyphs"))
-    stac_sql, stac_url = fetch_stac_seed(stac_sql_path)
+    stac_sql, stac_url, stac_source_sha256 = fetch_stac_seed(stac_sql_path)
     stac = stac_service(stac_sql)
 
     services = vectors + rasters + basemaps + [stac]
@@ -428,7 +430,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
 
     manifest = {
         "format": "honua.demo-services.v1",
-        "schemaVersion": "1.1.0",
+        "schemaVersion": "1.2.0",
         "description": (
             "Publicly discoverable seeded services of the demo.honua.io demo "
             "environment. Generated from seed definitions by "
@@ -440,6 +442,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
         "sources": {
             "seedManifest": "stacks/aws/SEED_MANIFEST.md",
             "stacSeed": stac_url,
+            "stacSeedSha256": stac_source_sha256,
             "wmsRelease": "manifest/wms-release.v1.json",
         },
         "releaseContracts": {"wms": wms_release},

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -17,11 +18,15 @@ def sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def render(source: str, environment: str, schema: str) -> str:
+def render(source: str, environment: str, schema: str) -> tuple[str, str]:
     if not SAFE_ENVIRONMENT.fullmatch(environment):
         raise ValueError("environment must contain only letters, digits, dot, underscore, or hyphen")
     if not SAFE_IDENTIFIER.fullmatch(schema):
         raise ValueError("schema must be a PostgreSQL identifier")
+    if ":'seed_sha256'" not in source:
+        raise ValueError("seed does not contain the transactional source-digest marker")
+
+    source_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     transaction = source.find("\nBEGIN;")
     if transaction < 0:
@@ -31,10 +36,11 @@ def render(source: str, environment: str, schema: str) -> str:
     rendered = rendered.replace(':"schema"', f'"{schema}"')
     rendered = rendered.replace(":'schema'", sql_literal(schema))
     rendered = rendered.replace(":'env'", sql_literal(environment))
+    rendered = rendered.replace(":'seed_sha256'", sql_literal(source_sha256))
 
     if re.search(r"(?m)^\\", rendered) or re.search(r":[\"']", rendered):
         raise ValueError("seed still contains psql-only directives or substitutions")
-    return rendered
+    return rendered, source_sha256
 
 
 def main() -> None:
@@ -44,8 +50,19 @@ def main() -> None:
     parser.add_argument("--schema", default="honua")
     args = parser.parse_args()
 
-    statement = render(args.seed_file.read_text(encoding="utf-8"), args.environment, args.schema)
-    print(json.dumps({"statements": [statement]}, separators=(",", ":")))
+    statement, source_sha256 = render(
+        args.seed_file.read_text(encoding="utf-8"), args.environment, args.schema
+    )
+    marker_query = (
+        "SELECT seed_id, source_sha256, metadata_environment, metadata_revision::text "
+        "FROM honua.demo_seed_revisions "
+        "WHERE seed_id = 'demo-stac-imagery-v1'"
+    )
+    print(json.dumps({
+        "statements": [statement],
+        "query": marker_query,
+        "seedSourceSha256": source_sha256,
+    }, separators=(",", ":")))
 
 
 if __name__ == "__main__":

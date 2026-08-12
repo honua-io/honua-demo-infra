@@ -11,8 +11,9 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const deploymentRevision = "6ad71ac701ca709ec671afd09257217e8d17a149";
 const collectionId = "90810";
-const stacServerCommit = "c5b9ffaf47a8b7dad25c5546b973eb427665fde1";
+const stacServerCommit = "0cf6f44d30da16fd0f8881e3606e91ef81e21110";
 const stacSeedUrl = `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`;
+const stacSeedSha256 = "d".repeat(64);
 
 test("STAC canary binds deployment revision and non-empty collection results", async () => {
   const harness = await createHarness(false);
@@ -27,6 +28,7 @@ test("STAC canary binds deployment revision and non-empty collection results", a
     assert.equal(receipt.stac.serviceId, "demo-stac");
     assert.equal(receipt.manifest.stacSeedUrl, stacSeedUrl);
     assert.equal(receipt.manifest.stacServerCommit, stacServerCommit);
+    assert.equal(receipt.manifest.stacSeedSha256, stacSeedSha256);
     for (const suffix of ["items", "search"]) {
       const proof = receipt.results.find((entry) => entry.name === `demo-stac:stac:${collectionId}:${suffix}`);
       assert.equal(proof.semantic.collectionId, collectionId);
@@ -57,6 +59,7 @@ test("STAC dispatch binding rejects seed URL, commit, and manifest digest drift"
   for (const [name, override] of [
     ["seed URL", { HONUA_DEMO_EXPECTED_STAC_SEED_URL: `${stacSeedUrl}?drift=1` }],
     ["server commit", { HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: "f".repeat(40) }],
+    ["source digest", { HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: "f".repeat(64) }],
     ["manifest digest", { HONUA_DEMO_EXPECTED_MANIFEST_SHA256: "f".repeat(64) }],
   ]) {
     await t.test(name, async () => {
@@ -156,8 +159,8 @@ function route(request, emptySearch, advertiseStac, advertisedCollectionId) {
 function fixtureManifest(advertiseStac = true, advertisedCollectionId = collectionId) {
   return {
     format: "honua.demo-services.v1",
-    schemaVersion: "1.1.0",
-    sources: { stacSeed: stacSeedUrl },
+    schemaVersion: "1.2.0",
+    sources: { stacSeed: stacSeedUrl, stacSeedSha256 },
     services: advertiseStac ? [{
       id: "demo-stac",
       protocols: {
@@ -207,6 +210,7 @@ function runCanary(baseUrl, evidencePath, envOverride = {}) {
         HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING: "true",
         HONUA_DEMO_EXPECTED_STAC_SEED_URL: stacSeedUrl,
         HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: stacServerCommit,
+        HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: stacSeedSha256,
         HONUA_DEMO_EXPECTED_MANIFEST_SHA256: createHash("sha256").update(manifestBytes).digest("hex"),
         ...envOverride,
       },

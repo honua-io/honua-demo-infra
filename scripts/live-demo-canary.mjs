@@ -18,6 +18,7 @@ const expectedDeploymentRevision = (process.env.HONUA_DEMO_EXPECTED_DEPLOYMENT_R
 const requireDeploymentBinding = process.env.HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING === "true";
 const expectedStacSeedUrl = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_URL ?? "").trim();
 const expectedStacServerCommit = (process.env.HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT ?? "").trim();
+const expectedStacSeedSha256 = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_SHA256 ?? "").trim();
 const expectedManifestSha256 = (process.env.HONUA_DEMO_EXPECTED_MANIFEST_SHA256 ?? "").trim();
 const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
 const results = [];
@@ -30,8 +31,8 @@ async function main() {
     if (!/^[0-9a-f]{40}$/u.test(expectedDeploymentRevision)) {
       throw new Error("dispatch requires an exact 40-character HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION");
     }
-    if (!expectedStacSeedUrl || !/^[0-9a-f]{40}$/u.test(expectedStacServerCommit) || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)) {
-      throw new Error("dispatch requires exact checked-out STAC seed URL, server commit, and manifest SHA-256 bindings");
+    if (!expectedStacSeedUrl || !/^[0-9a-f]{40}$/u.test(expectedStacServerCommit) || !/^[0-9a-f]{64}$/u.test(expectedStacSeedSha256) || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)) {
+      throw new Error("dispatch requires exact checked-out STAC seed URL, server commit, source digest, and manifest SHA-256 bindings");
     }
   }
 
@@ -58,17 +59,22 @@ async function main() {
   const stacSeedUrl = manifest.sources?.stacSeed;
   const stacSeedMatch = /^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-server\/([0-9a-f]{40})\/tests\/seed\/demo-stac-imagery-v1\.sql$/u.exec(stacSeedUrl ?? "");
   const stacServerCommit = stacSeedMatch?.[1] ?? null;
+  const stacSeedSha256 = manifest.sources?.stacSeedSha256;
   if (!stacSeedMatch) {
     failResult(manifestResult, "manifest sources.stacSeed is not an immutable honua-server commit URL");
   } else if (expectedStacSeedUrl && stacSeedUrl !== expectedStacSeedUrl) {
     failResult(manifestResult, "published manifest STAC seed URL does not match the checked-out contract");
   } else if (expectedStacServerCommit && stacServerCommit !== expectedStacServerCommit) {
     failResult(manifestResult, "published manifest STAC seed commit does not match the checked-out contract");
+  } else if (!/^[0-9a-f]{64}$/u.test(stacSeedSha256 ?? "")) {
+    failResult(manifestResult, "published manifest STAC seed source digest is invalid");
+  } else if (expectedStacSeedSha256 && stacSeedSha256 !== expectedStacSeedSha256) {
+    failResult(manifestResult, "published manifest STAC seed source digest does not match the checked-out contract");
   } else if (expectedManifestSha256 && manifestSha256 !== expectedManifestSha256) {
     failResult(manifestResult, "published manifest digest does not match the checked-out contract");
   }
   if (manifestResult) {
-    manifestResult.semantic = { ...(manifestResult.semantic ?? {}), stacSeedUrl, stacServerCommit };
+    manifestResult.semantic = { ...(manifestResult.semantic ?? {}), stacSeedUrl, stacServerCommit, stacSeedSha256 };
   }
 
   await probeText(results, "readiness", "/healthz/ready");
@@ -170,6 +176,8 @@ async function main() {
       expectedStacSeedUrl: expectedStacSeedUrl || null,
       stacServerCommit,
       expectedStacServerCommit: expectedStacServerCommit || null,
+      stacSeedSha256,
+      expectedStacSeedSha256: expectedStacSeedSha256 || null,
     },
     stac: {
       canaryCollectionId: stacCanaryCollectionId,

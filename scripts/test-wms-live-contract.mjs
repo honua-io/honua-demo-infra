@@ -13,7 +13,8 @@ import { inspectPng, selectWmsBindings, validateWmsCapabilities } from "./live-d
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
-const stacServerCommit = "c5b9ffaf47a8b7dad25c5546b973eb427665fde1";
+const stacServerCommit = "0cf6f44d30da16fd0f8881e3606e91ef81e21110";
+const stacSeedSha256 = "d".repeat(64);
 const stacCollectionId = "90810";
 
 test("planned WMS canary binds deployment, manifest, capabilities, and semantic PNG", async () => {
@@ -91,9 +92,10 @@ function fixtureManifest() {
   };
   return {
     format: "honua.demo-services.v1",
-    schemaVersion: "1.1.0",
+    schemaVersion: "1.2.0",
     sources: {
       stacSeed: `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`,
+      stacSeedSha256,
     },
     services: [
       { id: "maui-flood-hazard", protocols: {} },

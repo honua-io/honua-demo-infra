@@ -176,7 +176,7 @@ deploy or application roles.
 ```bash
 # [OPERATOR] render and invoke the in-VPC seed transaction
 : "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-seed_ref=c5b9ffaf47a8b7dad25c5546b973eb427665fde1
+seed_ref=0cf6f44d30da16fd0f8881e3606e91ef81e21110
 curl --fail --location \
   "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
   --output /tmp/demo-stac-imagery-v1.sql
@@ -185,11 +185,17 @@ python3 stacks/aws/scripts/render-demo-stac-seed.py \
   --environment "$SEED_ENV" \
   --schema honua \
   > /tmp/demo-stac-seed-payload.json
+seed_sha256="$(jq -er '.seedSourceSha256 | select(test("^[0-9a-f]{64}$"))' \
+  /tmp/demo-stac-seed-payload.json)"
 aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
   --payload fileb:///tmp/demo-stac-seed-payload.json \
   --cli-binary-format raw-in-base64-out \
   /tmp/demo-stac-seed-response.json
-jq -e '.statements | length == 1 and all(.[]; .ok == true)' \
+jq -e --arg sha "$seed_sha256" --arg env "$SEED_ENV" \
+  '(.statements | length == 1 and all(.[]; .ok == true)) and
+   (.rows | length == 1) and .rows[0][0] == "demo-stac-imagery-v1" and
+   .rows[0][1] == $sha and .rows[0][2] == $env and
+   (.rows[0][3] | test("^[1-9][0-9]*$"))' \
   /tmp/demo-stac-seed-response.json
 
 # Prove the physical table exists through the same in-VPC path.
@@ -217,14 +223,45 @@ catalog instead of the bundled sample lane.
 This repository cannot safely produce a `demo-deployed` event: the production alias
 promotion and database seed happen outside its GitHub OIDC trust. After the seed command
 above succeeds and the generated `demo-services.v1.json` is published through the normal
-Terraform deployment, bind the public canary to the exact runtime SHA from that deployment:
+Terraform deployment, first read the durable marker again through the trusted in-VPC
+bootstrap path. This query-only step catches applying old SQL and then publishing a new
+manifest: the database marker must equal the digest derived from the checked-out contract.
+The bootstrap Lambda is an arbitrary-SQL/database-admin surface, so this remains restricted
+to the same already-authorized break-glass DBA role described above.
 
 ```bash
+# Query-only seed receipt from the shared database after publication.
+EXPECTED_SEED_SHA256="$(jq -er '.sources.stacSeedSha256 | select(test("^[0-9a-f]{64}$"))' \
+  manifest/demo-services.v1.json)"
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+marker_query="SELECT seed_id, source_sha256, metadata_environment, metadata_revision::text FROM honua.demo_seed_revisions WHERE seed_id = 'demo-stac-imagery-v1'"
+jq -n --arg query "$marker_query" '{query: $query}' > /tmp/demo-stac-marker-payload.json
+aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
+  --payload fileb:///tmp/demo-stac-marker-payload.json \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/demo-stac-marker-response.json \
+  > /tmp/demo-stac-marker-invoke.json
+jq -e '.StatusCode == 200 and (.FunctionError | not)' /tmp/demo-stac-marker-invoke.json
+jq -e --arg sha "$EXPECTED_SEED_SHA256" --arg env "$SEED_ENV" \
+  '(.rows | length == 1) and .rows[0][0] == "demo-stac-imagery-v1" and
+   .rows[0][1] == $sha and .rows[0][2] == $env and
+   (.rows[0][3] | test("^[1-9][0-9]*$"))' \
+  /tmp/demo-stac-marker-response.json
+
 # Set this from the successful deployment output, not from an untrusted public response.
 DEPLOYMENT_REVISION=<exact-40-character-runtime-sha>
 test "$(printf '%s' "$DEPLOYMENT_REVISION" | wc -c)" -eq 40
 test "$(curl --fail --silent https://demo.honua.io/api/v1/capabilities/manifest \
   | jq -r '.server.deploymentRevision')" = "$DEPLOYMENT_REVISION"
+jq -n \
+  --arg runtimeRevision "$DEPLOYMENT_REVISION" \
+  --arg seedSourceSha256 "$EXPECTED_SEED_SHA256" \
+  --arg metadataEnvironment "$SEED_ENV" \
+  --slurpfile marker /tmp/demo-stac-marker-response.json \
+  '{format:"honua.demo.stac-deployment-gate.v1", runtimeRevision:$runtimeRevision,
+    seedSourceSha256:$seedSourceSha256, metadataEnvironment:$metadataEnvironment,
+    markerRows:$marker[0].rows}' \
+  > /tmp/demo-stac-deployment-gate-receipt.json
 gh workflow run live-canary.yml \
   --repo honua-io/honua-demo-infra \
   --ref trunk \
@@ -232,9 +269,11 @@ gh workflow run live-canary.yml \
   -f wms_admission=optional-live
 ```
 
-The workflow derives the expected STAC seed URL, server commit, and manifest SHA-256
-from the checked-out contract. It passes only when those exact bindings and a non-empty
-collection `90810` item/search result are all present on the deployed runtime.
+The workflow derives the expected STAC seed URL, server commit, seed source SHA-256, and
+manifest SHA-256 from the checked-out contract. It passes only when those exact public
+bindings and a non-empty collection `90810` item/search result are all present on the
+deployed runtime. The database proof is the preceding query-only receipt; the public
+workflow cannot replace it and must not be dispatched if that gate fails.
 
 ---
 
