@@ -115,7 +115,8 @@ DB-side raster post-processing (postgis-bootstrap Lambda maintenance mode):
   https://www.honua.io, http://localhost:8123 for site verification),
   `Limits__Connections__RequestTimeout=00:10:00` and
   `lambda_timeout_seconds=600` for bulk synchronous imports.
-- `postgis-bootstrap/handler.py`: optional `{"statements":[...], "query":...}`
+- `postgis-bootstrap/handler.py`: optional
+  `{"operation":"break-glass-sql", "statements":[...], "query":...}`
   maintenance mode (IAM-gated; reserved concurrency 1 on this helper only —
   the serving Lambda stays unreserved) used for schema flattening, raster
   migrations, and raster retiling — the RDS instance is only reachable in-VPC.

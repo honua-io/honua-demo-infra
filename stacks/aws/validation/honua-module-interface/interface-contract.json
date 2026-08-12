@@ -1,0 +1,3 @@
+{
+  "source": "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=a4a1ea52336549e4e7beb6864f115cb335cdc43b"
+}

@@ -183,6 +183,8 @@ is exactly the same operation in reverse).
     https://raw.githubusercontent.com/honua-io/honua-server/4be2e65042701464d649aa30a7f5eb88cdb13a1d/tests/seed/demo-stac-imagery-v1.sql
   ```
 
+  Exact seed SHA-256: `de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687`.
+
   honua-server is public, so that raw URL works without auth. Bump the
   pinned commit deliberately when picking up newer seed fixtures; don't
   float on `trunk`. See `stacks/aws/SEED_MANIFEST.md` for which fixtures apply

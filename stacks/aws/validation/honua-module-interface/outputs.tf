@@ -1,0 +1,20 @@
+output "api_endpoint" { value = "https://validation.execute-api.us-east-1.amazonaws.com" }
+output "control_plane_backend_name" { value = "validation-backend" }
+output "control_plane_target_id" { value = "validation-target" }
+output "control_plane_target_kind" { value = "lambda" }
+output "db_connection_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-db" }
+output "db_connection_string" { value = "Host=validation.cluster.local;Database=honua;Username=honua;Password=validation" }
+output "db_endpoint" { value = "validation.cluster.local" }
+output "gp_batch_enabled" { value = false }
+output "gp_job_definition_arns" { value = {} }
+output "gp_job_queue_arn" { value = "arn:aws:batch:us-east-1:000000000000:job-queue/validation" }
+output "lambda_alias_arn" { value = "arn:aws:lambda:us-east-1:000000000000:function:validation:live" }
+output "lambda_alias_name" { value = "live" }
+output "lambda_function_arn" { value = "arn:aws:lambda:us-east-1:000000000000:function:validation" }
+output "lambda_function_name" { value = "validation" }
+output "private_route_table_ids" { value = ["rtb-00000000000000000"] }
+output "private_subnet_ids" { value = ["subnet-00000000000000000", "subnet-00000000000000001"] }
+output "pro_license_enabled" { value = false }
+output "pro_license_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-pro" }
+output "redis_connection_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-redis" }
+output "vpc_id" { value = "vpc-00000000000000000" }

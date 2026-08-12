@@ -89,7 +89,8 @@ stmts = [
  ') AS v(name,description,status,count,ratio,uid,active,geometry) '
  'WHERE NOT EXISTS (SELECT 1 FROM public.test_service_features)'
 ]
-json.dump({"statements": stmts,
+json.dump({"operation": "break-glass-sql",
+           "statements": stmts,
            "query": "SELECT count(*)::text FROM public.test_service_features"},
           open(sys.argv[1], "w"))
 PY

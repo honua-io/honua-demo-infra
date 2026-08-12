@@ -11,6 +11,9 @@ IAC = ROOT / "stacks" / "aws" / "stac-seed-gate.tf"
 
 
 class StacRunbookContractTests(unittest.TestCase):
+    SERVER_HEAD = "4be2e65042701464d649aa30a7f5eb88cdb13a1d"
+    SEED_SHA256 = "de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687"
+
     def test_managed_seed_is_separate_from_break_glass_sql(self) -> None:
         runbook = RUNBOOK.read_text(encoding="utf-8")
         self.assertIn("honua-demo-demo-stac-seed-manager", runbook)
@@ -72,6 +75,19 @@ class StacRunbookContractTests(unittest.TestCase):
         self.assertIn('["terraform", "init", "-backend=false", "-input=false", "-no-color"]', validator)
         self.assertIn('["terraform", "validate", "-no-color"]', validator)
         self.assertNotIn("HONUA_IAC_READ_TOKEN", workflow)
+
+    def test_break_glass_seed_caller_uses_handler_operation_contract(self) -> None:
+        script = (ROOT / "stacks" / "aws" / "scripts" / "seed-test-service.sh").read_text(encoding="utf-8")
+        manifest = (ROOT / "stacks" / "aws" / "SEED_MANIFEST.md").read_text(encoding="utf-8")
+
+        self.assertIn('"operation": "break-glass-sql"', script)
+        self.assertIn('"operation":"break-glass-sql"', manifest)
+
+    def test_seed_indexes_pin_exact_server_and_digest(self) -> None:
+        for path in [ROOT / "README.md", ROOT / "runbook" / "README.md"]:
+            document = path.read_text(encoding="utf-8")
+            self.assertIn(self.SERVER_HEAD, document, str(path))
+            self.assertIn(self.SEED_SHA256, document, str(path))
 
 
 if __name__ == "__main__":
