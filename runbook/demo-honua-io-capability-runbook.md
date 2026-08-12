@@ -28,9 +28,16 @@ The 2026-07-24 ops round supersedes the two remaining open items in the table be
   `live` alias, image `nightly-lambda-aot-6b65376-amd64` (trunk `6b65376` — includes
   server PRs #2993, #3005–#3007, #3013, #3015; image mirrored GHCR → account ECR, tag
   kept SHA-explicit to avoid date-tag collisions with the pre-merge morning nightly).
-- **Schema at 089**: out-of-band DbUp run per the frozen-version model (flip
+- **Schema at 091** (2026-08-12): out-of-band DbUp run per the frozen-version model (flip
   `HONUA_SKIP_MIGRATIONS` on `$LATEST` only → unqualified invoke → verify "Upgrade
-  successful" → restore env byte-identically, verified). Migrations 083–089 applied.
+  successful" → restore env byte-identically, verified). Migrations 083–089 applied
+  earlier; 090 (`AddStudioContentItemOwner`) + 091 (`RenormalizeGeocodeReferenceSearchText`)
+  applied 2026-08-12 after the serving v39 code (2026-08-09 deploy) shipped ahead of the
+  schema — `POST /api/v1/studio/package-drafts` had been 500ing on the missing
+  `owner_id` column (42703), failing the honua-studio nightly live smoke for 9 nights.
+  Verified fixed: live-demo-smoke run 31610198250 green. Lesson repeated: a versioned
+  deploy does NOT run migrations; pair every image publish that carries new
+  `Honua.Server.Migrations` scripts with this out-of-band DbUp invoke.
 - **Geocoding LIVE end-to-end** via Amazon Location + `geo.places` PrivateLink:
   `findAddressCandidates?singleLine=Kahului Airport, Maui` → 200 in **1.3s**, 5
   candidates, top `Kahului Airport, Kahului, HI, USA`. (Known cosmetic gap unchanged:
