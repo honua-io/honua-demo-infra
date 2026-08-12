@@ -181,8 +181,8 @@ surface and must not be used for managed seeding or receipt reads.
 ```bash
 # [OPERATOR] validate the repository pin, then invoke the allowlisted manager
 : "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-seed_ref=3459800a8ad07ba877e60bae6dac34f2676fcf8b
-seed_sha256=2423ee8f25c71efb576646b99b16c09856fd946025320d524a451ce99c709e34
+seed_ref=f2785edded93493e6781e70dad6ec7814ba046da
+seed_sha256=b505f6d644c2d7a81fd349c766e1f7ef4573356f899dc136c252d71428213dba
 curl --fail --location \
   "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
   --output /tmp/demo-stac-imagery-v1.sql
