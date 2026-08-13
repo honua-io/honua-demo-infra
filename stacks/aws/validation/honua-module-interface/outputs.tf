@@ -1,4 +1,5 @@
 output "api_endpoint" { value = "https://validation.execute-api.us-east-1.amazonaws.com" }
+output "admin_password_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-admin" }
 output "control_plane_backend_name" { value = "validation-backend" }
 output "control_plane_target_id" { value = "validation-target" }
 output "control_plane_target_kind" { value = "lambda" }

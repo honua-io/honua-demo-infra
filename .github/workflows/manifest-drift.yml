@@ -52,6 +52,11 @@ jobs:
           python3 scripts/test-stac-seed-handler.py
           python3 scripts/test-stac-runbook-contract.py
 
+      - name: Validate credential-safe candidate preflight
+        run: |
+          python3 scripts/test-candidate-preflight-handler.py
+          python3 scripts/test-candidate-preflight-contract.py
+
   terraform-contract:
     name: Terraform format and validate
     runs-on: ubuntu-latest
