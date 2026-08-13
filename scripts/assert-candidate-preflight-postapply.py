@@ -53,6 +53,22 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def parse_json_exact(value: str, label: str = "post-apply show") -> dict:
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        document: dict[str, object] = {}
+        for key, item in pairs:
+            require(key not in document, f"{label} contains duplicate key {key!r}")
+            document[key] = item
+        return document
+
+    try:
+        document = json.loads(value, object_pairs_hook=reject_duplicate_keys)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{label} is malformed JSON") from exc
+    require(isinstance(document, dict), f"{label} is not a JSON object")
+    return document
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -252,7 +268,7 @@ def main() -> None:
     parser.add_argument("show_json", type=Path, help="saved post-apply terraform show -json output")
     parser.add_argument("--configuration-root", type=Path, default=DEFAULT_CONFIGURATION_ROOT)
     args = parser.parse_args()
-    assert_postapply(json.loads(args.show_json.read_text(encoding="utf-8")), args.configuration_root)
+    assert_postapply(parse_json_exact(args.show_json.read_text(encoding="utf-8")), args.configuration_root)
     print("candidate-preflight apply-actionless provider readback: PASS")
 
 

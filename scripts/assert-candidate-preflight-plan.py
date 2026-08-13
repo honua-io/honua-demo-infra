@@ -152,6 +152,82 @@ EXPECTED_RESOURCE_EXPRESSIONS = {
         "name": {"constant_value": "honua-demo-demo/admin-password"}
     },
 }
+EXPECTED_CONFIGURATION_OUTPUTS = {
+    "candidate_preflight_qualified_arn": {
+        "description": "Immutable published candidate-preflight Lambda ARN; invoke only this qualified ARN.",
+        "expression": {
+            "references": [
+                "aws_lambda_function.candidate_preflight.qualified_arn",
+                "aws_lambda_function.candidate_preflight",
+            ]
+        },
+    },
+    "candidate_preflight_version": {
+        "description": "Immutable published candidate-preflight Lambda version.",
+        "expression": {
+            "references": [
+                "aws_lambda_function.candidate_preflight.version",
+                "aws_lambda_function.candidate_preflight",
+            ]
+        },
+    },
+}
+EXPECTED_RESOURCE_METADATA = {
+    "aws_cloudwatch_log_group.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_cloudwatch_log_group",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "aws_iam_role.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_iam_role",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "aws_iam_role_policy.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_iam_role_policy",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+        "depends_on": ["aws_iam_role.candidate_preflight"],
+    },
+    "aws_lambda_function.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_lambda_function",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+        "depends_on": [
+            "aws_cloudwatch_log_group.candidate_preflight",
+            "aws_iam_role_policy.candidate_preflight",
+        ],
+    },
+    "data.archive_file.candidate_preflight": {
+        "mode": "data",
+        "type": "archive_file",
+        "name": "candidate_preflight",
+        "provider_config_key": "archive",
+        "schema_version": 0,
+    },
+    "data.aws_iam_policy_document.candidate_preflight_assume": {
+        "mode": "data",
+        "type": "aws_iam_policy_document",
+        "name": "candidate_preflight_assume",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "data.aws_secretsmanager_secret.admin_password": {
+        "mode": "data",
+        "type": "aws_secretsmanager_secret",
+        "name": "admin_password",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+}
 PROVIDER_KEYS = {
     "aws_cloudwatch_log_group.candidate_preflight": "aws",
     "aws_iam_role.candidate_preflight": "aws",
@@ -284,10 +360,15 @@ def assert_configuration(
     secret_data_address: str = "data.aws_secretsmanager_secret.admin_password",
     provider_contract: dict | None = None,
 ) -> dict[str, dict]:
-    configuration = plan.get("configuration", {}).get("root_module", {})
-    provider_config = plan.get("configuration", {}).get("provider_config", {})
+    full_configuration = plan.get("configuration")
+    require(isinstance(full_configuration, dict), "candidate-preflight configuration is missing")
+    require(set(full_configuration) == {"provider_config", "root_module"}, "configuration top-level schema drifted")
+    configuration = full_configuration.get("root_module")
+    require(isinstance(configuration, dict), "candidate-preflight root configuration is missing")
+    require(set(configuration) == {"outputs", "resources"}, "configuration root schema drifted")
+    require(configuration.get("outputs") == EXPECTED_CONFIGURATION_OUTPUTS, "configuration output contract drifted")
+    provider_config = full_configuration.get("provider_config")
     require(provider_config == (provider_contract or EXPECTED_PROVIDERS), "provider configuration set or values drifted")
-    require(not configuration.get("module_calls"), "candidate-preflight configuration has child modules")
     resources = configuration.get("resources", [])
     require(all(isinstance(resource, dict) and isinstance(resource.get("address"), str) for resource in resources), "configuration resource schema drifted")
     config_resources = {resource["address"]: resource for resource in resources}
@@ -298,22 +379,31 @@ def assert_configuration(
         require(config_resources[address].get("mode") == "managed", f"{address} must be managed")
     for address in expected_data:
         require(config_resources[address].get("mode") == "data", f"{address} must be data")
-    expected_provider_keys = dict(PROVIDER_KEYS)
     expected_expressions = dict(EXPECTED_RESOURCE_EXPRESSIONS)
+    expected_metadata = dict(EXPECTED_RESOURCE_METADATA)
     if secret_data_address != "data.aws_secretsmanager_secret.admin_password":
-        expected_provider_keys.pop("data.aws_secretsmanager_secret.admin_password")
-        expected_provider_keys[secret_data_address] = "archive"
         expected_expressions.pop("data.aws_secretsmanager_secret.admin_password")
         expected_expressions[secret_data_address] = {
             "output_path": {"references": ["path.module"]},
             "source_file": {"references": ["path.module"]},
             "type": {"constant_value": "zip"},
         }
-    for address, expected_key in expected_provider_keys.items():
-        require(config_resources[address].get("provider_config_key") == expected_key, f"{address} provider binding drifted")
+        expected_metadata.pop("data.aws_secretsmanager_secret.admin_password")
+        expected_metadata[secret_data_address] = {
+            "mode": "data",
+            "type": "archive_file",
+            "name": "admin_password",
+            "provider_config_key": "archive",
+            "schema_version": 0,
+        }
     require(set(expected_expressions) == set(config_resources), "configuration expression contract address set drifted")
     for address, expected in expected_expressions.items():
-        require(config_resources[address].get("expressions") == expected, f"{address} configuration expressions drifted")
+        expected_resource = {
+            "address": address,
+            **expected_metadata[address],
+            "expressions": expected,
+        }
+        require(config_resources[address] == expected_resource, f"{address} exact configuration object drifted")
     return config_resources
 
 

@@ -59,6 +59,12 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
         without_drift["resource_drift"] = []
         POSTAPPLY.assert_postapply(without_drift)
 
+    def test_duplicate_json_keys_fail_before_assertion(self) -> None:
+        serialized = json.dumps(self.valid)
+        duplicated = serialized.replace('"configuration": {', '"configuration": {"root_module": {}, "root_module": {},', 1)
+        with self.assertRaises(RuntimeError):
+            POSTAPPLY.parse_json_exact(duplicated)
+
     def test_exact_sealed_postapply_show_passes_when_local_evidence_exists(self) -> None:
         if not SEALED_SHOW.is_file():
             self.skipTest("exact sealed post-apply evidence is intentionally local-only")
@@ -136,6 +142,43 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
                 else:
                     node[key] = "hostile-configuration-churn"
             with self.subTest(address=address, expression=".".join(path)):
+                self.assertTrue(all(item["change"]["actions"] == ["no-op"] for item in candidate["resource_changes"]))
+                with self.assertRaises(RuntimeError):
+                    POSTAPPLY.assert_postapply(candidate)
+
+    def test_every_configuration_schema_mutation_fails_with_noop_actions(self) -> None:
+        def resource(value: dict, address: str) -> dict:
+            return next(item for item in value["configuration"]["root_module"]["resources"] if item["address"] == address)
+
+        function = "aws_lambda_function.candidate_preflight"
+        output = "candidate_preflight_version"
+        mutations = {
+            "extra configuration key": lambda p: p["configuration"].update(hostile=True),
+            "missing provider key": lambda p: p["configuration"].pop("provider_config"),
+            "extra provider key": lambda p: p["configuration"]["provider_config"].update(hostile={}),
+            "missing provider value": lambda p: p["configuration"]["provider_config"]["aws"].pop("name"),
+            "provider value": lambda p: p["configuration"]["provider_config"]["aws"].update(name="hostile"),
+            "extra root key": lambda p: p["configuration"]["root_module"].update(hostile=True),
+            "missing root key": lambda p: p["configuration"]["root_module"].pop("outputs"),
+            "extra output": lambda p: p["configuration"]["root_module"]["outputs"].update(hostile={}),
+            "missing output": lambda p: p["configuration"]["root_module"]["outputs"].pop(output),
+            "extra output key": lambda p: p["configuration"]["root_module"]["outputs"][output].update(hostile=True),
+            "missing output key": lambda p: p["configuration"]["root_module"]["outputs"][output].pop("description"),
+            "output description": lambda p: p["configuration"]["root_module"]["outputs"][output].update(description="hostile"),
+            "output reference": lambda p: p["configuration"]["root_module"]["outputs"][output]["expression"].update(references=["aws_lambda_function.candidate_preflight.qualified_arn"]),
+            "extra resource key": lambda p: resource(p, function).update(hostile=True),
+            "missing resource key": lambda p: resource(p, function).pop("name"),
+            "depends_on": lambda p: resource(p, function).update(depends_on=[]),
+            "type": lambda p: resource(p, function).update(type="aws_s3_bucket"),
+            "name": lambda p: resource(p, function).update(name="hostile"),
+            "mode": lambda p: resource(p, function).update(mode="data"),
+            "provider binding": lambda p: resource(p, function).update(provider_config_key="archive"),
+            "schema version": lambda p: resource(p, function).update(schema_version=999),
+        }
+        for label, mutation in mutations.items():
+            candidate = copy.deepcopy(self.valid)
+            mutation(candidate)
+            with self.subTest(label=label):
                 self.assertTrue(all(item["change"]["actions"] == ["no-op"] for item in candidate["resource_changes"]))
                 with self.assertRaises(RuntimeError):
                     POSTAPPLY.assert_postapply(candidate)
