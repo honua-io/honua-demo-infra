@@ -19,6 +19,7 @@ _IMMUTABLE_SEED_URL = re.compile(
     r"^https://raw\.githubusercontent\.com/honua-io/honua-server/"
     r"([0-9a-f]{40})/tests/seed/demo-stac-imagery-v1\.sql$"
 )
+_DOLLAR_QUOTE = re.compile(r"\$\$|\$[A-Za-z_][A-Za-z0-9_]*\$")
 _RECEIPT_ROLE = "honua_demo_seed_receipt"
 
 
@@ -71,6 +72,122 @@ def _render_seed(source_bytes, environment):
     if re.search(r"(?m)^\\", rendered) or re.search(r":[\"']", rendered):
         raise ValueError("seed still contains psql-only directives or substitutions")
     return rendered.encode("utf-8")
+
+
+def _split_postgresql_statements(script):
+    """Split trusted SQL without cutting quoted text, comments, or DO blocks.
+
+    Each returned slice preserves its original whitespace and terminating
+    semicolon. Concatenating the slices therefore reproduces the exact SQL
+    program covered by the execution digest.
+    """
+    statements = []
+    start = 0
+    index = 0
+    state = "normal"
+    dollar_tag = None
+    block_comment_depth = 0
+
+    while index < len(script):
+        if state == "normal":
+            if script.startswith("--", index):
+                state = "line-comment"
+                index += 2
+                continue
+            if script.startswith("/*", index):
+                state = "block-comment"
+                block_comment_depth = 1
+                index += 2
+                continue
+
+            character = script[index]
+            if character == "'":
+                state = "single-quote"
+                index += 1
+                continue
+            if character == '"':
+                state = "double-quote"
+                index += 1
+                continue
+            if character == "$":
+                match = _DOLLAR_QUOTE.match(script, index)
+                if match:
+                    dollar_tag = match.group(0)
+                    state = "dollar-quote"
+                    index = match.end()
+                    continue
+            if character == ";":
+                statements.append(script[start : index + 1])
+                start = index + 1
+            index += 1
+            continue
+
+        if state == "line-comment":
+            if script[index] in "\r\n":
+                state = "normal"
+            index += 1
+            continue
+
+        if state == "block-comment":
+            if script.startswith("/*", index):
+                block_comment_depth += 1
+                index += 2
+                continue
+            if script.startswith("*/", index):
+                block_comment_depth -= 1
+                index += 2
+                if block_comment_depth == 0:
+                    state = "normal"
+                continue
+            index += 1
+            continue
+
+        if state == "single-quote":
+            if script[index] == "\\" and index + 1 < len(script):
+                index += 2
+                continue
+            if script[index] == "'":
+                if index + 1 < len(script) and script[index + 1] == "'":
+                    index += 2
+                    continue
+                state = "normal"
+            index += 1
+            continue
+
+        if state == "double-quote":
+            if script[index] == '"':
+                if index + 1 < len(script) and script[index + 1] == '"':
+                    index += 2
+                    continue
+                state = "normal"
+            index += 1
+            continue
+
+        if state == "dollar-quote":
+            if script.startswith(dollar_tag, index):
+                index += len(dollar_tag)
+                dollar_tag = None
+                state = "normal"
+                continue
+            index += 1
+
+    if state not in ("normal", "line-comment"):
+        raise ValueError(f"unterminated PostgreSQL {state}")
+
+    tail = script[start:]
+    if tail.strip():
+        statements.append(tail)
+    elif tail and statements:
+        statements[-1] += tail
+    return [statement for statement in statements if statement.strip()]
+
+
+def _run_sql_script(connection, script):
+    statements = _split_postgresql_statements(script)
+    if not statements:
+        raise ValueError("SQL script contains no statement")
+    for statement in statements:
+        connection.run(statement)
 
 
 def _break_glass(event):
@@ -129,8 +246,10 @@ def _managed_seed(event):
     try:
         connection.run("BEGIN")
         try:
-            # execution_sha256 covers these exact UTF-8 bytes, independently of the caller.
-            connection.run(execution_bytes.decode("utf-8"))
+            # execution_sha256 covers the concatenated exact UTF-8 statement slices,
+            # independently of the caller. pg8000's extended-query path accepts one
+            # statement per Parse operation, so split only at PostgreSQL boundaries.
+            _run_sql_script(connection, execution_bytes.decode("utf-8"))
             rows = connection.run(
                 "SELECT revision FROM honua.metadata_v2_current WHERE environment = :environment",
                 environment=environment,
@@ -138,7 +257,8 @@ def _managed_seed(event):
             if len(rows) != 1:
                 raise RuntimeError("managed seed did not activate exactly one metadata revision")
             revision = int(rows[0][0])
-            connection.run(
+            _run_sql_script(
+                connection,
                 """
                 CREATE TABLE IF NOT EXISTS honua.demo_seed_revisions (
                     seed_id text PRIMARY KEY,
@@ -178,7 +298,8 @@ def _managed_seed(event):
                 environment=environment,
                 revision=revision,
             )
-            connection.run(
+            _run_sql_script(
+                connection,
                 f"""
                 DO $role$
                 BEGIN

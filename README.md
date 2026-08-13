@@ -180,7 +180,7 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-    https://raw.githubusercontent.com/honua-io/honua-server/4be2e65042701464d649aa30a7f5eb88cdb13a1d/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/1fc339a3692289e9bc4ec90ed1533c5eb22a995e/tests/seed/demo-stac-imagery-v1.sql
   ```
 
   Exact seed SHA-256: `de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687`.

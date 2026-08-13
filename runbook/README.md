@@ -39,7 +39,7 @@ stays in honua-server per the seed-data policy (see the repo-root README →
 "Seed data") — pinned reference:
 
 ```
-https://raw.githubusercontent.com/honua-io/honua-server/4be2e65042701464d649aa30a7f5eb88cdb13a1d/tests/seed/apply-demo-stac-seed.sh
+https://raw.githubusercontent.com/honua-io/honua-server/1fc339a3692289e9bc4ec90ed1533c5eb22a995e/tests/seed/apply-demo-stac-seed.sh
 ```
 
 The sibling STAC SQL at this ref has exact SHA-256

@@ -11,7 +11,7 @@ IAC = ROOT / "stacks" / "aws" / "stac-seed-gate.tf"
 
 
 class StacRunbookContractTests(unittest.TestCase):
-    SERVER_HEAD = "4be2e65042701464d649aa30a7f5eb88cdb13a1d"
+    SERVER_HEAD = "1fc339a3692289e9bc4ec90ed1533c5eb22a995e"
     SEED_SHA256 = "de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687"
 
     def test_managed_seed_is_separate_from_break_glass_sql(self) -> None:
