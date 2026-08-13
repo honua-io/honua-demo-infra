@@ -111,8 +111,10 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('lifecycle_field="status"', handler)
         self.assertIn('value.get("isReady") is not True', handler)
         self.assertIn('value.get("isFailed") is not False', handler)
-        self.assertIn('variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]', handler)
-        self.assertIn('"sourceCommit": variables["HONUA_GIT_SHA"]', handler)
+        self.assertNotIn('variables.get("HONUA_GIT_SHA")', handler)
+        self.assertIn('"sourceCommit": manifest_candidate["sourceCommit"]', handler)
+        self.assertIn('"provenance": "classification-manifest+resolved-image"', handler)
+        self.assertIn('code.get("ResolvedImageUri") != IMMUTABLE["artifactReference"]', handler)
         self.assertNotRegex(handler, r"\bprint\s*\(")
         for path in (
             "/healthz/live",
@@ -121,6 +123,18 @@ class CandidatePreflightContractTests(unittest.TestCase):
             "/api/v1/admin/observability/migrations",
         ):
             self.assertIn(path, handler)
+
+    def test_operator_ecr_provenance_does_not_widen_helper_iam(self):
+        iac = IAC.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
+        self.assertNotIn('"ecr:', iac)
+        self.assertIn("aws ecr batch-get-image", invoke)
+        self.assertIn("aws ecr get-download-url-for-layer", invoke)
+        self.assertIn("assert-candidate-preflight-ecr.py", invoke)
+        self.assertIn(
+            "ecrEvidenceSha256",
+            (ROOT / "scripts" / "assert-candidate-preflight-runtime.py").read_text(encoding="utf-8"),
+        )
 
     def test_runbook_keeps_execution_manual_and_non_mutating(self):
         runbook = RUNBOOK.read_text(encoding="utf-8")

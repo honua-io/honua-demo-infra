@@ -97,7 +97,7 @@ def _validate_environment() -> str:
     return secret_arn
 
 
-def _load_classification_manifest() -> list[str]:
+def _load_classification_manifest() -> tuple[list[str], dict[str, str]]:
     try:
         manifest = json.loads(
             Path(__file__).with_name("classification.v1.json").read_text(encoding="utf-8")
@@ -136,10 +136,13 @@ def _load_classification_manifest() -> list[str]:
         names.append(name)
     if len(set(names)) != len(names):
         raise PreflightFailure("classification-script-set-invalid")
-    return names
+    return names, candidate
 
 
-def _candidate_fingerprint(lambda_client: Any) -> dict[str, Any]:
+def _candidate_fingerprint(
+    lambda_client: Any,
+    manifest_candidate: dict[str, str],
+) -> dict[str, Any]:
     try:
         function = lambda_client.get_function(
             FunctionName=IMMUTABLE["appFunctionName"],
@@ -178,8 +181,6 @@ def _candidate_fingerprint(lambda_client: Any) -> dict[str, Any]:
         raise PreflightFailure("candidate-environment-invalid")
     if variables.get("HONUA_SKIP_MIGRATIONS") != IMMUTABLE["skipMigrations"]:
         raise PreflightFailure("candidate-migration-mode-drift")
-    if variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]:
-        raise PreflightFailure("candidate-source-commit-drift")
     if (
         variables.get("ControlPlane__DeployTargets__0__ArtifactReference")
         != IMMUTABLE["artifactReference"]
@@ -201,7 +202,9 @@ def _candidate_fingerprint(lambda_client: Any) -> dict[str, Any]:
         "resolvedImageUri": code["ResolvedImageUri"],
         "skipMigrations": variables["HONUA_SKIP_MIGRATIONS"],
         "artifactReference": variables["ControlPlane__DeployTargets__0__ArtifactReference"],
-        "sourceCommit": variables["HONUA_GIT_SHA"],
+        "sourceCommit": manifest_candidate["sourceCommit"],
+        "imageDigest": manifest_candidate["imageDigest"],
+        "provenance": "classification-manifest+resolved-image",
     }
 
 
@@ -410,11 +413,11 @@ def _validate_preflight(value: dict[str, Any], pending: list[str]) -> None:
 
 def _run() -> dict[str, Any]:
     secret_arn = _validate_environment()
-    pending = _load_classification_manifest()
+    pending, manifest_candidate = _load_classification_manifest()
     lambda_client = boto3.client("lambda", config=AWS_CONFIG)
     secrets_client = boto3.client("secretsmanager", config=AWS_CONFIG)
 
-    candidate_before = _candidate_fingerprint(lambda_client)
+    candidate_before = _candidate_fingerprint(lambda_client, manifest_candidate)
     alias_before = _alias_fingerprint(lambda_client)
     admin_password = _read_admin_password(secrets_client, secret_arn)
 
@@ -435,7 +438,7 @@ def _run() -> dict[str, Any]:
     )
 
     alias_after = _alias_fingerprint(lambda_client)
-    candidate_after = _candidate_fingerprint(lambda_client)
+    candidate_after = _candidate_fingerprint(lambda_client, manifest_candidate)
     if alias_after != alias_before:
         raise PreflightFailure("live-alias-post-check-drift")
     if candidate_after != candidate_before:
@@ -451,7 +454,9 @@ def _run() -> dict[str, Any]:
             "version": IMMUTABLE["candidateVersion"],
             "revisionId": IMMUTABLE["candidateRevisionId"],
             "imageDigest": IMMUTABLE["imageDigest"],
+            "artifactReference": IMMUTABLE["artifactReference"],
             "sourceCommit": IMMUTABLE["sourceCommit"],
+            "provenance": "classification-manifest+resolved-image",
         },
         "liveAlias": {
             "name": IMMUTABLE["liveAliasName"],

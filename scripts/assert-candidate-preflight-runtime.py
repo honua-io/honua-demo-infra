@@ -16,20 +16,21 @@ NAME = "honua-demo-demo-candidate-preflight"
 ROLE_NAME = f"{NAME}-role"
 ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{ROLE_NAME}"
 POLICY_NAME = "credential-safe-candidate-preflight-v1"
-CODE_SHA256 = "Uuh51TGz/JTPCJIbL7FAxtAsjl4Y42u1KEx7UtoshVQ="
+CODE_SHA256 = "TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA="
 SECRET_PATTERN = re.compile(
     rf"^arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:honua-demo-demo/admin-password-[A-Za-z0-9]{{6}}$"
 )
 REVISION_PATTERN = re.compile(r"^[0-9a-fA-F-]{36}$")
 VERSION_PATTERN = re.compile(r"^[1-9][0-9]*$")
-HANDLER_SHA256 = "cb7f4589f32a884c72552eb5e2227378f9cae810f4c9eb56a653be1139bb7415"
+HANDLER_SHA256 = "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb"
 CLASSIFICATION_SHA256 = "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579"
 IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 PLAN_RECEIPT_SCHEMA = "honua-candidate-preflight-plan-receipt-v1"
 DEPLOYMENT_RECEIPT_SCHEMA = "honua-candidate-preflight-deployment-receipt-v1"
+ECR_EVIDENCE_SCHEMA = "honua-candidate-preflight-ecr-evidence-v1"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
-ARCHIVE_SHA256 = "52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554"
+ARCHIVE_SHA256 = "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0"
 SOURCE_HASHES = {
     "handler.py": HANDLER_SHA256,
     "classification.v1.json": CLASSIFICATION_SHA256,
@@ -81,12 +82,13 @@ def validate_deployment_receipt(receipt: dict, merged_sha: str) -> None:
     require(isinstance(receipt, dict), "deployment receipt must be a JSON object")
     require(
         set(receipt)
-        == {"schema", "mergedSha", "planReceiptSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
+        == {"schema", "mergedSha", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
         "deployment receipt keyset drifted",
     )
     require(receipt["schema"] == DEPLOYMENT_RECEIPT_SCHEMA, "deployment receipt schema drifted")
     require(receipt["mergedSha"] == merged_sha, "deployment receipt merged SHA drifted")
     require(SHA256_PATTERN.fullmatch(receipt["planReceiptSha256"]) is not None, "deployment receipt plan hash is invalid")
+    require(SHA256_PATTERN.fullmatch(receipt["ecrEvidenceSha256"]) is not None, "deployment receipt ECR hash is invalid")
     require(VERSION_PATTERN.fullmatch(receipt["version"]) is not None, "deployment receipt helper version is invalid")
     require(
         receipt["qualifiedArn"] == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{NAME}:{receipt['version']}",
@@ -114,6 +116,38 @@ def expected_policy(secret_arn: str) -> dict:
     }
 
 
+def validate_ecr_evidence(evidence: dict) -> None:
+    require(
+        evidence
+        == {
+            "schema": ECR_EVIDENCE_SCHEMA,
+            "registryId": ACCOUNT,
+            "region": REGION,
+            "repositoryName": "honua-server",
+            "imageDigest": IMAGE_DIGEST,
+            "manifestMediaType": "application/vnd.oci.image.manifest.v1+json",
+            "manifestSha256": IMAGE_DIGEST,
+            "config": {
+                "digest": "sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f",
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "size": 6052,
+                "sha256": "sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f",
+                "architecture": "arm64",
+                "os": "linux",
+                "entrypoint": ["/var/task/Honua.Server"],
+                "cmd": None,
+                "workingDir": "/var/task",
+                "nativeAot": "native-aot",
+                "runtimeEntrypoint": "/var/task/Honua.Server",
+                "ociRevision": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+                "source": "https://github.com/honua-io/honua-server",
+                "honuaGitSha": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+            },
+        },
+        "ECR image provenance evidence drifted",
+    )
+
+
 def audit(args) -> dict:
     function = load(args.function)["Configuration"]
     concurrency = load(args.concurrency)
@@ -122,7 +156,9 @@ def audit(args) -> dict:
     attached = load(args.attached_policies)
     inline = load(args.inline_policies)
     plan_receipt = load(args.plan_receipt)
+    ecr_evidence = load(args.ecr_evidence)
     validate_plan_receipt(plan_receipt, args.merged_sha)
+    validate_ecr_evidence(ecr_evidence)
 
     version = str(function.get("Version", ""))
     qualified_arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{NAME}:{version}"
@@ -182,6 +218,7 @@ def audit(args) -> dict:
         "schema": DEPLOYMENT_RECEIPT_SCHEMA,
         "mergedSha": args.merged_sha,
         "planReceiptSha256": sha256(args.plan_receipt),
+        "ecrEvidenceSha256": sha256(args.ecr_evidence),
         "qualifiedArn": qualified_arn,
         "version": version,
         "revisionId": revision,
@@ -204,6 +241,7 @@ def main() -> None:
     parser.add_argument("--attached-policies", type=Path, required=True)
     parser.add_argument("--inline-policies", type=Path, required=True)
     parser.add_argument("--plan-receipt", type=Path, required=True)
+    parser.add_argument("--ecr-evidence", type=Path, required=True)
     parser.add_argument("--merged-sha", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()

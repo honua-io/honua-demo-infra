@@ -9,7 +9,7 @@ fi
 readonly MERGED_SHA="$1"
 readonly EVIDENCE_DIR="$2"
 readonly ARCHIVE="stacks/aws-candidate-preflight/candidate-preflight.zip"
-readonly ARCHIVE_SHA256="52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554"
+readonly ARCHIVE_SHA256="4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0"
 
 [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"

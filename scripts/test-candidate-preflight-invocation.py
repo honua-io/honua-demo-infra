@@ -8,6 +8,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +39,9 @@ def valid_payload():
             "version": "40",
             "revisionId": "0326e209-4231-4acd-9bb4-d3cb89402db0",
             "imageDigest": "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861",
+            "artifactReference": "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861",
             "sourceCommit": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+            "provenance": "classification-manifest+resolved-image",
         },
         "liveAlias": {"name": "live", "version": "39", "revisionId": "4f73dd76-0294-44d3-8362-c6f8606f034e"},
         "migration": {"phase": "Expand", "pendingScriptCount": 14, "pendingScriptsSha256": ASSERTION.PENDING_DIGEST},
@@ -108,6 +111,31 @@ class InvocationAssertionTests(unittest.TestCase):
                 ASSERTION.load_document(document)
         with self.assertRaises(RuntimeError):
             ASSERTION.assert_invocation({"StatusCode": 200, "ExecutedVersion": "$LATEST"}, valid_payload(), "$LATEST")
+
+    def test_invocation_receipt_binds_deployment_and_ecr_proof(self):
+        with tempfile.TemporaryDirectory(prefix="candidate-invocation-receipt-") as temporary:
+            root = Path(temporary)
+            metadata = root / "metadata.json"
+            payload = root / "payload.json"
+            evidence = root / "evidence.json"
+            deployment = root / "deployment.json"
+            metadata.write_text(json.dumps({"StatusCode": 200, "ExecutedVersion": "1"}), encoding="utf-8")
+            payload.write_text(json.dumps(valid_payload()), encoding="utf-8")
+            evidence.write_text(json.dumps({"schema": "honua-candidate-preflight-ecr-evidence-v1"}), encoding="utf-8")
+            deployment.write_text(
+                json.dumps(
+                    {
+                        "schema": "honua-candidate-preflight-deployment-receipt-v1",
+                        "ecrEvidenceSha256": ASSERTION.sha256(evidence),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            receipt = ASSERTION.build_receipt(metadata, payload, deployment, evidence, "1")
+            ASSERTION.validate_receipt(receipt)
+            evidence.write_text(json.dumps({"schema": "honua-candidate-preflight-ecr-evidence-v1", "drift": True}), encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                ASSERTION.build_receipt(metadata, payload, deployment, evidence, "1")
 
 
 if __name__ == "__main__":
