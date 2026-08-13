@@ -51,6 +51,10 @@ elif command == "aws" and args[:2] == ["ecr", "get-download-url-for-layer"]:
 elif command == "sha256sum" and (not args or args[0] != "--check"):
     for path in args:
         print("4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0  " + path)
+elif command == "sha256sum" and args and args[0] == "--check":
+    content = sys.stdin.read()
+    if content and "postapply-deployment-receipt.json" not in content:
+        raise SystemExit(73)
 elif command == "aws" and args[:2] == ["lambda", "invoke"]:
     if os.environ.get("AWS_MAX_ATTEMPTS") != "1":
         raise SystemExit(72)
@@ -77,6 +81,7 @@ run_script() {
   local script="$1"
   local evidence="$2"
   mkdir -p "$evidence"
+  printf '%s' 'sealed-v1-deployment-receipt' > "$evidence/postapply-deployment-receipt.json"
   set +e
   if [[ "$script" == *candidate-preflight-invoke.sh ]]; then
     bash "$script" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$evidence"
@@ -132,6 +137,15 @@ test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "aws iam list-attached-role-policies --no-paginate " "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "aws iam list-role-policies --no-paginate " "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "python scripts/candidate-preflight-governance-receipt.py verify " "$MOCK_LOG")" -eq 4
+grep -Fq "sha256sum --check" "$MOCK_LOG"
+
+reset_case
+mkdir -p "$TEMP_ROOT/missing-historical"
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$TEMP_ROOT/missing-historical"; then
+  echo "expected missing exact historical receipt failure" >&2
+  exit 1
+fi
+assert_no_invoke
 
 reset_case
 if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$TEMP_ROOT/wrong-deployment"; then

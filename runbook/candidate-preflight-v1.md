@@ -150,7 +150,7 @@ Before any invocation audit, verify the preserved historical receipt byte for
 byte and never use it as the v2 output path:
 
 ```bash
-echo "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29  $EVIDENCE_DIR/deployment-receipt.json" | sha256sum --check
+echo "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29  $EVIDENCE_DIR/postapply-deployment-receipt.json" | sha256sum --check
 ```
 
 ```bash
@@ -163,7 +163,7 @@ python scripts/assert-candidate-preflight-runtime.py create \
   --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
   --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
   --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
-  --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
   --governance-sha "$GOVERNANCE_SHA" \
   --deployment-sha "$DEPLOYMENT_SHA" \
@@ -177,7 +177,7 @@ python scripts/assert-candidate-preflight-runtime.py verify \
   --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
   --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
   --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
-  --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
   --governance-sha "$GOVERNANCE_SHA" \
   --deployment-sha "$DEPLOYMENT_SHA" \

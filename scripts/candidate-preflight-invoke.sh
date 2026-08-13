@@ -26,7 +26,8 @@ readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 test "$(git rev-parse HEAD)" = "$GOVERNANCE_SHA"
 test -z "$(git status --porcelain)"
-echo "$HISTORICAL_DEPLOYMENT_RECEIPT_SHA256  $EVIDENCE_DIR/deployment-receipt.json" | sha256sum --check
+test -f "$EVIDENCE_DIR/postapply-deployment-receipt.json"
+echo "$HISTORICAL_DEPLOYMENT_RECEIPT_SHA256  $EVIDENCE_DIR/postapply-deployment-receipt.json" | sha256sum --check
 
 capture_helper_audit() {
   local prefix="$1"
@@ -79,7 +80,7 @@ runtime_audit() {
     --ecr-evidence "$EVIDENCE_DIR/$prefix-ecr-evidence.json" \
     --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
     --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
-    --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+    --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
     --governance-sha "$GOVERNANCE_SHA" \
     --deployment-sha "$DEPLOYMENT_SHA" \
     --receipt "$EVIDENCE_DIR/governed-deployment-receipt.json"
@@ -99,7 +100,7 @@ governance_receipt_verify() {
   python scripts/candidate-preflight-governance-receipt.py verify \
     --governance-sha "$GOVERNANCE_SHA" \
     --deployment-sha "$DEPLOYMENT_SHA" \
-    --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+    --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
     --receipt "$EVIDENCE_DIR/governance-receipt.json"
 }
 
@@ -108,7 +109,7 @@ governance_receipt_verify() {
 python scripts/candidate-preflight-governance-receipt.py create \
   --governance-sha "$GOVERNANCE_SHA" \
   --deployment-sha "$DEPLOYMENT_SHA" \
-  --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
   --receipt "$EVIDENCE_DIR/governance-receipt.json"
 governance_receipt_verify
 plan_receipt_verify
