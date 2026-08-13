@@ -160,6 +160,7 @@ def assert_noop_change(item: dict, address: str) -> None:
     require(isinstance(change, dict) and change.get("actions") == ["no-op"], f"{address} is not no-op")
     require(change.get("before") == change.get("after"), f"{address} no-op values differ")
     require(not change.get("after_unknown"), f"{address} retains unknown values")
+    require(not change.get("replace_paths"), f"{address} contains replacement paths")
     require(change.get("before_sensitive") == change.get("after_sensitive"), f"{address} sensitivity shape drifted")
 
 
@@ -176,7 +177,14 @@ def assert_outputs(plan: dict) -> None:
 def parse_policy(value: object, label: str) -> dict:
     require(isinstance(value, str), f"{label} policy is not normalized JSON text")
     try:
-        document = json.loads(value)
+        def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+            document: dict[str, object] = {}
+            for key, item in pairs:
+                require(key not in document, f"{label} policy contains duplicate key {key!r}")
+                document[key] = item
+            return document
+
+        document = json.loads(value, object_pairs_hook=reject_duplicate_keys)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"{label} policy is malformed") from exc
     require(isinstance(document, dict), f"{label} policy is not a JSON object")
@@ -205,6 +213,14 @@ def assert_role_drift(item: dict, resources: dict[str, dict]) -> None:
     normalized_before = copy.deepcopy(before)
     normalized_before["inline_policy"] = copy.deepcopy(observed)
     require(normalized_before == after, "IAM role readback changes fields beyond the exact aggregate inline policy")
+    before_sensitive = change.get("before_sensitive")
+    after_sensitive = change.get("after_sensitive")
+    require(isinstance(before_sensitive, dict) and isinstance(after_sensitive, dict), "IAM role readback sensitivity shape is missing")
+    require(before_sensitive.get("inline_policy") == [], "IAM role readback sensitivity does not begin empty")
+    require(after_sensitive.get("inline_policy") == [{}], "IAM role readback sensitivity does not contain exactly one policy")
+    normalized_sensitive = copy.deepcopy(before_sensitive)
+    normalized_sensitive["inline_policy"] = [{}]
+    require(normalized_sensitive == after_sensitive, "IAM role readback changes sensitivity fields beyond the exact policy")
 
 
 def assert_lambda_drift(item: dict) -> None:
@@ -216,6 +232,14 @@ def assert_lambda_drift(item: dict) -> None:
     normalized_before = copy.deepcopy(before)
     normalized_before["layers"] = []
     require(normalized_before == after, "Lambda readback changes fields beyond exact empty-layer normalization")
+    before_sensitive = change.get("before_sensitive")
+    after_sensitive = change.get("after_sensitive")
+    require(isinstance(before_sensitive, dict) and isinstance(after_sensitive, dict), "Lambda readback sensitivity shape is missing")
+    require("layers" not in before_sensitive, "Lambda readback sensitivity unexpectedly begins with layers")
+    require(after_sensitive.get("layers") == [], "Lambda readback sensitivity does not normalize layers to empty")
+    normalized_sensitive = copy.deepcopy(before_sensitive)
+    normalized_sensitive["layers"] = []
+    require(normalized_sensitive == after_sensitive, "Lambda readback changes sensitivity fields beyond exact empty layers")
 
 
 def assert_drift(plan: dict, resources: dict[str, dict]) -> None:
@@ -230,6 +254,7 @@ def assert_drift(plan: dict, resources: dict[str, dict]) -> None:
         change = item.get("change")
         require(isinstance(change, dict) and change.get("actions") == ["update"], f"provider readback {address} action shape drifted")
         require(not change.get("after_unknown"), f"provider readback {address} contains unknown values")
+        require(not change.get("replace_paths"), f"provider readback {address} contains replacement paths")
         if address == "aws_iam_role.candidate_preflight":
             assert_role_drift(item, resources)
         elif address == "aws_lambda_function.candidate_preflight":
