@@ -40,7 +40,7 @@ DEPLOYMENT_PATHS = (
 OPERATOR_CONTRACT = {
     "awsMaxAttempts": 1,
     "attemptMarkerBeforeInvoke": True,
-    "fixedEvidenceDirectory": True,
+    "evidenceDirectoryTemplate": "$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA",
     "invokeLogType": "None",
     "payloadSha256": hashlib.sha256(b'{"operation":"candidate-preflight-v1"}').hexdigest(),
     "qualifiedArn": HELPER_ARN,
@@ -79,6 +79,11 @@ def source_hashes() -> dict[str, str]:
     return {name: lf_sha256(ROOT / name) for name in CONTROL_PATHS}
 
 
+def canonical_evidence_dir(governance_sha: str) -> Path:
+    require(SHA_PATTERN.fullmatch(governance_sha) is not None, "governance SHA is invalid")
+    return (Path.home() / ".honua-runtime-proof" / f"candidate-preflight-v2-invocation-{governance_sha}").resolve()
+
+
 def validate_apply_manifest(path: Path) -> dict:
     require(path.is_file(), "sealed v2 apply evidence manifest is missing")
     require(sha256(path) == APPLY_EVIDENCE_MANIFEST_SHA256, "sealed v2 apply evidence manifest hash drifted")
@@ -111,6 +116,7 @@ def validate_operator_source() -> None:
     require(f'readonly QUALIFIED_ARN="{HELPER_ARN}"' in operator, "v2 operator is not pinned to the qualified helper")
     require("terraform " not in operator, "v2 operator must not read ambiguous Terraform current outputs")
     require("invocation-attempt-v2.json" in operator, "v2 terminal attempt marker is missing")
+    require('readonly EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA"' in operator, "v2 canonical evidence directory is missing")
 
 
 def require_clean_binding(governance_sha: str) -> None:
@@ -130,27 +136,30 @@ def require_clean_binding(governance_sha: str) -> None:
 
 def validate_receipt(receipt: dict, governance_sha: str, apply_manifest_path: Path) -> None:
     require(
-        set(receipt) == {"schema", "governanceSha", "deploymentSha", "applyEvidenceManifestSha256", "stateLineage", "stateSerial", "sourceSha256", "operatorContract"},
+        set(receipt) == {"schema", "governanceSha", "deploymentSha", "applyEvidenceManifestSha256", "evidenceDirectory", "stateLineage", "stateSerial", "sourceSha256", "operatorContract"},
         "v2 governance receipt keyset drifted",
     )
     require(receipt["schema"] == SCHEMA, "v2 governance receipt schema drifted")
     require(receipt["governanceSha"] == governance_sha and SHA_PATTERN.fullmatch(governance_sha) is not None, "v2 governance SHA binding drifted")
     require(receipt["deploymentSha"] == DEPLOYMENT_SHA and governance_sha != DEPLOYMENT_SHA, "v2 deployment/governance provenance is not distinct")
     require(receipt["applyEvidenceManifestSha256"] == sha256(apply_manifest_path) == APPLY_EVIDENCE_MANIFEST_SHA256, "v2 apply evidence binding drifted")
+    require(receipt["evidenceDirectory"] == str(canonical_evidence_dir(governance_sha)), "v2 canonical evidence directory binding drifted")
     require(receipt["stateLineage"] == STATE_LINEAGE and receipt["stateSerial"] == STATE_SERIAL, "v2 state binding drifted")
     require(receipt["sourceSha256"] == source_hashes(), "v2 governance source hashes drifted")
     require(all(SHA256_PATTERN.fullmatch(value) for value in receipt["sourceSha256"].values()), "v2 governance source hash is invalid")
     require(receipt["operatorContract"] == OPERATOR_CONTRACT, "v2 operator contract drifted")
 
 
-def build_receipt(governance_sha: str, apply_manifest_path: Path) -> dict:
+def build_receipt(governance_sha: str, apply_manifest_path: Path, evidence_dir: Path) -> dict:
     require_clean_binding(governance_sha)
     validate_apply_manifest(apply_manifest_path)
+    require(evidence_dir.resolve() == canonical_evidence_dir(governance_sha), "caller selected a noncanonical v2 evidence directory")
     receipt = {
         "schema": SCHEMA,
         "governanceSha": governance_sha,
         "deploymentSha": DEPLOYMENT_SHA,
         "applyEvidenceManifestSha256": APPLY_EVIDENCE_MANIFEST_SHA256,
+        "evidenceDirectory": str(canonical_evidence_dir(governance_sha)),
         "stateLineage": STATE_LINEAGE,
         "stateSerial": STATE_SERIAL,
         "sourceSha256": source_hashes(),
@@ -165,9 +174,10 @@ def main() -> None:
     parser.add_argument("mode", choices=("create", "verify"))
     parser.add_argument("--governance-sha", required=True)
     parser.add_argument("--apply-evidence-manifest", type=Path, required=True)
+    parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
-    actual = build_receipt(args.governance_sha, args.apply_evidence_manifest)
+    actual = build_receipt(args.governance_sha, args.apply_evidence_manifest, args.evidence_dir)
     if args.mode == "create":
         args.receipt.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     else:

@@ -39,18 +39,26 @@ export PATH="$MOCK_BIN:$PATH"
 export MOCK_LOG MOCK_ROOT="$ROOT" MOCK_SHA="$MERGED_SHA"
 
 run_case() {
-  local evidence="$1"
-  bash "$ROOT/scripts/candidate-preflight-v2-invoke.sh" "$MERGED_SHA" "$evidence" "$APPLY_DIR"
+  local isolated_home="$1"
+  HOME="$isolated_home" bash "$ROOT/scripts/candidate-preflight-v2-invoke.sh" "$MERGED_SHA" "$APPLY_DIR"
 }
 
 : > "$MOCK_LOG"
-run_case "$TEMP_ROOT/success"
+readonly SUCCESS_HOME="$TEMP_ROOT/home-success"
+readonly SUCCESS_EVIDENCE="$SUCCESS_HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$MERGED_SHA"
+run_case "$SUCCESS_HOME"
 test "$(grep -Fc 'aws lambda invoke ' "$MOCK_LOG")" -eq 1
 grep -Fq 'arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2' "$MOCK_LOG"
 ! grep -Fq 'terraform ' "$MOCK_LOG"
-test -f "$TEMP_ROOT/success/invocation-attempt-v2.json"
+test -f "$SUCCESS_EVIDENCE/invocation-attempt-v2.json"
 
-if run_case "$TEMP_ROOT/success"; then echo "second invocation path unexpectedly passed" >&2; exit 1; fi
+if run_case "$SUCCESS_HOME"; then echo "second invocation path unexpectedly passed" >&2; exit 1; fi
+test "$(grep -Fc 'aws lambda invoke ' "$MOCK_LOG")" -eq 1
+
+if HOME="$TEMP_ROOT/home-alternate" bash "$ROOT/scripts/candidate-preflight-v2-invoke.sh" "$MERGED_SHA" "$APPLY_DIR" "$TEMP_ROOT/caller-selected-alternate"; then
+  echo "alternate caller-selected evidence directory unexpectedly accepted" >&2
+  exit 1
+fi
 test "$(grep -Fc 'aws lambda invoke ' "$MOCK_LOG")" -eq 1
 
 pre_failures=(
@@ -60,15 +68,17 @@ pre_failures=(
   "aws ecr batch-get-image"
   "assert-candidate-preflight-v2-runtime.py create"
 )
+index=0
 for failure in "${pre_failures[@]}"; do
   : > "$MOCK_LOG"; export MOCK_FAIL_MATCH="$failure"
-  if run_case "$TEMP_ROOT/pre-${RANDOM}"; then echo "preinvoke failure passed: $failure" >&2; exit 1; fi
+  index=$((index + 1))
+  if run_case "$TEMP_ROOT/home-pre-$index"; then echo "preinvoke failure passed: $failure" >&2; exit 1; fi
   ! grep -Fq 'aws lambda invoke ' "$MOCK_LOG"
 done
 unset MOCK_FAIL_MATCH
 
 : > "$MOCK_LOG"; export MOCK_FAIL_MATCH="aws lambda invoke"
-if run_case "$TEMP_ROOT/invoke-failure"; then echo "invoke failure passed" >&2; exit 1; fi
+if run_case "$TEMP_ROOT/home-invoke-failure"; then echo "invoke failure passed" >&2; exit 1; fi
 test "$(grep -Fc 'aws lambda invoke ' "$MOCK_LOG")" -eq 1
 test "$(grep -Fc 'aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2' "$MOCK_LOG")" -eq 2
 test "$(grep -Fc 'aws lambda get-alias ' "$MOCK_LOG")" -eq 2

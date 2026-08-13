@@ -44,10 +44,20 @@ class GovernanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = self.write(Path(temporary), manifest())
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            with mock.patch.object(MODULE, "APPLY_EVIDENCE_MANIFEST_SHA256", digest), mock.patch.object(MODULE, "require_clean_binding"):
-                receipt = MODULE.build_receipt("a" * 40, path)
+            evidence = Path(temporary) / ".honua-runtime-proof" / ("candidate-preflight-v2-invocation-" + "a" * 40)
+            with mock.patch.object(MODULE, "APPLY_EVIDENCE_MANIFEST_SHA256", digest), mock.patch.object(MODULE, "require_clean_binding"), mock.patch.object(MODULE, "canonical_evidence_dir", return_value=evidence.resolve()):
+                receipt = MODULE.build_receipt("a" * 40, path, evidence)
                 self.assertEqual(digest, receipt["applyEvidenceManifestSha256"])
                 self.assertEqual(3, receipt["stateSerial"])
+
+    def test_alternate_evidence_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = self.write(root, manifest())
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            canonical = root / ".honua-runtime-proof" / ("candidate-preflight-v2-invocation-" + "a" * 40)
+            with mock.patch.object(MODULE, "APPLY_EVIDENCE_MANIFEST_SHA256", digest), mock.patch.object(MODULE, "require_clean_binding"), mock.patch.object(MODULE, "canonical_evidence_dir", return_value=canonical.resolve()), self.assertRaises(RuntimeError):
+                MODULE.build_receipt("a" * 40, path, root / "alternate")
 
     def test_hostile_apply_receipt_variants_fail_closed(self):
         mutations = {

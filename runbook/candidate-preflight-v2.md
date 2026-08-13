@@ -14,7 +14,9 @@ sealed apply-evidence manifest SHA-256
 isolated-state lineage `7e7947a0-303e-b5f3-6e03-6fa7fb4ef6a2`, and serial 3.
 
 The operator never reads an unqualified helper or an ambiguous Terraform
-current output. Before the invocation it proves helper `:2`, candidate `:40`,
+current output. It derives the only allowed evidence directory as the normalized
+`$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA`
+path and binds that exact resolved path into the governance receipt. Before the invocation it proves helper `:2`, candidate `:40`,
 live alias `:39` with no routing, exact ECR provenance, exact IAM, the clean
 governance commit, and the sealed apply manifest. It exports
 `AWS_MAX_ATTEMPTS=1`, creates a terminal attempt marker before the AWS call,
@@ -34,12 +36,12 @@ a clean checkout at the exact merge SHA from Git for Windows Bash:
 ```bash
 GOVERNANCE_SHA="$(git rev-parse HEAD)"
 APPLY_EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-helper-v2-5b5a67b75e8db85cf1669e4114be4c659139e191-plan"
-EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA"
-test ! -e "$EVIDENCE_DIR"
-scripts/candidate-preflight-v2-invoke.sh "$GOVERNANCE_SHA" "$EVIDENCE_DIR" "$APPLY_EVIDENCE_DIR"
+test ! -e "$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA"
+scripts/candidate-preflight-v2-invoke.sh "$GOVERNANCE_SHA" "$APPLY_EVIDENCE_DIR"
 ```
 
-Never retry this path or choose a new evidence directory after an attempt. A
+The operator does not accept an evidence-directory argument. Never retry this
+path or change `HOME` to manufacture a new evidence directory after an attempt. A
 failure requires a new diagnosis, reviewed governance transition, and explicit
 authorization. This procedure has no Terraform plan/apply, secret output,
 database, migration, seed, promotion, or alias-mutation command.

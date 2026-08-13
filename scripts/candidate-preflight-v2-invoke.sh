@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "usage: $0 GOVERNANCE_SHA EVIDENCE_DIR APPLY_EVIDENCE_DIR" >&2
+if [[ $# -ne 2 ]]; then
+  echo "usage: $0 GOVERNANCE_SHA APPLY_EVIDENCE_DIR" >&2
   exit 64
 fi
 
 readonly GOVERNANCE_SHA="$1"
-readonly EVIDENCE_DIR="$2"
-readonly APPLY_EVIDENCE_DIR="$3"
+readonly APPLY_EVIDENCE_DIR="$2"
+readonly EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA"
 readonly APPLY_MANIFEST="$APPLY_EVIDENCE_DIR/final-evidence-manifest.json"
 readonly QUALIFIED_ARN="arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2"
 readonly HELPER_NAME="honua-demo-demo-candidate-preflight"
@@ -24,6 +24,7 @@ readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 test "$(git rev-parse HEAD)" = "$GOVERNANCE_SHA"
 test -z "$(git status --porcelain)"
+mkdir -p "$HOME/.honua-runtime-proof"
 test ! -e "$EVIDENCE_DIR"
 mkdir "$EVIDENCE_DIR"
 
@@ -76,11 +77,11 @@ runtime_audit() {
 }
 
 governance_verify() {
-  python scripts/candidate-preflight-v2-governance-receipt.py verify --governance-sha "$GOVERNANCE_SHA" --apply-evidence-manifest "$APPLY_MANIFEST" --receipt "$EVIDENCE_DIR/governance-receipt-v2.json"
+  python scripts/candidate-preflight-v2-governance-receipt.py verify --governance-sha "$GOVERNANCE_SHA" --apply-evidence-manifest "$APPLY_MANIFEST" --evidence-dir "$EVIDENCE_DIR" --receipt "$EVIDENCE_DIR/governance-receipt-v2.json"
 }
 
 # Every gate before the marker is fail-fast and cannot invoke Lambda.
-python scripts/candidate-preflight-v2-governance-receipt.py create --governance-sha "$GOVERNANCE_SHA" --apply-evidence-manifest "$APPLY_MANIFEST" --receipt "$EVIDENCE_DIR/governance-receipt-v2.json"
+python scripts/candidate-preflight-v2-governance-receipt.py create --governance-sha "$GOVERNANCE_SHA" --apply-evidence-manifest "$APPLY_MANIFEST" --evidence-dir "$EVIDENCE_DIR" --receipt "$EVIDENCE_DIR/governance-receipt-v2.json"
 governance_verify
 capture_helper_audit preinvoke
 capture_app_audit preinvoke
