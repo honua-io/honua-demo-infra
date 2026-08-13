@@ -36,6 +36,8 @@ replaced with a pointer stub, and the one code reference
 `candidate-preflight-v1.md` preserves the historical helper `:1` deployment
 and invocation record. `candidate-preflight-v2.md` is the additive, qualified
 helper `:2` one-attempt governance procedure; it does not repoint the v1 path.
+`candidate-preflight-v3.md` independently governs the immutable helper `:3`
+attempt and preserves both earlier operator paths and evidence.
 
 For the capability runbook, no separate probe/verification scripts were moved:
 its verification commands are inline `bash`/`curl` blocks within the markdown
