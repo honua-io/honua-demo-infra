@@ -142,7 +142,8 @@ class RuntimeAuditTests(unittest.TestCase):
         for name, document in documents.items():
             path = self.root / f"{name}.json"
             if name == "historical_deployment_receipt":
-                path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                serialized = json.dumps(document, indent=2, sort_keys=True) + "\n"
+                path.write_bytes(serialized.replace("\n", "\r\n").encode("utf-8"))
             else:
                 path.write_text(json.dumps(document), encoding="utf-8")
             paths[name] = path
