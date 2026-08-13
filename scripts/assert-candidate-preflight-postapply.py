@@ -18,7 +18,7 @@ PREAPPLY_ASSERTION = ROOT / "scripts" / "assert-candidate-preflight-plan.py"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
 SOURCE_LF_SHA256 = {
-    "main.tf": "a663663af53704033e28f72968c84ad142b30b7b1bae79c6b0602644f647adfb",
+    "main.tf": "c8b9c7dea32be1d792d165d39e3d9501a67eadd8771a69eeab7fef27b9378814",
     "versions.tf": "b7443e50e884d7ed228bb7d29373b18c1b8c1a5a4cb5575e8b5a550a8baa60f6",
     ".terraform.lock.hcl": "4f9da38851b151b7100f9403c30048327f8674136132a957b7061535bc4efe41",
     "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",

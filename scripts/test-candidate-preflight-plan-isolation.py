@@ -152,6 +152,77 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
     def test_exact_candidate_only_plan_passes(self):
         self.assert_plan(self.valid_plan)
 
+    def test_getalias_policy_accepts_only_the_exact_unqualified_app_function(self):
+        secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd"
+        exact = ASSERTION_MODULE.expected_policy(secret_arn)
+        ASSERTION_MODULE.assert_policy(json.dumps(exact), secret_arn)
+        rejected = (
+            f"{ASSERTION_MODULE.FUNCTION_ARN}:live",
+            f"{ASSERTION_MODULE.FUNCTION_ARN}:40",
+            f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:other",
+            f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:*",
+            "*",
+        )
+        for resource in rejected:
+            candidate = copy.deepcopy(exact)
+            next(statement for statement in candidate["Statement"] if statement["Sid"] == "ReadExactLiveAlias")["Resource"] = [resource]
+            with self.subTest(resource=resource), self.assertRaises(RuntimeError):
+                ASSERTION_MODULE.assert_policy(json.dumps(candidate), secret_arn)
+
+        candidate_read = next(statement for statement in exact["Statement"] if statement["Sid"] == "ReadExactCandidate")
+        candidate_invoke = next(statement for statement in exact["Statement"] if statement["Sid"] == "InvokeExactCandidate")
+        self.assertEqual([f"{ASSERTION_MODULE.FUNCTION_ARN}:40"], candidate_read["Resource"])
+        self.assertEqual([f"{ASSERTION_MODULE.FUNCTION_ARN}:40"], candidate_invoke["Resource"])
+
+    def test_exact_existing_deployment_repair_plan_changes_only_the_policy_resource(self):
+        plan = copy.deepcopy(self.valid_plan)
+        changes = {item["address"]: item for item in plan["resource_changes"]}
+        for address, item in changes.items():
+            change = item["change"]
+            change["before"] = copy.deepcopy(change["after"])
+            change["actions"] = ["no-op"]
+            change["after_unknown"] = {}
+            change["before_sensitive"] = copy.deepcopy(change.get("after_sensitive", {}))
+            change["replace_paths"] = []
+
+        policy_change = changes["aws_iam_role_policy.candidate_preflight"]["change"]
+        policy_change["actions"] = ["update"]
+        secret_arn = changes["aws_lambda_function.candidate_preflight"]["change"]["after"]["environment"][0]["variables"]["ADMIN_PASSWORD_SECRET_ARN"]
+        policy_change["before"]["policy"] = json.dumps(
+            ASSERTION_MODULE.expected_policy(secret_arn, f"{ASSERTION_MODULE.FUNCTION_ARN}:live"),
+            separators=(",", ":"),
+        )
+
+        expected_outputs = {
+            "candidate_preflight_qualified_arn": f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:{ASSERTION_MODULE.HELPER_NAME}:1",
+            "candidate_preflight_version": "1",
+        }
+        for name, value in expected_outputs.items():
+            plan["output_changes"][name] = {
+                "actions": ["no-op"],
+                "before": value,
+                "after": value,
+                "after_unknown": False,
+                "before_sensitive": False,
+                "after_sensitive": False,
+            }
+            plan["planned_values"]["outputs"][name] = {"sensitive": False, "value": value}
+
+        self.assert_plan(plan)
+        for label, mutation in {
+            "alias ARN remains": lambda p: p["before"].update(policy=p["after"]["policy"]),
+            "other resource changes": lambda p: changes["aws_lambda_function.candidate_preflight"]["change"].update(actions=["update"]),
+            "other policy field changes": lambda p: p["before"].update(name="other"),
+        }.items():
+            candidate = copy.deepcopy(plan)
+            candidate_policy = next(item for item in candidate["resource_changes"] if item["address"] == "aws_iam_role_policy.candidate_preflight")["change"]
+            if label == "other resource changes":
+                next(item for item in candidate["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["actions"] = ["update"]
+            else:
+                mutation(candidate_policy)
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                self.assert_plan(candidate)
+
     def test_sensitive_primary_state_sentinel_cannot_enter_plan(self):
         serialized = json.dumps(self.valid_plan)
         self.assertNotIn("SENSITIVE_PRIMARY_STATE_SENTINEL", serialized)

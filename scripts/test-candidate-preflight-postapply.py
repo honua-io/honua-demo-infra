@@ -65,11 +65,12 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             POSTAPPLY.parse_json_exact(duplicated)
 
-    def test_exact_sealed_postapply_show_passes_when_local_evidence_exists(self) -> None:
+    def test_sealed_pre_repair_postapply_show_is_preserved_and_rejected(self) -> None:
         if not SEALED_SHOW.is_file():
             self.skipTest("exact sealed post-apply evidence is intentionally local-only")
         self.assertEqual(SEALED_SHOW_SHA256, hashlib.sha256(SEALED_SHOW.read_bytes()).hexdigest())
-        POSTAPPLY.assert_postapply(json.loads(SEALED_SHOW.read_text(encoding="utf-8")))
+        with self.assertRaises(RuntimeError):
+            POSTAPPLY.assert_postapply(json.loads(SEALED_SHOW.read_text(encoding="utf-8")))
 
     def test_every_action_or_graph_mutation_fails_closed(self) -> None:
         mutations = {

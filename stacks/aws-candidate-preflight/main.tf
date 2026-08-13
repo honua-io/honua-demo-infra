@@ -146,7 +146,7 @@ resource "aws_iam_role_policy" "candidate_preflight" {
         Sid      = "ReadExactLiveAlias"
         Effect   = "Allow"
         Action   = ["lambda:GetAlias"]
-        Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_live_alias_name}"]
+        Resource = [local.candidate_preflight_app_function_arn]
       },
       {
         Sid      = "InvokeExactCandidate"

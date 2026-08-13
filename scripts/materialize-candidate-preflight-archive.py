@@ -179,8 +179,8 @@ def materialize(
     require_clean_exact_worktree(governance_root, governance_sha, "governance")
     require(canonical_git_dir(deployment_root) == canonical_git_dir(governance_root), "deployment and governance roots are not worktrees of the same repository")
     require(
-        git(governance_root, "diff", "--quiet", deployment_sha, governance_sha, "--", "stacks/aws-candidate-preflight", "stacks/aws/candidate-preflight", check=False).returncode == 0,
-        "reviewed deployment source differs under governance",
+        git(governance_root, "diff", "--quiet", deployment_sha, governance_sha, "--", "stacks/aws-candidate-preflight/versions.tf", "stacks/aws-candidate-preflight/.terraform.lock.hcl", "stacks/aws/candidate-preflight", check=False).returncode == 0,
+        "reviewed archive-producing source differs under governance",
     )
     validate_receipts(governance_receipt_path, plan_receipt_path, governance_sha, deployment_sha)
 

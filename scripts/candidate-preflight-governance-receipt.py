@@ -14,6 +14,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "honua-candidate-preflight-governance-receipt-v1"
 DEPLOYMENT_SHA = "3a00dfd36c298def8f8f49757dd56595d29097cb"
+REPAIRED_MAIN_LF_SHA256 = "c8b9c7dea32be1d792d165d39e3d9501a67eadd8771a69eeab7fef27b9378814"
 HISTORICAL_DEPLOYMENT_RECEIPT_SHA256 = "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29"
 HISTORICAL_DEPLOYMENT_RECEIPT = {
     "schema": "honua-candidate-preflight-deployment-receipt-v1",
@@ -39,9 +40,11 @@ CONTROL_PATHS = (
     "scripts/candidate-preflight-invoke.sh",
     "scripts/candidate-preflight-plan-receipt.py",
     "scripts/materialize-candidate-preflight-archive.py",
+    "stacks/aws-candidate-preflight/main.tf",
 )
 DEPLOYMENT_PATHS = (
-    "stacks/aws-candidate-preflight",
+    "stacks/aws-candidate-preflight/versions.tf",
+    "stacks/aws-candidate-preflight/.terraform.lock.hcl",
     "stacks/aws/candidate-preflight",
 )
 OPERATOR_CONTRACT = {
@@ -93,6 +96,10 @@ def validate_historical_deployment_receipt(path: Path) -> None:
 
 def validate_operator_source() -> None:
     operator = (ROOT / "scripts" / "candidate-preflight-invoke.sh").read_text(encoding="utf-8")
+    require(
+        lf_sha256(ROOT / "stacks/aws-candidate-preflight/main.tf") == REPAIRED_MAIN_LF_SHA256,
+        "repaired candidate-preflight IAM source hash drifted",
+    )
     require(operator.count("aws lambda invoke \\") == 1, "operator must contain exactly one qualified invoke command")
     require("AWS_MAX_ATTEMPTS=1" in operator, "operator one-attempt guard is missing")
     require(operator.count("--log-type None") == 1, "operator log boundary drifted")
