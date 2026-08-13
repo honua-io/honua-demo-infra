@@ -7,6 +7,7 @@ readonly MOCK_BIN="$TEMP_ROOT/bin"
 readonly MOCK_LOG="$TEMP_ROOT/commands.log"
 readonly MOCK_COUNT="$TEMP_ROOT/failure-count"
 readonly MERGED_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+readonly DEPLOYMENT_SHA="3a00dfd36c298def8f8f49757dd56595d29097cb"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 mkdir -p "$MOCK_BIN"
 
@@ -37,9 +38,10 @@ elif command == "git" and args[:2] == ["rev-parse", "HEAD"]:
     print(os.environ["MOCK_MERGED_SHA"])
 elif command == "terraform" and "output" in args:
     if args[-1] == "candidate_preflight_qualified_arn":
-        print("arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1")
+        version = os.environ.get("MOCK_HELPER_VERSION", "1")
+        print(f"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:{version}")
     elif args[-1] == "candidate_preflight_version":
-        print("1")
+        print(os.environ.get("MOCK_HELPER_VERSION", "1"))
 elif command == "terraform" and "show" in args:
     print("{}")
 elif command == "python" and "assert-candidate-preflight-ecr.py" in line and "config-digest" in line:
@@ -49,7 +51,13 @@ elif command == "aws" and args[:2] == ["ecr", "get-download-url-for-layer"]:
 elif command == "sha256sum" and (not args or args[0] != "--check"):
     for path in args:
         print("4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0  " + path)
+elif command == "sha256sum" and args and args[0] == "--check":
+    content = sys.stdin.read()
+    if content and "postapply-deployment-receipt.json" not in content:
+        raise SystemExit(73)
 elif command == "aws" and args[:2] == ["lambda", "invoke"]:
+    if os.environ.get("AWS_MAX_ATTEMPTS") != "1":
+        raise SystemExit(72)
     print('{"StatusCode":200,"ExecutedVersion":"1"}')
 PY
 chmod +x "$MOCK_BIN/dispatcher"
@@ -66,15 +74,20 @@ export MOCK_MERGED_SHA="$MERGED_SHA"
 reset_case() {
   : > "$MOCK_LOG"
   rm -f "$MOCK_COUNT"
-  unset MOCK_FAIL_MATCH MOCK_FAIL_AT
+  unset MOCK_FAIL_MATCH MOCK_FAIL_AT MOCK_HELPER_VERSION
 }
 
 run_script() {
   local script="$1"
   local evidence="$2"
   mkdir -p "$evidence"
+  printf '%s' 'sealed-v1-deployment-receipt' > "$evidence/postapply-deployment-receipt.json"
   set +e
-  bash "$script" "$MERGED_SHA" "$evidence"
+  if [[ "$script" == *candidate-preflight-invoke.sh ]]; then
+    bash "$script" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$evidence"
+  else
+    bash "$script" "$MERGED_SHA" "$evidence"
+  fi
   local status=$?
   set -e
   return "$status"
@@ -118,10 +131,47 @@ done
 reset_case
 run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/invoke-success"
 grep -Fq "aws lambda invoke " "$MOCK_LOG"
+test "$(grep -Fc "aws lambda invoke " "$MOCK_LOG")" -eq 1
 test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
+test "$(grep -Fc "aws iam list-attached-role-policies --no-paginate " "$MOCK_LOG")" -eq 3
+test "$(grep -Fc "aws iam list-role-policies --no-paginate " "$MOCK_LOG")" -eq 3
+test "$(grep -Fc "python scripts/candidate-preflight-governance-receipt.py verify " "$MOCK_LOG")" -eq 4
+grep -Fq "sha256sum --check" "$MOCK_LOG"
+
+reset_case
+mkdir -p "$TEMP_ROOT/missing-historical"
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$TEMP_ROOT/missing-historical"; then
+  echo "expected missing exact historical receipt failure" >&2
+  exit 1
+fi
+assert_no_invoke
+
+reset_case
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$TEMP_ROOT/wrong-deployment"; then
+  echo "expected wrong deployment binding failure" >&2
+  exit 1
+fi
+assert_no_invoke
+
+reset_case
+export MOCK_HELPER_VERSION=2
+if run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/later-helper"; then
+  echo "expected helper version 2 failure" >&2
+  exit 1
+fi
+assert_no_invoke
+
+reset_case
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$DEPLOYMENT_SHA" "$TEMP_ROOT/wrong-governance"; then
+  echo "expected wrong governance binding failure" >&2
+  exit 1
+fi
+assert_no_invoke
 
 preinvoke_failures=(
+  "python scripts/candidate-preflight-governance-receipt.py create|1"
+  "python scripts/candidate-preflight-governance-receipt.py verify|1"
   "python scripts/candidate-preflight-plan-receipt.py verify|1"
   "terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn|1"
   "aws lambda get-function --|1"
@@ -161,6 +211,7 @@ for fixture in "${postinvoke_failures[@]}"; do
     exit 1
   fi
   grep -Fq "aws lambda invoke " "$MOCK_LOG"
+  test "$(grep -Fc "aws lambda invoke " "$MOCK_LOG")" -eq 1
   test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
   test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 done

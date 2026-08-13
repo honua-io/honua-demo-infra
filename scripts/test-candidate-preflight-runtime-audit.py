@@ -60,7 +60,7 @@ class RuntimeAuditTests(unittest.TestCase):
                     "Handler": "handler.handler",
                     "CodeSha256": AUDIT.CODE_SHA256,
                     "Version": version,
-                    "RevisionId": "0326e209-4231-4acd-9bb4-d3cb89402db1",
+                    "RevisionId": AUDIT.HELPER_REVISION_ID,
                     "PackageType": "Zip",
                     "Architectures": ["arm64"],
                     "Timeout": 120,
@@ -88,7 +88,7 @@ class RuntimeAuditTests(unittest.TestCase):
             "inline_policies": {"PolicyNames": [AUDIT.POLICY_NAME], "IsTruncated": False},
             "plan_receipt": {
                 "schema": AUDIT.PLAN_RECEIPT_SCHEMA,
-                "mergedSha": "a" * 40,
+                "mergedSha": AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
                 "terraformVersion": AUDIT.TERRAFORM_VERSION,
                 "planFormatVersion": AUDIT.PLAN_FORMAT_VERSION,
                 "artifacts": {
@@ -98,6 +98,15 @@ class RuntimeAuditTests(unittest.TestCase):
                 },
                 "sourceSha256": AUDIT.SOURCE_HASHES,
             },
+            "governance_receipt": {
+                "schema": AUDIT.GOVERNANCE.SCHEMA,
+                "governanceSha": "a" * 40,
+                "deploymentSha": AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+                "historicalDeploymentReceiptSha256": AUDIT.GOVERNANCE.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256,
+                "sourceSha256": AUDIT.GOVERNANCE.source_hashes(),
+                "operatorContract": AUDIT.GOVERNANCE.OPERATOR_CONTRACT,
+            },
+            "historical_deployment_receipt": AUDIT.GOVERNANCE.HISTORICAL_DEPLOYMENT_RECEIPT,
             "ecr_evidence": {
                 "schema": AUDIT.ECR_EVIDENCE_SCHEMA,
                 "registryId": AUDIT.ACCOUNT,
@@ -132,9 +141,17 @@ class RuntimeAuditTests(unittest.TestCase):
         paths = {}
         for name, document in documents.items():
             path = self.root / f"{name}.json"
-            path.write_text(json.dumps(document), encoding="utf-8")
+            if name == "historical_deployment_receipt":
+                serialized = json.dumps(document, indent=2, sort_keys=True) + "\n"
+                path.write_bytes(serialized.replace("\n", "\r\n").encode("utf-8"))
+            else:
+                path.write_text(json.dumps(document), encoding="utf-8")
             paths[name] = path
-        return SimpleNamespace(**paths, merged_sha="a" * 40)
+        return SimpleNamespace(
+            **paths,
+            governance_sha="a" * 40,
+            deployment_sha=AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+        )
 
     def test_exact_qualified_runtime_passes(self):
         receipt = AUDIT.audit(self.args(self.documents))
@@ -145,6 +162,7 @@ class RuntimeAuditTests(unittest.TestCase):
         mutations = {
             "unqualified ARN": lambda d: d["function"]["Configuration"].update(FunctionArn=f"arn:aws:lambda:us-west-2:585192672263:function:{AUDIT.NAME}"),
             "latest version": lambda d: d["function"]["Configuration"].update(Version="$LATEST"),
+            "later version": lambda d: d["function"]["Configuration"].update(Version="2", FunctionArn=f"arn:aws:lambda:us-west-2:585192672263:function:{AUDIT.NAME}:2"),
             "code": lambda d: d["function"]["Configuration"].update(CodeSha256="wrong"),
             "revision": lambda d: d["function"]["Configuration"].update(RevisionId="wrong"),
             "environment": lambda d: d["function"]["Configuration"]["Environment"]["Variables"].update(EXPECTED_LIVE_VERSION="40"),
@@ -154,7 +172,11 @@ class RuntimeAuditTests(unittest.TestCase):
             "DLQ": lambda d: d["function"]["Configuration"].update(DeadLetterConfig={"TargetArn": "arn:bad"}),
             "concurrency": lambda d: d["concurrency"].update(ReservedConcurrentExecutions=2),
             "managed policy": lambda d: d["attached_policies"].update(AttachedPolicies=[{"PolicyArn": "arn:bad"}]),
+            "missing attached pagination": lambda d: d["attached_policies"].pop("IsTruncated"),
+            "truncated attached pagination": lambda d: d["attached_policies"].update(IsTruncated=True),
             "inline policy set": lambda d: d["inline_policies"].update(PolicyNames=[AUDIT.POLICY_NAME, "bad"]),
+            "missing inline pagination": lambda d: d["inline_policies"].pop("IsTruncated"),
+            "truncated inline pagination": lambda d: d["inline_policies"].update(IsTruncated=True),
             "widened policy": lambda d: d["role_policy"]["PolicyDocument"]["Statement"][0].update(Resource=["*"]),
         }
         for label, mutation in mutations.items():
@@ -168,13 +190,15 @@ class RuntimeAuditTests(unittest.TestCase):
         receipt = AUDIT.audit(args)
         changed = copy.deepcopy(self.documents)
         changed["function"]["Configuration"]["RevisionId"] = "1326e209-4231-4acd-9bb4-d3cb89402db1"
-        self.assertNotEqual(receipt, AUDIT.audit(self.args(changed)))
+        self.assertEqual(AUDIT.HELPER_REVISION_ID, receipt["revisionId"])
+        with self.assertRaises(RuntimeError):
+            AUDIT.audit(self.args(changed))
 
     def test_plan_receipt_mutations_fail_closed(self):
         mutations = {
             "root extra": lambda r: r.update(extra=True),
             "schema": lambda r: r.update(schema="wrong"),
-            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "deployment SHA": lambda r: r.update(mergedSha="b" * 40),
             "Terraform version": lambda r: r.update(terraformVersion="1.15.9"),
             "format version": lambda r: r.update(planFormatVersion="1.3"),
             "artifact extra": lambda r: r["artifacts"].update(extra="0" * 64),
@@ -196,7 +220,10 @@ class RuntimeAuditTests(unittest.TestCase):
         mutations = {
             "root extra": lambda r: r.update(extra=True),
             "schema": lambda r: r.update(schema="wrong"),
-            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "governance SHA": lambda r: r.update(governanceSha="b" * 40),
+            "deployment SHA": lambda r: r.update(deploymentSha="b" * 40),
+            "governance receipt hash": lambda r: r.update(governanceReceiptSha256="bad"),
+            "historical receipt hash": lambda r: r.update(historicalDeploymentReceiptSha256="bad"),
             "plan receipt hash": lambda r: r.update(planReceiptSha256="bad"),
             "qualified ARN": lambda r: r.update(qualifiedArn=r["qualifiedArn"].rsplit(":", 1)[0]),
             "version": lambda r: r.update(version="$LATEST"),
@@ -211,7 +238,26 @@ class RuntimeAuditTests(unittest.TestCase):
             changed = copy.deepcopy(receipt)
             mutation(changed)
             with self.subTest(label=label), self.assertRaises(RuntimeError):
-                AUDIT.validate_deployment_receipt(changed, "a" * 40)
+                AUDIT.validate_deployment_receipt(
+                    changed,
+                    "a" * 40,
+                    AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+                    AUDIT.sha256(self.args(self.documents).governance_receipt),
+                )
+
+    def test_governance_cross_binding_mutations_fail_closed(self):
+        mutations = {
+            "wrong governance": lambda d: d["governance_receipt"].update(governanceSha="b" * 40),
+            "wrong deployment": lambda d: d["governance_receipt"].update(deploymentSha="b" * 40),
+            "wrong controls": lambda d: d["governance_receipt"]["operatorContract"].update(awsMaxAttempts=2),
+            "wrong source": lambda d: d["governance_receipt"]["sourceSha256"].update(**{AUDIT.GOVERNANCE.CONTROL_PATHS[0]: "0" * 64}),
+            "wrong historical receipt": lambda d: d["historical_deployment_receipt"].update(version="2"),
+        }
+        for label, mutation in mutations.items():
+            documents = copy.deepcopy(self.documents)
+            mutation(documents)
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                AUDIT.audit(self.args(documents))
 
     def test_ecr_evidence_mutations_fail_closed(self):
         mutations = {

@@ -125,8 +125,20 @@ class InvocationAssertionTests(unittest.TestCase):
             deployment.write_text(
                 json.dumps(
                     {
-                        "schema": "honua-candidate-preflight-deployment-receipt-v1",
+                        "schema": ASSERTION.DEPLOYMENT_RECEIPT_SCHEMA,
+                        "governanceSha": "a" * 40,
+                        "deploymentSha": ASSERTION.DEPLOYMENT_SHA,
+                        "governanceReceiptSha256": "3" * 64,
+                        "historicalDeploymentReceiptSha256": "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29",
+                        "planReceiptSha256": "1" * 64,
                         "ecrEvidenceSha256": ASSERTION.sha256(evidence),
+                        "qualifiedArn": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1",
+                        "version": "1",
+                        "revisionId": "23959775-30a4-4654-a3dd-1e430915e1b1",
+                        "codeSha256": "TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA=",
+                        "roleArn": "arn:aws:iam::585192672263:role/honua-demo-demo-candidate-preflight-role",
+                        "policyName": "credential-safe-candidate-preflight-v1",
+                        "secretArn": "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd",
                     }
                 ),
                 encoding="utf-8",
@@ -136,6 +148,50 @@ class InvocationAssertionTests(unittest.TestCase):
             evidence.write_text(json.dumps({"schema": "honua-candidate-preflight-ecr-evidence-v1", "drift": True}), encoding="utf-8")
             with self.assertRaises(RuntimeError):
                 ASSERTION.build_receipt(metadata, payload, deployment, evidence, "1")
+
+    def test_invocation_receipt_rejects_cross_binding(self):
+        with tempfile.TemporaryDirectory(prefix="candidate-invocation-binding-") as temporary:
+            root = Path(temporary)
+            metadata = root / "metadata.json"
+            payload = root / "payload.json"
+            evidence = root / "evidence.json"
+            deployment = root / "deployment.json"
+            metadata.write_text(json.dumps({"StatusCode": 200, "ExecutedVersion": "1"}), encoding="utf-8")
+            payload.write_text(json.dumps(valid_payload()), encoding="utf-8")
+            evidence.write_text(json.dumps({"schema": "honua-candidate-preflight-ecr-evidence-v1"}), encoding="utf-8")
+            base = {
+                "schema": ASSERTION.DEPLOYMENT_RECEIPT_SCHEMA,
+                "governanceSha": "a" * 40,
+                "deploymentSha": ASSERTION.DEPLOYMENT_SHA,
+                "governanceReceiptSha256": "3" * 64,
+                "historicalDeploymentReceiptSha256": "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29",
+                "planReceiptSha256": "1" * 64,
+                "ecrEvidenceSha256": ASSERTION.sha256(evidence),
+                "qualifiedArn": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1",
+                "version": "1",
+                "revisionId": "23959775-30a4-4654-a3dd-1e430915e1b1",
+                "codeSha256": "TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA=",
+                "roleArn": "arn:aws:iam::585192672263:role/honua-demo-demo-candidate-preflight-role",
+                "policyName": "credential-safe-candidate-preflight-v1",
+                "secretArn": "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd",
+            }
+            mutations = {
+                "wrong deployment": lambda r: r.update(deploymentSha="b" * 40),
+                "same provenance": lambda r: r.update(governanceSha=ASSERTION.DEPLOYMENT_SHA),
+                "wrong governance hash": lambda r: r.update(governanceReceiptSha256="bad"),
+                "wrong historical hash": lambda r: r.update(historicalDeploymentReceiptSha256="bad"),
+                "later helper": lambda r: r.update(version="2", qualifiedArn=r["qualifiedArn"].rsplit(":", 1)[0] + ":2"),
+            }
+            for label, mutation in mutations.items():
+                value = copy.deepcopy(base)
+                mutation(value)
+                deployment.write_text(json.dumps(value), encoding="utf-8")
+                with self.subTest(label=label), self.assertRaises(RuntimeError):
+                    ASSERTION.build_receipt(metadata, payload, deployment, evidence, "1")
+
+    def test_matching_later_executed_version_is_rejected(self):
+        with self.assertRaises(RuntimeError):
+            ASSERTION.assert_invocation({"StatusCode": 200, "ExecutedVersion": "2"}, valid_payload(), "2")
 
 
 if __name__ == "__main__":

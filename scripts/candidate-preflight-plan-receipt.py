@@ -21,6 +21,7 @@ TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 MERGED_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+DEPLOYMENT_SHA = "3a00dfd36c298def8f8f49757dd56595d29097cb"
 
 
 def require(condition: bool, message: str) -> None:
@@ -46,6 +47,12 @@ def require_clean_sha(expected: str) -> None:
         raise RuntimeError("checkout HEAD differs from the reviewed merged SHA")
     if git(["status", "--porcelain"]):
         raise RuntimeError("checkout is not clean")
+
+
+def validate_checkout_binding(deployment_sha: str, checkout_sha: str) -> None:
+    require(MERGED_SHA_PATTERN.fullmatch(checkout_sha) is not None, "checkout SHA is not an exact Git commit")
+    if checkout_sha != deployment_sha:
+        require(deployment_sha == DEPLOYMENT_SHA, "cross-checkout verification is not bound to the immutable deployment")
 
 
 def validate_receipt(receipt: dict, merged_sha: str) -> None:
@@ -75,7 +82,9 @@ def validate_receipt(receipt: dict, merged_sha: str) -> None:
 
 
 def build_receipt(args) -> dict:
-    require_clean_sha(args.merged_sha)
+    checkout_sha = args.checkout_sha or args.merged_sha
+    validate_checkout_binding(args.merged_sha, checkout_sha)
+    require_clean_sha(checkout_sha)
     show = json.loads(args.show.read_text(encoding="utf-8"))
     require(isinstance(show, dict), "Terraform show JSON must be an object")
     require(show.get("format_version") == PLAN_FORMAT_VERSION, "Terraform plan JSON format drifted")
@@ -105,11 +114,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("create", "verify"))
     parser.add_argument("--merged-sha", required=True)
+    parser.add_argument("--checkout-sha")
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--show", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
+    if args.mode == "create":
+        require(args.checkout_sha in (None, args.merged_sha), "plan receipt creation must run at the deployment SHA")
     actual = build_receipt(args)
     if args.mode == "create":
         args.receipt.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n", encoding="utf-8")
