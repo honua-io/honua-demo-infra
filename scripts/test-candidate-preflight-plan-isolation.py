@@ -125,6 +125,40 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             check=True,
         )
         cls.valid_plan = json.loads(show.stdout)
+        changes = {item["address"]: item for item in cls.valid_plan["resource_changes"]}
+        for address, item in changes.items():
+            change = item["change"]
+            change["before"] = copy.deepcopy(change["after"])
+            change["actions"] = ["no-op"]
+            change["after_unknown"] = {}
+            change["before_sensitive"] = copy.deepcopy(change.get("after_sensitive", {}))
+            change["replace_paths"] = []
+        function = changes["aws_lambda_function.candidate_preflight"]["change"]
+        function["actions"] = ["update"]
+        before, after = function["before"], function["after"]
+        historical_environment = copy.deepcopy(after["environment"])
+        historical_environment[0]["variables"]["SOURCE_HANDLER_SHA256"] = ASSERTION_MODULE.HISTORICAL_HANDLER_SHA256
+        before["environment"] = historical_environment
+        before["source_code_hash"] = ASSERTION_MODULE.HISTORICAL_ARCHIVE_BASE64SHA256
+        before["code_sha256"] = ASSERTION_MODULE.HISTORICAL_ARCHIVE_BASE64SHA256
+        before["source_code_size"] = ASSERTION_MODULE.HISTORICAL_ARCHIVE_BYTES
+        before["last_modified"] = "2026-08-13T11:48:45.732+0000"
+        before["version"] = "1"
+        before["qualified_arn"] = f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:{ASSERTION_MODULE.HELPER_NAME}:1"
+        before["qualified_invoke_arn"] = f"arn:aws:apigateway:{ASSERTION_MODULE.REGION}:lambda:path/2015-03-31/functions/{before['qualified_arn']}/invocations"
+        computed = ("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "source_code_size", "version")
+        for name in computed:
+            after[name] = None
+        function["after_unknown"] = {name: True for name in computed}
+        for name, value in {
+            "candidate_preflight_qualified_arn": before["qualified_arn"],
+            "candidate_preflight_version": "1",
+        }.items():
+            cls.valid_plan["output_changes"][name] = {
+                "actions": ["update"], "before": value, "after": None,
+                "after_unknown": True, "before_sensitive": False, "after_sensitive": False,
+            }
+            cls.valid_plan["planned_values"]["outputs"][name] = {"sensitive": False}
         cls.provider_contract = copy.deepcopy(cls.valid_plan["configuration"]["provider_config"])
         cls.check_contract = {
             item["address"]["to_display"] for item in cls.valid_plan["checks"]
@@ -174,52 +208,17 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
         self.assertEqual([f"{ASSERTION_MODULE.FUNCTION_ARN}:40"], candidate_read["Resource"])
         self.assertEqual([f"{ASSERTION_MODULE.FUNCTION_ARN}:40"], candidate_invoke["Resource"])
 
-    def test_exact_existing_deployment_repair_plan_changes_only_the_policy_resource(self):
-        plan = copy.deepcopy(self.valid_plan)
-        changes = {item["address"]: item for item in plan["resource_changes"]}
-        for address, item in changes.items():
-            change = item["change"]
-            change["before"] = copy.deepcopy(change["after"])
-            change["actions"] = ["no-op"]
-            change["after_unknown"] = {}
-            change["before_sensitive"] = copy.deepcopy(change.get("after_sensitive", {}))
-            change["replace_paths"] = []
-
-        policy_change = changes["aws_iam_role_policy.candidate_preflight"]["change"]
-        policy_change["actions"] = ["update"]
-        secret_arn = changes["aws_lambda_function.candidate_preflight"]["change"]["after"]["environment"][0]["variables"]["ADMIN_PASSWORD_SECRET_ARN"]
-        policy_change["before"]["policy"] = json.dumps(
-            ASSERTION_MODULE.expected_policy(secret_arn, f"{ASSERTION_MODULE.FUNCTION_ARN}:live"),
-            separators=(",", ":"),
-        )
-
-        expected_outputs = {
-            "candidate_preflight_qualified_arn": f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:{ASSERTION_MODULE.HELPER_NAME}:1",
-            "candidate_preflight_version": "1",
-        }
-        for name, value in expected_outputs.items():
-            plan["output_changes"][name] = {
-                "actions": ["no-op"],
-                "before": value,
-                "after": value,
-                "after_unknown": False,
-                "before_sensitive": False,
-                "after_sensitive": False,
-            }
-            plan["planned_values"]["outputs"][name] = {"sensitive": False, "value": value}
-
-        self.assert_plan(plan)
+    def test_exact_existing_deployment_publication_changes_only_lambda_code(self):
+        self.assert_plan(copy.deepcopy(self.valid_plan))
         for label, mutation in {
-            "alias ARN remains": lambda p: p["before"].update(policy=p["after"]["policy"]),
-            "other resource changes": lambda p: changes["aws_lambda_function.candidate_preflight"]["change"].update(actions=["update"]),
-            "other policy field changes": lambda p: p["before"].update(name="other"),
+            "policy update": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_iam_role_policy.candidate_preflight")["change"].update(actions=["update"]),
+            "wrong prior version": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["before"].update(version="2"),
+            "known next version": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(version="2"),
+            "extra unknown": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after_unknown"].update(role=True),
+            "environment widened": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["before"]["environment"][0]["variables"].update(EXPECTED_LIVE_VERSION="38"),
         }.items():
-            candidate = copy.deepcopy(plan)
-            candidate_policy = next(item for item in candidate["resource_changes"] if item["address"] == "aws_iam_role_policy.candidate_preflight")["change"]
-            if label == "other resource changes":
-                next(item for item in candidate["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["actions"] = ["update"]
-            else:
-                mutation(candidate_policy)
+            candidate = copy.deepcopy(self.valid_plan)
+            mutation(candidate)
             with self.subTest(label=label), self.assertRaises(RuntimeError):
                 self.assert_plan(candidate)
 
@@ -288,7 +287,7 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "missing config data": lambda p: p["configuration"]["root_module"]["resources"].pop(),
             "extra resource change": lambda p: p["resource_changes"].append({"address": "aws_db_instance.bad", "change": {"actions": ["create"]}}),
             "missing resource change": lambda p: p["resource_changes"].pop(),
-            "resource update": lambda p: resource(p, function_address)["change"].update(actions=["update"]),
+            "resource create": lambda p: resource(p, function_address)["change"].update(actions=["create"]),
             "action reason": lambda p: resource(p, function_address).update(action_reason="replace_because_tainted"),
             "extra output": lambda p: p["output_changes"].update(bad={"actions": ["create"]}),
             "output becomes known": lambda p: p["output_changes"]["candidate_preflight_qualified_arn"].update(after="arn:unqualified", after_unknown=False),

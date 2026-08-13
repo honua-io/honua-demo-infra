@@ -59,12 +59,18 @@ pending set must exactly match migrations 092 through 105 in
 payload reporting a contract branch fails closed. Migration observability must
 report `status=skipped`, `isReady=true`, and `isFailed=false`; the deploy
 diagnostic must independently report `migration.lifecycleStatus=skipped`.
+Only after those lifecycle, readiness, plan-availability, upgrade-required,
+exact pending-set, empty journal-divergence, and null plan-error gates pass may
+`backupHook` be JSON `null`. A non-null hook remains an exact object with
+boolean `configured` and `ranForPendingSet`, `requiredForPendingSet=false`, and
+an empty `pendingContractScripts`; missing, malformed, extra-field, or
+contract-bearing values fail closed.
 
 This probe does not move `live`, does not run migrations, does not seed data,
 and does not produce a promotion receipt. A passing response is preflight
 evidence only.
 
-## Sealed failed invocation and IAM repair
+## Sealed failed invocations and helper-v2 repair
 
 The single invocation authorized from governance commit
 `c25bdcd6b7ca183f13f1689f9955296dda41ceee` is terminal and must not be retried
@@ -81,14 +87,28 @@ requires the unqualified function resource for `GetAlias`. Together these
 establish the exact policy-resource mismatch without exposing credentials.
 
 Repair planning must use `-refresh=false` and pass the exact plan assertion. An
-existing deployment may produce only `0 added, 1 changed, 0 destroyed`: the
-standalone inline policy changes from the exact sealed alias-ARN document to the
-exact unqualified-function document. The log group, role, helper Lambda, helper
-version `1`, candidate `:40` read/invoke statements, outputs, archive, handler,
-classification, and every other policy statement must be no-op. Apply and a new
-single invocation each require separate release-owner authorization, clean
-merged-SHA evidence directories, and fresh receipts. The sealed failed bundle
-does not authorize either operation.
+existing repaired deployment may produce only `0 added, 1 changed, 0
+destroyed`: the Lambda publishes the reviewed code archive as immutable helper version `2`.
+The log group, role, standalone inline policy, candidate `:40`
+read/invoke statements, secret binding, classification, runtime bounds, and
+every other Lambda field must be no-op. The plan must begin at historical
+version `1`, archive SHA-256
+`4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0`,
+and handler SHA-256
+`cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb`;
+it must publish archive SHA-256
+`b4715ea1256a9bf139088b2764d45d2859ed734d063fb4a0fe532bb68a61e299`
+with handler SHA-256
+`589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140`.
+Apply and any version-2 invocation each require separate release-owner
+authorization, clean merged-SHA evidence directories, and fresh receipts. The
+sealed failed bundles do not authorize either operation.
+
+The existing materializer, runtime validator, invocation validator, and
+governance receipt remain deliberately pinned to historical version `1` and
+its sealed receipts. They cannot authorize or invoke version `2`. A separately
+reviewed v2 invocation-governance change is required after publication and
+post-apply proof; do not repoint or overwrite the historical receipts.
 
 ## Terraform and source boundary
 
@@ -99,7 +119,7 @@ primary Terraform state. The exact module-owned name
 region; Terraform resolves it with metadata-only `DescribeSecret`. This returns
 the authoritative generated-suffix ARN but never `SecretString`.
 
-The deployment archive contains exactly `handler.py` and
+The version-2 deployment archive contains exactly `handler.py` and
 `classification.v1.json`. Their SHA-256 values are pinned in Terraform and the
 plan checker; the deterministic ZIP hash is also pinned. Never add a directory
 source, third file, layer, filesystem, dead-letter destination, VPC attachment,
@@ -135,7 +155,7 @@ checkout as a shortcut.
 
 ## Apply-actionless provider readback
 
-After the exact saved plan reports `4 added, 0 changed, 0 destroyed`, capture a
+After the exact saved plan reports `0 added, 1 changed, 0 destroyed`, capture a
 normal full-refresh plan with the same verified Terraform `1.15.8` binary. This
 is an **apply-actionless provider readback**, not a second deployment:
 
