@@ -51,8 +51,9 @@ elif command == "python" and "assert-candidate-preflight-ecr.py" in line and "co
 elif command == "aws" and args[:2] == ["ecr", "get-download-url-for-layer"]:
     print("https://example.invalid/exact-config")
 elif command == "sha256sum" and (not args or args[0] != "--check"):
+    digest = os.environ.get("MOCK_ARCHIVE_SHA256", "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0")
     for path in args:
-        print("4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0  " + path)
+        print(digest + "  " + path)
 elif command == "sha256sum" and args and args[0] == "--check":
     content = sys.stdin.read()
     if content and "postapply-deployment-receipt.json" not in content:
@@ -76,7 +77,7 @@ export MOCK_MERGED_SHA="$MERGED_SHA"
 reset_case() {
   : > "$MOCK_LOG"
   rm -f "$MOCK_COUNT"
-  unset MOCK_FAIL_MATCH MOCK_FAIL_AT MOCK_HELPER_VERSION
+  unset MOCK_FAIL_MATCH MOCK_FAIL_AT MOCK_HELPER_VERSION MOCK_ARCHIVE_SHA256
 }
 
 run_script() {
@@ -104,6 +105,7 @@ assert_no_invoke() {
 }
 
 reset_case
+export MOCK_ARCHIVE_SHA256="b4715ea1256a9bf139088b2764d45d2859ed734d063fb4a0fe532bb68a61e299"
 run_script "$ROOT/scripts/candidate-preflight-plan-apply.sh" "$TEMP_ROOT/plan-success"
 grep -Fq "terraform -chdir=stacks/aws-candidate-preflight apply " "$MOCK_LOG"
 
@@ -121,6 +123,7 @@ plan_failures=(
 )
 for fixture in "${plan_failures[@]}"; do
   reset_case
+  export MOCK_ARCHIVE_SHA256="b4715ea1256a9bf139088b2764d45d2859ed734d063fb4a0fe532bb68a61e299"
   export MOCK_FAIL_MATCH="${fixture%|*}"
   export MOCK_FAIL_AT="${fixture##*|}"
   if run_script "$ROOT/scripts/candidate-preflight-plan-apply.sh" "$TEMP_ROOT/plan-failure"; then

@@ -11,12 +11,18 @@ import re
 import subprocess
 
 
-SCHEMA = "honua-candidate-preflight-plan-receipt-v1"
+SCHEMA = "honua-candidate-preflight-plan-receipt-v2"
 SOURCE_HASHES = {
+    "handler.py": "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140",
+    "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
+}
+ARCHIVE_SHA256 = "b4715ea1256a9bf139088b2764d45d2859ed734d063fb4a0fe532bb68a61e299"
+HISTORICAL_SCHEMA = "honua-candidate-preflight-plan-receipt-v1"
+HISTORICAL_SOURCE_HASHES = {
     "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",
     "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
 }
-ARCHIVE_SHA256 = "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0"
+HISTORICAL_ARCHIVE_SHA256 = "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -61,7 +67,11 @@ def validate_receipt(receipt: dict, merged_sha: str) -> None:
         set(receipt) == {"schema", "mergedSha", "terraformVersion", "planFormatVersion", "artifacts", "sourceSha256"},
         "plan receipt keyset drifted",
     )
-    require(receipt["schema"] == SCHEMA, "plan receipt schema drifted")
+    historical = merged_sha == DEPLOYMENT_SHA
+    expected_schema = HISTORICAL_SCHEMA if historical else SCHEMA
+    expected_source_hashes = HISTORICAL_SOURCE_HASHES if historical else SOURCE_HASHES
+    expected_archive_sha256 = HISTORICAL_ARCHIVE_SHA256 if historical else ARCHIVE_SHA256
+    require(receipt["schema"] == expected_schema, "plan receipt schema drifted")
     require(MERGED_SHA_PATTERN.fullmatch(merged_sha) is not None, "merged SHA is not an exact Git commit")
     require(receipt["mergedSha"] == merged_sha, "plan receipt merged SHA drifted")
     require(receipt["terraformVersion"] == TERRAFORM_VERSION, "plan receipt Terraform version drifted")
@@ -77,8 +87,8 @@ def validate_receipt(receipt: dict, merged_sha: str) -> None:
         all(isinstance(value, str) and SHA256_PATTERN.fullmatch(value) is not None for value in artifacts.values()),
         "plan receipt contains an invalid artifact SHA-256",
     )
-    require(artifacts["archiveSha256"] == ARCHIVE_SHA256, "plan receipt ZIP hash drifted")
-    require(receipt["sourceSha256"] == SOURCE_HASHES, "plan receipt source hash set drifted")
+    require(artifacts["archiveSha256"] == expected_archive_sha256, "plan receipt ZIP hash drifted")
+    require(receipt["sourceSha256"] == expected_source_hashes, "plan receipt source hash set drifted")
 
 
 def build_receipt(args) -> dict:
@@ -86,6 +96,10 @@ def build_receipt(args) -> dict:
     validate_checkout_binding(args.merged_sha, checkout_sha)
     require_clean_sha(checkout_sha)
     show = json.loads(args.show.read_text(encoding="utf-8"))
+    historical = args.merged_sha == DEPLOYMENT_SHA
+    expected_schema = HISTORICAL_SCHEMA if historical else SCHEMA
+    expected_source_hashes = HISTORICAL_SOURCE_HASHES if historical else SOURCE_HASHES
+    expected_archive_sha256 = HISTORICAL_ARCHIVE_SHA256 if historical else ARCHIVE_SHA256
     require(isinstance(show, dict), "Terraform show JSON must be an object")
     require(show.get("format_version") == PLAN_FORMAT_VERSION, "Terraform plan JSON format drifted")
     require(show.get("terraform_version") == TERRAFORM_VERSION, "Terraform version drifted")
@@ -93,9 +107,9 @@ def build_receipt(args) -> dict:
         show.get("applyable") is True and show.get("complete") is True and show.get("errored") is False,
         "show JSON is not a complete applyable plan",
     )
-    require(sha256(args.archive) == ARCHIVE_SHA256, "candidate-preflight ZIP differs from the reviewed hash")
+    require(sha256(args.archive) == expected_archive_sha256, "candidate-preflight ZIP differs from the reviewed hash")
     receipt = {
-        "schema": SCHEMA,
+        "schema": expected_schema,
         "mergedSha": args.merged_sha,
         "terraformVersion": show.get("terraform_version"),
         "planFormatVersion": show.get("format_version"),
@@ -104,7 +118,7 @@ def build_receipt(args) -> dict:
             "showJsonSha256": sha256(args.show),
             "archiveSha256": sha256(args.archive),
         },
-        "sourceSha256": SOURCE_HASHES,
+        "sourceSha256": expected_source_hashes,
     }
     validate_receipt(receipt, args.merged_sha)
     return receipt

@@ -40,9 +40,19 @@ def valid_receipt():
     }
 
 
+def historical_receipt():
+    value = valid_receipt()
+    value["schema"] = RECEIPT.HISTORICAL_SCHEMA
+    value["mergedSha"] = RECEIPT.DEPLOYMENT_SHA
+    value["artifacts"]["archiveSha256"] = RECEIPT.HISTORICAL_ARCHIVE_SHA256
+    value["sourceSha256"] = RECEIPT.HISTORICAL_SOURCE_HASHES
+    return value
+
+
 class CandidatePreflightPlanReceiptTests(unittest.TestCase):
     def test_exact_receipt_passes(self):
         RECEIPT.validate_receipt(valid_receipt(), MERGED_SHA)
+        RECEIPT.validate_receipt(historical_receipt(), RECEIPT.DEPLOYMENT_SHA)
 
     def test_cross_checkout_is_only_allowed_for_exact_deployment(self):
         RECEIPT.validate_checkout_binding(RECEIPT.DEPLOYMENT_SHA, "b" * 40)
@@ -70,6 +80,11 @@ class CandidatePreflightPlanReceiptTests(unittest.TestCase):
             mutation(receipt)
             with self.subTest(label=label), self.assertRaises(RuntimeError):
                 RECEIPT.validate_receipt(receipt, MERGED_SHA)
+
+        historical = historical_receipt()
+        historical["artifacts"]["archiveSha256"] = RECEIPT.ARCHIVE_SHA256
+        with self.assertRaises(RuntimeError):
+            RECEIPT.validate_receipt(historical, RECEIPT.DEPLOYMENT_SHA)
 
 
 if __name__ == "__main__":

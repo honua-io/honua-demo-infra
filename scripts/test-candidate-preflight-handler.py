@@ -37,6 +37,11 @@ class FakeLambda:
         observability_status="skipped",
         observability_ready=True,
         observability_failed=False,
+        backup_hook="exact-non-contract",
+        plan_available=True,
+        upgrade_required=True,
+        executed_but_not_discovered=None,
+        plan_error=None,
     ):
         self.pending = pending
         self.alias_post_drift = alias_post_drift
@@ -46,6 +51,11 @@ class FakeLambda:
         self.observability_status = observability_status
         self.observability_ready = observability_ready
         self.observability_failed = observability_failed
+        self.backup_hook = backup_hook
+        self.plan_available = plan_available
+        self.upgrade_required = upgrade_required
+        self.executed_but_not_discovered = executed_but_not_discovered or []
+        self.plan_error = plan_error
         self.get_function_calls = []
         self.get_configuration_calls = []
         self.get_alias_calls = []
@@ -99,18 +109,21 @@ class FakeLambda:
 
     def _migration(self, *, nested=False):
         contract_scripts = [self.pending[0]] if self.contract else []
-        result = {
-            "planAvailable": True,
-            "upgradeRequired": True,
-            "pendingScripts": self.pending,
-            "executedButNotDiscoveredScripts": [],
-            "planError": None,
-            "backupHook": {
+        backup_hook = self.backup_hook
+        if backup_hook == "exact-non-contract":
+            backup_hook = {
                 "configured": False,
                 "requiredForPendingSet": self.contract,
                 "ranForPendingSet": False,
                 "pendingContractScripts": contract_scripts,
-            },
+            }
+        result = {
+            "planAvailable": self.plan_available,
+            "upgradeRequired": self.upgrade_required,
+            "pendingScripts": self.pending,
+            "executedButNotDiscoveredScripts": self.executed_but_not_discovered,
+            "planError": self.plan_error,
+            "backupHook": backup_hook,
         }
         if nested:
             result["lifecycleStatus"] = self.nested_lifecycle
@@ -303,6 +316,74 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
     def test_contract_phase_branch_is_rejected(self):
         result, *_ = self.execute(contract=True)
         self.assertEqual("contract-phase-rejected", result["failure"])
+
+    def test_null_backup_hook_is_accepted_only_after_every_expand_gate(self):
+        result, *_ = self.execute(backup_hook=None)
+        self.assertEqual("passed", result["status"])
+
+        cases = (
+            ({"nested_lifecycle": "succeeded"}, "migration-lifecycle-drift"),
+            ({"plan_available": False}, "migration-plan-unavailable"),
+            ({"upgrade_required": False}, "migration-upgrade-branch-drift"),
+            ({"executed_but_not_discovered": [self.pending[0]]}, "migration-journal-drift"),
+            ({"plan_error": "redacted"}, "migration-plan-error"),
+            ({"observability_ready": False}, "migration-readiness-drift"),
+            ({"observability_failed": True}, "migration-failure-state-drift"),
+        )
+        for options, code in cases:
+            with self.subTest(options=options):
+                result, *_ = self.execute(backup_hook=None, **options)
+                self.assertEqual(code, result["failure"])
+
+        lambda_client = FakeLambda(self.pending[:-1], backup_hook=None)
+        module = load_handler(lambda_client, FakeSecrets(), [])
+        with patch.dict(os.environ, self.environment, clear=True):
+            result = module.handler({"operation": "candidate-preflight-v1"}, None)
+        self.assertEqual("migration-pending-set-drift", result["failure"])
+
+    def test_non_null_backup_hook_remains_an_exact_non_contract_object(self):
+        malformed = (
+            "not-an-object",
+            [],
+            {},
+            {"configured": False, "requiredForPendingSet": False, "ranForPendingSet": False},
+            {
+                "configured": "false",
+                "requiredForPendingSet": False,
+                "ranForPendingSet": False,
+                "pendingContractScripts": [],
+            },
+            {
+                "configured": False,
+                "requiredForPendingSet": False,
+                "ranForPendingSet": False,
+                "pendingContractScripts": [],
+                "extra": True,
+            },
+        )
+        for backup_hook in malformed:
+            with self.subTest(backup_hook=backup_hook):
+                result, *_ = self.execute(backup_hook=backup_hook)
+                self.assertEqual("migration-classification-missing", result["failure"])
+
+        contract_values = (
+            {
+                "configured": True,
+                "requiredForPendingSet": True,
+                "ranForPendingSet": False,
+                "pendingContractScripts": [self.pending[0]],
+            },
+            {
+                "configured": True,
+                "requiredForPendingSet": False,
+                "ranForPendingSet": False,
+                "pendingContractScripts": [self.pending[0]],
+            },
+        )
+        for backup_hook in contract_values:
+            with self.subTest(backup_hook=backup_hook):
+                result, *_ = self.execute(backup_hook=backup_hook)
+                self.assertEqual("contract-phase-rejected", result["failure"])
 
     def test_manifest_source_digest_and_reference_drift_fail_closed(self):
         module = load_handler(FakeLambda(self.pending), FakeSecrets(), [])

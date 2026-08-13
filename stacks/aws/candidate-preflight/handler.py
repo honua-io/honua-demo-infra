@@ -374,8 +374,23 @@ def _validate_non_contract_migration(
         raise PreflightFailure("migration-journal-drift")
     if value.get("planError") is not None:
         raise PreflightFailure("migration-plan-error")
-    backup = value.get("backupHook")
+    if "backupHook" not in value:
+        raise PreflightFailure("migration-classification-missing")
+    backup = value["backupHook"]
+    if backup is None:
+        return
     if not isinstance(backup, dict):
+        raise PreflightFailure("migration-classification-missing")
+    if set(backup) != {
+        "configured",
+        "requiredForPendingSet",
+        "ranForPendingSet",
+        "pendingContractScripts",
+    }:
+        raise PreflightFailure("migration-classification-missing")
+    if type(backup.get("configured")) is not bool or type(
+        backup.get("ranForPendingSet")
+    ) is not bool:
         raise PreflightFailure("migration-classification-missing")
     if backup.get("requiredForPendingSet") is not False:
         raise PreflightFailure("contract-phase-rejected")
