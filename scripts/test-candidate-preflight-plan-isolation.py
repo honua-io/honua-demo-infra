@@ -251,6 +251,7 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "provider account": ('allowed_account_ids = ["585192672263"]', 'allowed_account_ids = ["000000000000"]'),
             "metadata version": ('data "aws_secretsmanager_secret" "admin_password"', 'data "aws_secretsmanager_secret_version" "admin_password"'),
             "metadata name": ('name = "honua-demo-demo/admin-password"', 'name = "other"'),
+            "metadata tag map normalization": ('self.tags == tomap(local.common_tags)', 'self.tags == local.common_tags'),
             "skip guard": ('provider "aws" {', 'provider "aws" {\n  skip_requesting_account_id = true'),
             "ignore changes": ('resource "aws_lambda_function" "candidate_preflight" {', 'resource "aws_lambda_function" "candidate_preflight" {\n  lifecycle { ignore_changes = all }'),
             "source directory": ('data "archive_file" "candidate_preflight" {', 'data "archive_file" "candidate_preflight" {\n  source_dir = "extra"'),
