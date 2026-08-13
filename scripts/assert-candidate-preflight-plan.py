@@ -21,7 +21,7 @@ EXPECTED_MANAGED = {
 EXPECTED_DATA = {
     "data.archive_file.candidate_preflight",
     "data.aws_iam_policy_document.candidate_preflight_assume",
-    "data.terraform_remote_state.primary",
+    "data.aws_secretsmanager_secret.admin_password",
 }
 EXPECTED_TAGS = {
     "Environment": "demo",
@@ -36,11 +36,16 @@ FUNCTION_ARN = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{FUNCTION_NAME}"
 HELPER_NAME = "honua-demo-demo-candidate-preflight"
 LOG_GROUP = f"/aws/lambda/{HELPER_NAME}"
 LOG_GROUP_ARN = f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:{LOG_GROUP}"
+ROLE_NAME = f"{HELPER_NAME}-role"
+ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{ROLE_NAME}"
 SECRET_PATTERN = re.compile(
     rf"^arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:honua-demo-demo/admin-password-[A-Za-z0-9]{{6}}$"
 )
 IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 ARTIFACT = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/honua-server@{IMAGE_DIGEST}"
+HANDLER_SHA256 = "f687b55788489e2e8a5b5d0fd2dbb29a4e835c6f278e98af799dff35a8e774c2"
+CLASSIFICATION_SHA256 = "bfce514b11bc245ce99f72870578acbd3753aacd94c03db0fb5581a77aab90a0"
+ARCHIVE_BASE64SHA256 = "2eR63E033GzbKgX9+fFDA9vjLRzKJIE7WUziLoiBGHQ="
 
 
 def require(condition: bool, message: str) -> None:
@@ -64,16 +69,29 @@ def assert_production_source(configuration_root: Path = DEFAULT_CONFIGURATION_RO
     require("use_lockfile = true" in versions, "helper backend locking drifted")
     require('region              = "us-west-2"' in versions, "provider region drifted")
     require('allowed_account_ids = ["585192672263"]' in versions, "provider account guard drifted")
-    for forbidden in ("skip_credentials_validation", "skip_requesting_account_id", "var.", "ignore_changes"):
+    for forbidden in (
+        "skip_credentials_validation",
+        "skip_requesting_account_id",
+        "var.",
+        "ignore_changes",
+        "terraform_remote_state",
+        "aws_secretsmanager_secret_version",
+        "secret_string",
+        "source_dir",
+    ):
         require(forbidden not in versions + main, f"production escape hatch present: {forbidden}")
-    require('backend   = "s3"' in main, "primary handoff backend drifted")
-    require('workspace = "default"' in main, "primary handoff workspace drifted")
-    require('bucket       = "honua-tfstate-585192672263"' in main, "primary handoff bucket drifted")
-    require('key          = "demo/aws-demo/terraform.tfstate"' in main, "primary handoff key drifted")
-    require('region       = "us-east-1"' in main, "primary handoff backend region drifted")
+    require('data "aws_secretsmanager_secret" "admin_password"' in main, "metadata-only secret lookup missing")
+    require('name = "honua-demo-demo/admin-password"' in main, "exact secret name drifted")
+    require('self.tags == local.common_tags' in main, "exact secret tag guard missing")
     require("terraform.workspace == \"default\"" in main, "default-workspace precondition missing")
     require("module.honua" not in main, "isolated root contains a module.honua dependency")
     require(not re.search(r"admin-password-[A-Za-z0-9]{6}(?:\"|$)", main), "secret ARN suffix was hard-coded")
+    require(main.count("source {") == 2, "archive source allowlist is not exactly two files")
+    require('filename = "handler.py"' in main, "handler.py archive member missing")
+    require('filename = "classification.v1.json"' in main, "classification archive member missing")
+    require(re.search(rf'candidate_preflight_handler_sha256\s*=\s*"{HANDLER_SHA256}"', main) is not None, "handler source hash drifted")
+    require(re.search(rf'candidate_preflight_classification_sha256\s*=\s*"{CLASSIFICATION_SHA256}"', main) is not None, "classification source hash drifted")
+    require(re.search(rf'candidate_preflight_archive_base64sha256\s*=\s*"{re.escape(ARCHIVE_BASE64SHA256)}"', main) is not None, "archive hash drifted")
 
 
 def assert_policy(policy_text: str, secret_arn: str) -> None:
@@ -118,41 +136,38 @@ def assert_policy(policy_text: str, secret_arn: str) -> None:
 def assert_plan(
     plan: dict,
     configuration_root: Path = DEFAULT_CONFIGURATION_ROOT,
-    remote_state_contract: tuple[str, str, dict] | None = None,
+    secret_data_address: str = "data.aws_secretsmanager_secret.admin_password",
 ) -> None:
     assert_production_source(configuration_root)
     require(plan.get("errored") is not True, "candidate-preflight plan is marked errored")
     require(plan.get("complete") is True, "candidate-preflight plan is incomplete or deferred")
+    require(plan.get("applyable") is True, "candidate-preflight plan is not applyable")
+    format_version = str(plan.get("format_version", ""))
+    require(format_version.split(".", 1)[0] == "1", f"unsupported plan format version {format_version!r}")
     require(not plan.get("resource_drift"), "candidate-preflight plan contains resource drift")
     require(not plan.get("deferred_changes"), "candidate-preflight plan contains deferred changes")
+    for field in ("actions", "action_invocations", "action_triggers"):
+        require(not plan.get(field), f"candidate-preflight plan contains top-level {field}")
+    checks = plan.get("checks", [])
+    require(checks, "candidate-preflight plan has no evaluated safety checks")
+    for check in checks:
+        require(check.get("status") == "pass", f"safety check did not pass: {check.get('address')}")
+        for instance in check.get("instances", []):
+            require(instance.get("status") == "pass", f"safety check instance did not pass: {instance.get('address')}")
 
     configuration = plan.get("configuration", {}).get("root_module", {})
     require(not configuration.get("module_calls"), "candidate-preflight configuration has child modules")
     config_resources = {resource["address"]: resource for resource in configuration.get("resources", [])}
-    require(set(config_resources) == EXPECTED_MANAGED | EXPECTED_DATA, "configuration graph is not exactly four resources and three data sources")
+    expected_data = (EXPECTED_DATA - {"data.aws_secretsmanager_secret.admin_password"}) | {secret_data_address}
+    require(set(config_resources) == EXPECTED_MANAGED | expected_data, "configuration graph is not exactly four resources and three data sources")
     for address in EXPECTED_MANAGED:
         require(config_resources[address].get("mode") == "managed", f"{address} must be managed")
-    for address in EXPECTED_DATA:
+    for address in expected_data:
         require(config_resources[address].get("mode") == "data", f"{address} must be data")
 
-    remote = config_resources["data.terraform_remote_state.primary"]
-    expected_backend, expected_workspace, expected_config = remote_state_contract or (
-        "s3",
-        "default",
-        {
-            "bucket": "honua-tfstate-585192672263",
-            "encrypt": True,
-            "key": "demo/aws-demo/terraform.tfstate",
-            "region": "us-east-1",
-            "use_lockfile": True,
-        },
-    )
-    require(expression_constant(remote, "backend") == expected_backend, "primary remote-state backend drifted")
-    require(expression_constant(remote, "workspace") == expected_workspace, "primary remote-state workspace drifted")
-    require(
-        expression_constant(remote, "config") == expected_config,
-        "primary remote-state configuration drifted",
-    )
+    if secret_data_address == "data.aws_secretsmanager_secret.admin_password":
+        secret_data = config_resources[secret_data_address]
+        require(expression_constant(secret_data, "name") == "honua-demo-demo/admin-password", "secret metadata identity drifted")
 
     changes = {change["address"]: change for change in plan.get("resource_changes", [])}
     require(set(changes) == EXPECTED_MANAGED, "resource-change set is not exactly the four helper resources")
@@ -168,13 +183,42 @@ def assert_plan(
     require(output.get("after_unknown") is False, "helper output must be known")
     require(output.get("after_sensitive") is False, "helper output must be non-sensitive")
 
+    planned_outputs = plan.get("planned_values", {}).get("outputs", {})
+    require(set(planned_outputs) == {"candidate_preflight_function_name"}, "planned output set contains an unexpected or sensitive output")
+    require(planned_outputs["candidate_preflight_function_name"].get("value") == HELPER_NAME, "planned helper output drifted")
+    require(planned_outputs["candidate_preflight_function_name"].get("sensitive") is False, "planned helper output is sensitive")
+
+    def find_forbidden_secret_fields(value) -> bool:
+        if isinstance(value, dict):
+            return any(
+                str(key).lower() in {"secret_string", "secret_binary"}
+                or find_forbidden_secret_fields(child)
+                for key, child in value.items()
+            )
+        if isinstance(value, list):
+            return any(find_forbidden_secret_fields(child) for child in value)
+        return False
+
+    require(not find_forbidden_secret_fields(plan), "plan contains a secret value field")
+    planned_resources = {
+        resource["address"]: resource
+        for resource in plan.get("planned_values", {}).get("root_module", {}).get("resources", [])
+    }
+    require(set(planned_resources) == EXPECTED_MANAGED, f"planned managed state graph is not exact: {sorted(planned_resources)}")
+    archive_config = config_resources["data.archive_file.candidate_preflight"]
+    require(expression_constant(archive_config, "type") == "zip", "archive type drifted")
+    require(
+        archive_config.get("expressions", {}).get("output_path", {}).get("references") == ["path.module"],
+        "archive output path provenance drifted",
+    )
+
     after = {address: change["change"]["after"] for address, change in changes.items()}
     log_group = after["aws_cloudwatch_log_group.candidate_preflight"]
     require(log_group["name"] == LOG_GROUP and log_group["retention_in_days"] == 90, "log-group contract drifted")
     require(log_group["tags"] == EXPECTED_TAGS, "log-group tags drifted")
 
     role = after["aws_iam_role.candidate_preflight"]
-    require(role["name_prefix"] == f"{HELPER_NAME}-", "role name prefix drifted")
+    require(role["name"] == ROLE_NAME and not role.get("name_prefix"), "role identity drifted")
     require(role["tags"] == EXPECTED_TAGS, "role tags drifted")
     assume = json.loads(role["assume_role_policy"])
     require(
@@ -200,6 +244,8 @@ def assert_plan(
         "EXPECTED_PACKAGE_TYPE": "Image",
         "EXPECTED_SKIP_MIGRATIONS": "true",
         "EXPECTED_SOURCE_COMMIT": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+        "SOURCE_CLASSIFICATION_SHA256": CLASSIFICATION_SHA256,
+        "SOURCE_HANDLER_SHA256": HANDLER_SHA256,
     }
     require(environment == expected_environment, "helper environment contract drifted")
     require(function["function_name"] == HELPER_NAME, "helper function name drifted")
@@ -208,10 +254,18 @@ def assert_plan(
     require(function["timeout"] == 120 and function["memory_size"] == 128, "helper resource bounds drifted")
     require(function["reserved_concurrent_executions"] == 1, "helper concurrency bound drifted")
     require(function["tags"] == EXPECTED_TAGS, "helper tags drifted")
+    require(function["role"] == ROLE_ARN, "helper execution role ARN drifted")
+    require(function["filename"] == "./candidate-preflight.zip", "helper archive filename drifted")
+    require(function["source_code_hash"] == ARCHIVE_BASE64SHA256, f"helper archive content hash drifted: {function['source_code_hash']}")
+    require(not function.get("layers"), "helper unexpectedly has Lambda layers")
     require(not function.get("vpc_config"), "helper unexpectedly has VPC configuration")
+    require(not function.get("file_system_config"), "helper unexpectedly has filesystem configuration")
+    require(not function.get("dead_letter_config"), "helper unexpectedly has dead-letter configuration")
+    require(not function.get("image_config"), "helper unexpectedly has image configuration")
 
     role_policy = after["aws_iam_role_policy.candidate_preflight"]
     require(role_policy["name"] == "credential-safe-candidate-preflight-v1", "inline policy name drifted")
+    require(role_policy["role"] == ROLE_NAME, "inline policy is not bound to the exact reviewed role")
     assert_policy(role_policy["policy"], secret_arn)
 
 

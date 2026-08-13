@@ -1,20 +1,25 @@
 ###############################################################################
 # Credential-safe candidate preflight, isolated from the demo application root.
 #
-# This root reads three persisted, typed outputs from the primary root. It has
-# no module call and cannot place the application Lambda, alias, environment,
-# RDS, secret versions, seed/bootstrap helpers, or CloudFront in its plan.
+# This root resolves one exact secret by its account/region-unique name through
+# DescribeSecret metadata. It never reads SecretString or any primary state.
+# It has no module call and cannot place the application Lambda, alias,
+# environment, RDS, secret versions, seed/bootstrap helpers, or CloudFront in
+# its plan.
 ###############################################################################
 
-data "terraform_remote_state" "primary" {
-  backend   = "s3"
-  workspace = "default"
-  config = {
-    bucket       = "honua-tfstate-585192672263"
-    key          = "demo/aws-demo/terraform.tfstate"
-    region       = "us-east-1"
-    encrypt      = true
-    use_lockfile = true
+data "aws_secretsmanager_secret" "admin_password" {
+  name = "honua-demo-demo/admin-password"
+
+  lifecycle {
+    postcondition {
+      condition     = self.arn == "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-${reverse(split("-", self.arn))[0]}" && can(regex("^[A-Za-z0-9]{6}$", reverse(split("-", self.arn))[0]))
+      error_message = "metadata lookup did not return the exact demo admin-password secret identity."
+    }
+    postcondition {
+      condition     = self.description == "Admin API password for Honua." && self.tags == local.common_tags
+      error_message = "metadata lookup returned unexpected description or tags."
+    }
   }
 }
 
@@ -33,16 +38,16 @@ locals {
     Purpose     = "public-demo"
   }
 
-  # These values are state handoffs, not copied or reconstructed ARNs. In the
-  # primary root, admin_password_secret_arn is exactly the pinned honua-iac
-  # module output. The random Secrets Manager suffix is never encoded here.
-  admin_password_secret_arn = data.terraform_remote_state.primary.outputs.admin_password_secret_arn
-  app_function_arn          = data.terraform_remote_state.primary.outputs.lambda_function_arn
-  app_function_name         = data.terraform_remote_state.primary.outputs.lambda_function_name
+  # The module creates this exact unique secret name. DescribeSecret returns
+  # only metadata, including the authoritative ARN and generated suffix. The
+  # suffix and secret value are never copied, derived, or queried here.
+  admin_password_secret_arn = data.aws_secretsmanager_secret.admin_password.arn
 
   candidate_preflight_dir           = "${path.module}/../aws/candidate-preflight"
   candidate_preflight_function_name = "honua-demo-demo-candidate-preflight"
   candidate_preflight_log_group     = "/aws/lambda/${local.candidate_preflight_function_name}"
+  candidate_preflight_role_name     = "honua-demo-demo-candidate-preflight-role"
+  candidate_preflight_role_arn      = "arn:aws:iam::585192672263:role/${local.candidate_preflight_role_name}"
 
   candidate_preflight_app_function_name     = "honua-demo-demo-honua"
   candidate_preflight_app_function_arn      = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua"
@@ -55,12 +60,40 @@ locals {
   candidate_preflight_image_digest          = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
   candidate_preflight_artifact_reference    = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@${local.candidate_preflight_image_digest}"
   candidate_preflight_source_commit         = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
+  candidate_preflight_handler_sha256        = "f687b55788489e2e8a5b5d0fd2dbb29a4e835c6f278e98af799dff35a8e774c2"
+  candidate_preflight_classification_sha256 = "bfce514b11bc245ce99f72870578acbd3753aacd94c03db0fb5581a77aab90a0"
+  candidate_preflight_archive_base64sha256  = "2eR63E033GzbKgX9+fFDA9vjLRzKJIE7WUziLoiBGHQ="
 }
 
 data "archive_file" "candidate_preflight" {
-  type        = "zip"
-  source_dir  = local.candidate_preflight_dir
+  type = "zip"
+
+  source {
+    content  = file("${local.candidate_preflight_dir}/handler.py")
+    filename = "handler.py"
+  }
+
+  source {
+    content  = file("${local.candidate_preflight_dir}/classification.v1.json")
+    filename = "classification.v1.json"
+  }
+
   output_path = "${path.module}/candidate-preflight.zip"
+
+  lifecycle {
+    precondition {
+      condition     = filesha256("${local.candidate_preflight_dir}/handler.py") == local.candidate_preflight_handler_sha256
+      error_message = "candidate-preflight handler.py differs from the reviewed source hash."
+    }
+    precondition {
+      condition     = filesha256("${local.candidate_preflight_dir}/classification.v1.json") == local.candidate_preflight_classification_sha256
+      error_message = "candidate-preflight classification.v1.json differs from the reviewed source hash."
+    }
+    postcondition {
+      condition     = self.output_base64sha256 == local.candidate_preflight_archive_base64sha256
+      error_message = "candidate-preflight deterministic ZIP differs from the reviewed archive hash."
+    }
+  }
 }
 
 data "aws_iam_policy_document" "candidate_preflight_assume" {
@@ -80,14 +113,14 @@ resource "aws_cloudwatch_log_group" "candidate_preflight" {
 }
 
 resource "aws_iam_role" "candidate_preflight" {
-  name_prefix        = "honua-demo-demo-candidate-preflight-"
+  name               = local.candidate_preflight_role_name
   assume_role_policy = data.aws_iam_policy_document.candidate_preflight_assume.json
   tags               = local.common_tags
 }
 
 resource "aws_iam_role_policy" "candidate_preflight" {
   name = "credential-safe-candidate-preflight-v1"
-  role = aws_iam_role.candidate_preflight.id
+  role = local.candidate_preflight_role_name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -130,6 +163,8 @@ resource "aws_iam_role_policy" "candidate_preflight" {
       },
     ]
   })
+
+  depends_on = [aws_iam_role.candidate_preflight]
 }
 
 #checkov:skip=CKV_AWS_50: Fixed synchronous probe; logs contain only Lambda runtime failures with sanitized codes.
@@ -138,7 +173,7 @@ resource "aws_iam_role_policy" "candidate_preflight" {
 #checkov:skip=CKV_AWS_272: The repository-built helper is content-addressed by source_code_hash and independently reviewed.
 resource "aws_lambda_function" "candidate_preflight" {
   function_name                  = local.candidate_preflight_function_name
-  role                           = aws_iam_role.candidate_preflight.arn
+  role                           = local.candidate_preflight_role_arn
   runtime                        = "python3.13"
   handler                        = "handler.handler"
   architectures                  = ["arm64"]
@@ -163,21 +198,23 @@ resource "aws_lambda_function" "candidate_preflight" {
       EXPECTED_PACKAGE_TYPE          = "Image"
       EXPECTED_SKIP_MIGRATIONS       = "true"
       EXPECTED_SOURCE_COMMIT         = local.candidate_preflight_source_commit
+      SOURCE_CLASSIFICATION_SHA256   = local.candidate_preflight_classification_sha256
+      SOURCE_HANDLER_SHA256          = local.candidate_preflight_handler_sha256
     }
   }
 
   lifecycle {
     precondition {
-      condition     = local.app_function_name == local.candidate_preflight_app_function_name
-      error_message = "candidate-preflight-v1 is pinned to the exact demo Honua function name."
+      condition     = data.aws_secretsmanager_secret.admin_password.name == "honua-demo-demo/admin-password"
+      error_message = "candidate-preflight-v1 must resolve only the exact module-owned admin secret name."
     }
     precondition {
       condition     = can(regex("^arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-[A-Za-z0-9]{6}$", local.admin_password_secret_arn))
       error_message = "the authoritative module output is not the exact demo admin-password secret ARN."
     }
     precondition {
-      condition     = local.app_function_arn == local.candidate_preflight_app_function_arn
-      error_message = "the authoritative primary-state output is not the exact demo Honua function ARN."
+      condition     = data.aws_secretsmanager_secret.admin_password.description == "Admin API password for Honua."
+      error_message = "candidate-preflight-v1 resolved unexpected secret metadata."
     }
     precondition {
       condition     = terraform.workspace == "default"

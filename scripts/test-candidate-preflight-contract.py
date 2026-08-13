@@ -15,7 +15,6 @@ HANDLER = ROOT / "stacks" / "aws" / "candidate-preflight" / "handler.py"
 MANIFEST = ROOT / "stacks" / "aws" / "candidate-preflight" / "classification.v1.json"
 RUNBOOK = ROOT / "runbook" / "candidate-preflight-v1.md"
 MAIN = ROOT / "stacks" / "aws" / "main.tf"
-PRIMARY_OUTPUTS = ROOT / "stacks" / "aws" / "outputs.tf"
 INTERFACE = ROOT / "stacks" / "aws" / "validation" / "honua-module-interface"
 
 
@@ -28,22 +27,18 @@ class CandidatePreflightContractTests(unittest.TestCase):
         main = MAIN.read_text(encoding="utf-8")
         contract = json.loads((INTERFACE / "interface-contract.json").read_text(encoding="utf-8"))
         outputs = (INTERFACE / "outputs.tf").read_text(encoding="utf-8")
-        primary_outputs = PRIMARY_OUTPUTS.read_text(encoding="utf-8")
         self.assertIn(f"ref={self.MODULE_COMMIT}", main)
         self.assertIn(f"ref={self.MODULE_COMMIT}", contract["source"])
         self.assertIn('output "admin_password_secret_arn"', outputs)
-        self.assertRegex(
-            primary_outputs,
-            r'output\s+"admin_password_secret_arn"\s*\{[^}]*value\s*=\s*module\.honua\.admin_password_secret_arn',
-        )
 
-    def test_helper_root_is_state_isolated_and_consumes_authoritative_outputs(self):
+    def test_helper_root_is_state_isolated_and_uses_metadata_only_secret_discovery(self):
         iac = IAC.read_text(encoding="utf-8")
         versions = IAC_VERSIONS.read_text(encoding="utf-8")
-        self.assertIn('data "terraform_remote_state" "primary"', iac)
-        self.assertIn("data.terraform_remote_state.primary.outputs.admin_password_secret_arn", iac)
-        self.assertIn("data.terraform_remote_state.primary.outputs.lambda_function_arn", iac)
-        self.assertIn("data.terraform_remote_state.primary.outputs.lambda_function_name", iac)
+        self.assertIn('data "aws_secretsmanager_secret" "admin_password"', iac)
+        self.assertIn('name = "honua-demo-demo/admin-password"', iac)
+        self.assertIn("data.aws_secretsmanager_secret.admin_password.arn", iac)
+        self.assertNotIn("terraform_remote_state", iac)
+        self.assertNotIn("secret_string", iac.lower())
         self.assertNotIn("module.honua", iac)
         self.assertIn('key          = "demo/aws-demo/candidate-preflight.tfstate"', versions)
 
@@ -79,13 +74,16 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("reserved_concurrent_executions = 1", iac)
         self.assertIn("timeout                        = 120", iac)
         self.assertNotIn("AWSLambdaBasicExecutionRole", iac)
+        self.assertIn("candidate_preflight_role_arn", iac)
+        self.assertIn("candidate_preflight_handler_sha256", iac)
+        self.assertIn("candidate_preflight_classification_sha256", iac)
+        self.assertNotIn("source_dir", iac)
 
     def test_production_root_has_no_redirect_or_account_escape_hatch(self):
         iac = IAC.read_text(encoding="utf-8")
         versions = IAC_VERSIONS.read_text(encoding="utf-8")
-        self.assertIn('backend   = "s3"', iac)
-        self.assertIn('workspace = "default"', iac)
-        self.assertIn('key          = "demo/aws-demo/terraform.tfstate"', iac)
+        self.assertIn('data "aws_secretsmanager_secret" "admin_password"', iac)
+        self.assertIn('name = "honua-demo-demo/admin-password"', iac)
         self.assertIn('region              = "us-west-2"', versions)
         self.assertIn('allowed_account_ids = ["585192672263"]', versions)
         self.assertNotIn("var.", iac + versions)
@@ -127,11 +125,9 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("does not move `live`", runbook)
         self.assertIn("does not run migrations", runbook)
         self.assertIn("Do not invoke", runbook)
-        self.assertIn("state-only", runbook)
         self.assertIn("assert-candidate-preflight-plan.py", runbook)
-        self.assertIn("assert-primary-output-materialization-plan.py", runbook)
         self.assertIn("-refresh=false", runbook)
-        self.assertNotIn("-refresh-only", runbook)
+        self.assertIn("git diff --exit-code", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
 
 

@@ -5,12 +5,11 @@ inline policy, and log group. Its S3 state key is
 `demo/aws-demo/candidate-preflight.tfstate`, separate from the primary demo
 root at `demo/aws-demo/terraform.tfstate`.
 
-The helper reads `admin_password_secret_arn`, `lambda_function_arn`, and
-`lambda_function_name` from the primary root's persisted outputs. In the
-primary configuration, `admin_password_secret_arn` is exactly
-`module.honua.admin_password_secret_arn`; the helper never hard-codes or
-reconstructs the random-suffix secret ARN.
+The helper never reads the primary Terraform state. It uses metadata-only
+`DescribeSecret` for the exact module-owned, account/region-unique name
+`honua-demo-demo/admin-password`. That returns the authoritative ARN without
+reading `SecretString`; the helper never hard-codes or reconstructs the random
+suffix.
 
-Do not plan or apply this root until the output-handoff gate in
-`runbook/candidate-preflight-v1.md` passes. Every saved plan must pass the
-plan-JSON allowlist before an independently authorized apply.
+Every saved plan must pass the plan-JSON and reviewed-source allowlists before
+an independently authorized apply.

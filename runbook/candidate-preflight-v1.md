@@ -47,62 +47,64 @@ This probe does not move `live`, does not run migrations, does not seed data,
 and does not produce a promotion receipt. A passing response is preflight
 evidence only.
 
-## Terraform state boundary and output handoff
+## Terraform and source boundary
 
 The helper is owned by the dedicated `stacks/aws-candidate-preflight` root and
-state key `demo/aws-demo/candidate-preflight.tfstate`. Its plan cannot include
-resources from the primary demo root. It reads three persisted primary-state
-outputs; `admin_password_secret_arn` is declared there as exactly
-`module.honua.admin_password_secret_arn`. Never replace this handoff with a
-copied ARN, a derived random-suffix ARN, or an AWS name lookup.
+state key `demo/aws-demo/candidate-preflight.tfstate`. It never reads the
+primary Terraform state. The exact module-owned name
+`honua-demo-demo/admin-password` is unique within the fixed AWS account and
+region; Terraform resolves it with metadata-only `DescribeSecret`. This returns
+the authoritative generated-suffix ARN but never `SecretString`.
 
-Before the first helper plan, require this to succeed from the primary root:
+The deployment archive contains exactly `handler.py` and
+`classification.v1.json`. Their SHA-256 values are pinned in Terraform and the
+plan checker; the deterministic ZIP hash is also pinned. Never add a directory
+source, third file, layer, filesystem, dead-letter destination, VPC attachment,
+or copied/derived secret ARN.
 
-```bash
-terraform -chdir=stacks/aws output -raw admin_password_secret_arn
-```
-
-If the output is absent, stop. Its declaration must be materialized by a
-separately reviewed, state-only primary-root operation. Use a saved normal plan
-with refresh disabled so remote drift cannot be accepted into state as part of
-this handoff:
+After PR merge, use a clean checkout at the exact reviewed merge SHA. Set
+`MERGED_SHA` to that immutable commit and require every command below to pass:
 
 ```bash
-terraform -chdir=stacks/aws plan -refresh=false -input=false -out=primary-output.tfplan
-terraform -chdir=stacks/aws show -json primary-output.tfplan > primary-output.show.json
-python scripts/assert-primary-output-materialization-plan.py primary-output.show.json
-```
-
-The assertion requires `errored=false`, `complete=true`, empty resource drift
-and deferred changes, every resource action to be `no-op`, no action reasons,
-and exactly one changed output: a known, non-sensitive, exact demo admin-secret
-ARN created from `module.honua.admin_password_secret_arn`. Any other action is
-a hard stop. Applying that exact reviewed saved plan writes Terraform state but
-does not change AWS; it still requires explicit release-owner authorization:
-
-```bash
-terraform -chdir=stacks/aws apply primary-output.tfplan
-```
-
-Do not create a second plan between assertion and apply. Do not use refresh-only,
-`terraform state` editing, `-target`, `ignore_changes`, a copied secret ARN, or
-an unsaved plan as a shortcut.
-
-After the output exists, create the helper plan from its own root and gate its
-local show JSON:
-
-```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-$MERGED_SHA"
+mkdir -p "$EVIDENCE_DIR"
+test "$(git rev-parse HEAD)" = "$MERGED_SHA"
+git diff --exit-code
+git diff --cached --exit-code
+test -z "$(git status --porcelain)"
 terraform -chdir=stacks/aws-candidate-preflight init -input=false
-terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out=candidate-preflight.tfplan
-terraform -chdir=stacks/aws-candidate-preflight show -json candidate-preflight.tfplan > candidate-preflight.show.json
-python scripts/assert-candidate-preflight-plan.py candidate-preflight.show.json
+terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out="$EVIDENCE_DIR/candidate-preflight.tfplan"
+terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/candidate-preflight.show.json"
+python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/candidate-preflight.show.json"
+test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "d9e47adc4d37dc6cdb2a05fdf9f14303dbe32d1cca24813b594ce22e88811874"
+sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip > "$EVIDENCE_DIR/candidate-preflight.zip.sha256"
 ```
 
-Keep the plan JSON local because it can contain state values. The assertion
-requires a complete plan with exactly four helper creates and the helper output;
-it rejects application Lambda/alias/environment, RDS/database, secret-version,
-seed/bootstrap, CloudFront, deferred, and unrelated output actions. Apply only
-the exact saved plan after independent review and explicit authorization.
+Keep the saved plan, show JSON, generated ZIP, ZIP checksum, `MERGED_SHA`, and
+plan-checker result together as one local review bundle. Plan JSON can contain
+state values, so never upload it. The assertion requires an applyable supported
+plan with no drift, deferral, Terraform actions/triggers/invocations, extra
+outputs, child modules, or resources beyond the exact helper graph. It verifies
+the exact role ARN, least-privilege IAM, environment, source member hashes,
+ZIP `source_code_hash`, filename, and absence of layers/VPC/filesystems/DLQ.
+
+Immediately before an authorized apply, repeat the clean-SHA checks and verify
+the ZIP checksum against the recorded file. Apply only the exact saved plan;
+do not re-plan or regenerate the ZIP:
+
+```bash
+test "$(git rev-parse HEAD)" = "$MERGED_SHA"
+git diff --exit-code
+git diff --cached --exit-code
+test -z "$(git status --porcelain)"
+test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "d9e47adc4d37dc6cdb2a05fdf9f14303dbe32d1cca24813b594ce22e88811874"
+terraform -chdir=stacks/aws-candidate-preflight apply "$EVIDENCE_DIR/candidate-preflight.tfplan"
+```
+
+Any mismatch is a hard stop. Do not use `terraform state` editing, `-target`,
+`ignore_changes`, a copied secret ARN, an unsaved plan, or a dirty/different
+checkout as a shortcut.
 
 ## Required re-audit
 

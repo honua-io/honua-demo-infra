@@ -73,11 +73,13 @@ only provisions and operates the AWS resources the demo runs on.
 | Locking | S3-native conditional-write locking (`use_lockfile`, Terraform >= 1.10) |
 
 The candidate-preflight helper has a separate state key,
-`demo/aws-demo/candidate-preflight.tfstate`. This is a security and deployment
-boundary: helper plans cannot traverse the primary root's application, RDS,
-secret-version, seed/bootstrap, or CloudFront dependency graph. See
-`runbook/candidate-preflight-v1.md` for the fail-closed output handoff and plan
-allowlist.
+`demo/aws-demo/candidate-preflight.tfstate` and never reads the primary state.
+This is a security and deployment boundary: helper plans cannot traverse or
+copy the primary root's application, RDS, secret-version, seed/bootstrap,
+CloudFront, or sensitive output graph. Its exact admin-secret name is resolved
+by metadata-only `DescribeSecret`; no secret value is read. See
+`runbook/candidate-preflight-v1.md` for the fail-closed source and plan
+allowlists.
 
 This state **is reachable and was read successfully** as part of the
 honua-iac#126 extraction (see "Migration proof" below) — it is not

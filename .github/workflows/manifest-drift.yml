@@ -75,6 +75,4 @@ jobs:
         run: python3 scripts/validate-terraform-root.py
 
       - name: Validate state-handoff and isolated candidate plan contracts
-        run: |
-          python3 scripts/test-primary-output-materialization-plan.py
-          python3 scripts/test-candidate-preflight-plan-isolation.py
+        run: python3 scripts/test-candidate-preflight-plan-isolation.py

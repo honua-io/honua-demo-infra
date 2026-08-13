@@ -44,15 +44,10 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
 
         versions_path = cls.stack / "versions.tf"
         versions = versions_path.read_text(encoding="utf-8")
-        versions, replacements = re.subn(
-            r'(?ms)^  backend "s3" \{.*?^  \}',
-            '  backend "local" {}',
-            versions,
-            count=1,
-        )
-        if replacements != 1:
+        versions, count = re.subn(r'(?ms)^  backend "s3" \{.*?^  \}', '  backend "local" {}', versions, count=1)
+        if count != 1:
             raise RuntimeError("could not replace copied S3 backend")
-        versions, replacements = re.subn(
+        versions, count = re.subn(
             r'(?ms)^provider "aws" \{.*?^\}',
             '''provider "aws" {
   region                      = "us-west-2"
@@ -64,34 +59,43 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             versions,
             count=1,
         )
-        if replacements != 1:
+        if count != 1:
             raise RuntimeError("could not replace copied AWS provider")
         versions_path.write_text(versions, encoding="utf-8")
 
-        cls.state = cls.root / "primary.tfstate"
-        cls.missing_state = cls.root / "missing-admin.tfstate"
-        cls.write_state(cls.state, include_admin_output=True)
-        cls.write_state(cls.missing_state, include_admin_output=False)
+        fixture = cls.stack / "admin-secret-metadata-fixture.txt"
+        fixture.write_text("metadata-only fixture", encoding="utf-8")
         main_path = cls.stack / "main.tf"
         main = main_path.read_text(encoding="utf-8")
-        local_remote = f'''data "terraform_remote_state" "primary" {{
-  backend   = "local"
-  workspace = "default"
-  config = {{
-    path = "{cls.state.as_posix()}"
-  }}
-}}'''
-        main, replacements = re.subn(
-            r'(?ms)^data "terraform_remote_state" "primary" \{.*?^\}',
-            local_remote,
+        main, count = re.subn(
+            r'(?ms)^data "aws_secretsmanager_secret" "admin_password" \{.*?^\}\n\n(?=check "default_workspace_only")',
+            '''data "archive_file" "admin_password" {
+  type        = "zip"
+  source_file = "${path.module}/admin-secret-metadata-fixture.txt"
+  output_path = "${path.module}/admin-secret-metadata-fixture.zip"
+}
+
+''',
             main,
             count=1,
         )
-        if replacements != 1:
-            raise RuntimeError("could not replace copied primary-state handoff")
+        if count != 1:
+            raise RuntimeError("could not replace copied metadata lookup")
+        main = main.replace(
+            "data.aws_secretsmanager_secret.admin_password.arn",
+            '"arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd"',
+        )
+        main = main.replace(
+            'data.aws_secretsmanager_secret.admin_password.name == "honua-demo-demo/admin-password"',
+            'local.candidate_preflight_app_function_name == "honua-demo-demo-honua"',
+        )
+        main = main.replace(
+            'data.aws_secretsmanager_secret.admin_password.description == "Admin API password for Honua."',
+            'local.candidate_preflight_app_function_name == "honua-demo-demo-honua"',
+        )
         main_path.write_text(main, encoding="utf-8")
 
-        cls.remote_contract = ("local", "default", {"path": cls.state.as_posix()})
+        cls.secret_data_address = "data.archive_file.admin_password"
         cls.environment = os.environ.copy()
         cls.environment.update(
             {
@@ -101,13 +105,15 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
                 "TF_IN_AUTOMATION": "1",
             }
         )
-        subprocess.run(
-            ["terraform", "init", "-input=false", "-no-color"],
+        subprocess.run(["terraform", "init", "-input=false", "-no-color"], cwd=cls.stack, env=cls.environment, check=True)
+        result = subprocess.run(
+            ["terraform", "plan", "-refresh=false", "-input=false", "-no-color", "-out", "candidate.tfplan"],
             cwd=cls.stack,
             env=cls.environment,
-            check=True,
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        result = cls.plan("candidate.tfplan")
         if result.returncode != 0:
             raise RuntimeError(result.stdout + result.stderr)
         show = subprocess.run(
@@ -124,108 +130,97 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temporary.cleanup()
 
-    @staticmethod
-    def write_state(path: Path, *, include_admin_output: bool) -> None:
-        outputs = {
-            "lambda_function_arn": {
-                "value": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua",
-                "type": "string",
-            },
-            "lambda_function_name": {"value": "honua-demo-demo-honua", "type": "string"},
-        }
-        if include_admin_output:
-            outputs["admin_password_secret_arn"] = {
-                "value": "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd",
-                "type": "string",
-            }
-        path.write_text(
-            json.dumps(
-                {
-                    "version": 4,
-                    "terraform_version": "1.15.8",
-                    "serial": 1,
-                    "lineage": "candidate-preflight-contract-fixture",
-                    "outputs": outputs,
-                    "resources": [],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-    @classmethod
-    def plan(cls, name: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["terraform", "plan", "-refresh=false", "-input=false", "-no-color", "-out", name],
-            cwd=cls.stack,
-            env=cls.environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    def assert_plan(self, plan):
+        ASSERTION_MODULE.assert_plan(plan, STACK, self.secret_data_address)
 
     def assert_rejected(self, label: str, mutate) -> None:
         candidate = copy.deepcopy(self.valid_plan)
         mutate(candidate)
         with self.subTest(label=label), self.assertRaises(RuntimeError):
-            ASSERTION_MODULE.assert_plan(candidate, STACK, self.remote_contract)
+            self.assert_plan(candidate)
 
     def test_exact_candidate_only_plan_passes(self):
-        ASSERTION_MODULE.assert_plan(self.valid_plan, STACK, self.remote_contract)
+        self.assert_plan(self.valid_plan)
 
-    def test_missing_authoritative_secret_output_fails_closed(self):
-        main_path = self.stack / "main.tf"
-        original = main_path.read_text(encoding="utf-8")
-        main_path.write_text(original.replace(self.state.as_posix(), self.missing_state.as_posix()), encoding="utf-8")
-        try:
-            result = self.plan("missing.tfplan")
-        finally:
-            main_path.write_text(original, encoding="utf-8")
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("admin_password_secret_arn", result.stdout + result.stderr)
+    def test_sensitive_primary_state_sentinel_cannot_enter_plan(self):
+        serialized = json.dumps(self.valid_plan)
+        self.assertNotIn("SENSITIVE_PRIMARY_STATE_SENTINEL", serialized)
+        candidate = copy.deepcopy(self.valid_plan)
+        candidate["planned_values"]["outputs"]["sentinel_sensitive"] = {
+            "value": "SENSITIVE_PRIMARY_STATE_SENTINEL",
+            "sensitive": True,
+        }
+        with self.assertRaises(RuntimeError):
+            self.assert_plan(candidate)
+
+    def test_each_reviewed_source_mutation_prevents_plan(self):
+        for index, filename in enumerate(("handler.py", "classification.v1.json")):
+            source = self.source / filename
+            original = source.read_text(encoding="utf-8")
+            source.write_text(original + "\n", encoding="utf-8")
+            try:
+                result = subprocess.run(
+                    ["terraform", "plan", "-refresh=false", "-input=false", "-no-color", "-out", f"mutated-{index}.tfplan"],
+                    cwd=self.stack,
+                    env=self.environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                source.write_text(original, encoding="utf-8")
+            with self.subTest(filename=filename):
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("reviewed source", result.stdout + result.stderr)
+                self.assertIn("hash.", result.stdout + result.stderr)
 
     def test_plan_json_bypasses_all_fail_closed(self):
-        managed = "aws_lambda_function.candidate_preflight"
-        policy = "aws_iam_role_policy.candidate_preflight"
-        remote = "data.terraform_remote_state.primary"
+        function_address = "aws_lambda_function.candidate_preflight"
+        policy_address = "aws_iam_role_policy.candidate_preflight"
 
-        def change(address: str):
-            return next(item for item in self.valid_plan["resource_changes"] if item["address"] == address)
+        def resource(plan, address):
+            return next(item for item in plan["resource_changes"] if item["address"] == address)
 
-        def config(address: str):
-            return next(item for item in self.valid_plan["configuration"]["root_module"]["resources"] if item["address"] == address)
-
-        mutations = {
-            "errored": lambda plan: plan.update(errored=True),
-            "incomplete": lambda plan: plan.update(complete=False),
-            "resource drift": lambda plan: plan.update(resource_drift=[{"address": managed}]),
-            "deferred": lambda plan: plan.update(deferred_changes=[{"reason": "fixture"}]),
-            "child module": lambda plan: plan["configuration"]["root_module"].update(module_calls={"bad": {}}),
-            "extra config resource": lambda plan: plan["configuration"]["root_module"]["resources"].append({"address": "aws_s3_bucket.bad", "mode": "managed"}),
-            "missing config data": lambda plan: plan["configuration"]["root_module"]["resources"].remove(next(item for item in plan["configuration"]["root_module"]["resources"] if item["address"] == remote)),
-            "remote backend": lambda plan: next(item for item in plan["configuration"]["root_module"]["resources"] if item["address"] == remote)["expressions"]["backend"].update(constant_value="s3"),
-            "remote workspace": lambda plan: next(item for item in plan["configuration"]["root_module"]["resources"] if item["address"] == remote)["expressions"]["workspace"].update(constant_value="other"),
-            "remote config": lambda plan: next(item for item in plan["configuration"]["root_module"]["resources"] if item["address"] == remote)["expressions"]["config"]["constant_value"].update(path="wrong"),
-            "extra resource change": lambda plan: plan["resource_changes"].append({"address": "aws_db_instance.bad", "change": {"actions": ["create"]}}),
-            "missing resource change": lambda plan: plan["resource_changes"].pop(),
-            "resource update": lambda plan: next(item for item in plan["resource_changes"] if item["address"] == managed)["change"].update(actions=["update"]),
-            "action reason": lambda plan: next(item for item in plan["resource_changes"] if item["address"] == managed).update(action_reason="replace_because_tainted"),
-            "extra output": lambda plan: plan["output_changes"].update(bad={"actions": ["create"]}),
-            "output unknown": lambda plan: plan["output_changes"]["candidate_preflight_function_name"].update(after_unknown=True),
-            "output sensitive": lambda plan: plan["output_changes"]["candidate_preflight_function_name"].update(after_sensitive=True),
-            "output value": lambda plan: plan["output_changes"]["candidate_preflight_function_name"].update(after="wrong"),
-            "IAM widened": lambda plan: json_policy_mutation(plan, policy, "Action", ["lambda:*"]),
-            "IAM resource widened": lambda plan: json_policy_mutation(plan, policy, "Resource", ["*"]),
-            "environment changed": lambda plan: next(item for item in plan["resource_changes"] if item["address"] == managed)["change"]["after"]["environment"][0]["variables"].update(EXPECTED_LIVE_VERSION="40"),
-            "secret identity changed": lambda plan: next(item for item in plan["resource_changes"] if item["address"] == managed)["change"]["after"]["environment"][0]["variables"].update(ADMIN_PASSWORD_SECRET_ARN="arn:aws:secretsmanager:us-west-2:585192672263:secret:other-Ab12Cd"),
-            "VPC attached": lambda plan: next(item for item in plan["resource_changes"] if item["address"] == managed)["change"]["after"].update(vpc_config=[{"subnet_ids": ["subnet-bad"]}]),
-        }
-
-        def json_policy_mutation(plan, address, field, value):
-            item = next(item for item in plan["resource_changes"] if item["address"] == address)
+        def mutate_policy(plan, field, value):
+            item = resource(plan, policy_address)
             document = json.loads(item["change"]["after"]["policy"])
             document["Statement"][0][field] = value
             item["change"]["after"]["policy"] = json.dumps(document)
 
+        mutations = {
+            "errored": lambda p: p.update(errored=True),
+            "incomplete": lambda p: p.update(complete=False),
+            "not applyable": lambda p: p.update(applyable=False),
+            "unsupported format": lambda p: p.update(format_version="2.0"),
+            "resource drift": lambda p: p.update(resource_drift=[{"address": function_address}]),
+            "deferred": lambda p: p.update(deferred_changes=[{"reason": "fixture"}]),
+            "actions": lambda p: p.update(actions=[{"address": "bad"}]),
+            "action invocations": lambda p: p.update(action_invocations=[{"address": "bad"}]),
+            "action triggers": lambda p: p.update(action_triggers=[{"address": "bad"}]),
+            "unknown safety check": lambda p: p["checks"][0].update(status="unknown"),
+            "child module": lambda p: p["configuration"]["root_module"].update(module_calls={"bad": {}}),
+            "extra config resource": lambda p: p["configuration"]["root_module"]["resources"].append({"address": "aws_s3_bucket.bad", "mode": "managed"}),
+            "missing config data": lambda p: p["configuration"]["root_module"]["resources"].pop(),
+            "extra resource change": lambda p: p["resource_changes"].append({"address": "aws_db_instance.bad", "change": {"actions": ["create"]}}),
+            "missing resource change": lambda p: p["resource_changes"].pop(),
+            "resource update": lambda p: resource(p, function_address)["change"].update(actions=["update"]),
+            "action reason": lambda p: resource(p, function_address).update(action_reason="replace_because_tainted"),
+            "extra output": lambda p: p["output_changes"].update(bad={"actions": ["create"]}),
+            "output unknown": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after_unknown=True),
+            "output sensitive": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after_sensitive=True),
+            "output value": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after="wrong"),
+            "IAM widened": lambda p: mutate_policy(p, "Action", ["lambda:*"]),
+            "IAM resource widened": lambda p: mutate_policy(p, "Resource", ["*"]),
+            "environment changed": lambda p: resource(p, function_address)["change"]["after"]["environment"][0]["variables"].update(EXPECTED_LIVE_VERSION="40"),
+            "secret changed": lambda p: resource(p, function_address)["change"]["after"]["environment"][0]["variables"].update(ADMIN_PASSWORD_SECRET_ARN="arn:aws:secretsmanager:us-west-2:585192672263:secret:other-Ab12Cd"),
+            "VPC": lambda p: resource(p, function_address)["change"]["after"].update(vpc_config=[{"subnet_ids": ["subnet-bad"]}]),
+            "layer": lambda p: resource(p, function_address)["change"]["after"].update(layers=["arn:bad"]),
+            "filesystem": lambda p: resource(p, function_address)["change"]["after"].update(file_system_config=[{"arn": "arn:bad"}]),
+            "dead letter": lambda p: resource(p, function_address)["change"]["after"].update(dead_letter_config=[{"target_arn": "arn:bad"}]),
+            "archive hash": lambda p: resource(p, function_address)["change"]["after"].update(source_code_hash="wrong"),
+            "archive filename": lambda p: resource(p, function_address)["change"]["after"].update(filename="other.zip"),
+            "role ARN": lambda p: resource(p, function_address)["change"]["after"].update(role="arn:aws:iam::585192672263:role/other"),
+        }
         for label, mutation in mutations.items():
             self.assert_rejected(label, mutation)
 
@@ -235,10 +230,14 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "helper backend bucket": ('honua-tfstate-585192672263', 'honua-tfstate-other'),
             "provider region": ('region              = "us-west-2"', 'region              = "us-east-1"'),
             "provider account": ('allowed_account_ids = ["585192672263"]', 'allowed_account_ids = ["000000000000"]'),
-            "primary key": ('key          = "demo/aws-demo/terraform.tfstate"', 'key          = "other.tfstate"'),
-            "primary workspace": ('workspace = "default"', 'workspace = "other"'),
+            "metadata version": ('data "aws_secretsmanager_secret" "admin_password"', 'data "aws_secretsmanager_secret_version" "admin_password"'),
+            "metadata name": ('name = "honua-demo-demo/admin-password"', 'name = "other"'),
             "skip guard": ('provider "aws" {', 'provider "aws" {\n  skip_requesting_account_id = true'),
             "ignore changes": ('resource "aws_lambda_function" "candidate_preflight" {', 'resource "aws_lambda_function" "candidate_preflight" {\n  lifecycle { ignore_changes = all }'),
+            "source directory": ('data "archive_file" "candidate_preflight" {', 'data "archive_file" "candidate_preflight" {\n  source_dir = "extra"'),
+            "extra archive source": ('source {', 'source {\n    filename = "extra.py"\n  }\n  source {'),
+            "handler hash": (ASSERTION_MODULE.HANDLER_SHA256, "0" * 64),
+            "classification hash": (ASSERTION_MODULE.CLASSIFICATION_SHA256, "1" * 64),
         }
         for label, (old, new) in mutations.items():
             with self.subTest(label=label), tempfile.TemporaryDirectory(prefix="candidate-source-negative-") as temporary:
