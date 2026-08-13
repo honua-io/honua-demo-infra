@@ -81,5 +81,6 @@ jobs:
         run: |
           python3 scripts/test-candidate-preflight-tag-map.py
           python3 scripts/test-candidate-preflight-plan-isolation.py
+          python3 scripts/test-candidate-preflight-postapply.py
           python3 scripts/test-candidate-preflight-plan-receipt.py
           python3 scripts/test-candidate-preflight-runtime-audit.py

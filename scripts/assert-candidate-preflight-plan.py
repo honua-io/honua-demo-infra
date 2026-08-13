@@ -45,6 +45,189 @@ EXPECTED_PROVIDERS = {
         },
     },
 }
+EXPECTED_RESOURCE_EXPRESSIONS = {
+    "aws_cloudwatch_log_group.candidate_preflight": {
+        "name": {"references": ["local.candidate_preflight_log_group"]},
+        "retention_in_days": {"constant_value": 90},
+        "tags": {"references": ["local.common_tags"]},
+    },
+    "aws_iam_role.candidate_preflight": {
+        "assume_role_policy": {
+            "references": [
+                "data.aws_iam_policy_document.candidate_preflight_assume.json",
+                "data.aws_iam_policy_document.candidate_preflight_assume",
+            ]
+        },
+        "name": {"references": ["local.candidate_preflight_role_name"]},
+        "tags": {"references": ["local.common_tags"]},
+    },
+    "aws_iam_role_policy.candidate_preflight": {
+        "name": {"constant_value": "credential-safe-candidate-preflight-v1"},
+        "policy": {
+            "references": [
+                "local.admin_password_secret_arn",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_candidate_version",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_live_alias_name",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_candidate_version",
+                "local.candidate_preflight_log_group_arn",
+            ]
+        },
+        "role": {"references": ["local.candidate_preflight_role_name"]},
+    },
+    "aws_lambda_function.candidate_preflight": {
+        "architectures": {"constant_value": ["arm64"]},
+        "environment": [
+            {
+                "variables": {
+                    "references": [
+                        "local.admin_password_secret_arn",
+                        "local.candidate_preflight_app_function_name",
+                        "local.candidate_preflight_artifact_reference",
+                        "local.candidate_preflight_candidate_revision_id",
+                        "local.candidate_preflight_candidate_version",
+                        "local.candidate_preflight_image_digest",
+                        "local.candidate_preflight_live_alias_name",
+                        "local.candidate_preflight_live_revision_id",
+                        "local.candidate_preflight_live_version",
+                        "local.candidate_preflight_source_commit",
+                        "local.candidate_preflight_classification_sha256",
+                        "local.candidate_preflight_handler_sha256",
+                    ]
+                }
+            }
+        ],
+        "filename": {
+            "references": [
+                "data.archive_file.candidate_preflight.output_path",
+                "data.archive_file.candidate_preflight",
+            ]
+        },
+        "function_name": {"references": ["local.candidate_preflight_function_name"]},
+        "handler": {"constant_value": "handler.handler"},
+        "memory_size": {"constant_value": 128},
+        "publish": {"constant_value": True},
+        "reserved_concurrent_executions": {"constant_value": 1},
+        "role": {"references": ["local.candidate_preflight_role_arn"]},
+        "runtime": {"constant_value": "python3.13"},
+        "source_code_hash": {
+            "references": [
+                "data.archive_file.candidate_preflight.output_base64sha256",
+                "data.archive_file.candidate_preflight",
+            ]
+        },
+        "tags": {"references": ["local.common_tags"]},
+        "timeout": {"constant_value": 120},
+    },
+    "data.archive_file.candidate_preflight": {
+        "output_path": {"references": ["path.module"]},
+        "source": [
+            {
+                "content": {"references": ["local.candidate_preflight_handler_source"]},
+                "filename": {"constant_value": "handler.py"},
+            },
+            {
+                "content": {"references": ["local.candidate_preflight_classification_source"]},
+                "filename": {"constant_value": "classification.v1.json"},
+            },
+        ],
+        "type": {"constant_value": "zip"},
+    },
+    "data.aws_iam_policy_document.candidate_preflight_assume": {
+        "statement": [
+            {
+                "actions": {"constant_value": ["sts:AssumeRole"]},
+                "principals": [
+                    {
+                        "identifiers": {"constant_value": ["lambda.amazonaws.com"]},
+                        "type": {"constant_value": "Service"},
+                    }
+                ],
+            }
+        ]
+    },
+    "data.aws_secretsmanager_secret.admin_password": {
+        "name": {"constant_value": "honua-demo-demo/admin-password"}
+    },
+}
+EXPECTED_CONFIGURATION_OUTPUTS = {
+    "candidate_preflight_qualified_arn": {
+        "description": "Immutable published candidate-preflight Lambda ARN; invoke only this qualified ARN.",
+        "expression": {
+            "references": [
+                "aws_lambda_function.candidate_preflight.qualified_arn",
+                "aws_lambda_function.candidate_preflight",
+            ]
+        },
+    },
+    "candidate_preflight_version": {
+        "description": "Immutable published candidate-preflight Lambda version.",
+        "expression": {
+            "references": [
+                "aws_lambda_function.candidate_preflight.version",
+                "aws_lambda_function.candidate_preflight",
+            ]
+        },
+    },
+}
+EXPECTED_RESOURCE_METADATA = {
+    "aws_cloudwatch_log_group.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_cloudwatch_log_group",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "aws_iam_role.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_iam_role",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "aws_iam_role_policy.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_iam_role_policy",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+        "depends_on": ["aws_iam_role.candidate_preflight"],
+    },
+    "aws_lambda_function.candidate_preflight": {
+        "mode": "managed",
+        "type": "aws_lambda_function",
+        "name": "candidate_preflight",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+        "depends_on": [
+            "aws_cloudwatch_log_group.candidate_preflight",
+            "aws_iam_role_policy.candidate_preflight",
+        ],
+    },
+    "data.archive_file.candidate_preflight": {
+        "mode": "data",
+        "type": "archive_file",
+        "name": "candidate_preflight",
+        "provider_config_key": "archive",
+        "schema_version": 0,
+    },
+    "data.aws_iam_policy_document.candidate_preflight_assume": {
+        "mode": "data",
+        "type": "aws_iam_policy_document",
+        "name": "candidate_preflight_assume",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+    "data.aws_secretsmanager_secret.admin_password": {
+        "mode": "data",
+        "type": "aws_secretsmanager_secret",
+        "name": "admin_password",
+        "provider_config_key": "aws",
+        "schema_version": 0,
+    },
+}
 PROVIDER_KEYS = {
     "aws_cloudwatch_log_group.candidate_preflight": "aws",
     "aws_iam_role.candidate_preflight": "aws",
@@ -172,6 +355,58 @@ def assert_policy(policy_text: str, secret_arn: str) -> None:
     require(policy["Statement"] == expected, "IAM policy is not the exact least-privilege document")
 
 
+def assert_configuration(
+    plan: dict,
+    secret_data_address: str = "data.aws_secretsmanager_secret.admin_password",
+    provider_contract: dict | None = None,
+) -> dict[str, dict]:
+    full_configuration = plan.get("configuration")
+    require(isinstance(full_configuration, dict), "candidate-preflight configuration is missing")
+    require(set(full_configuration) == {"provider_config", "root_module"}, "configuration top-level schema drifted")
+    configuration = full_configuration.get("root_module")
+    require(isinstance(configuration, dict), "candidate-preflight root configuration is missing")
+    require(set(configuration) == {"outputs", "resources"}, "configuration root schema drifted")
+    require(configuration.get("outputs") == EXPECTED_CONFIGURATION_OUTPUTS, "configuration output contract drifted")
+    provider_config = full_configuration.get("provider_config")
+    require(provider_config == (provider_contract or EXPECTED_PROVIDERS), "provider configuration set or values drifted")
+    resources = configuration.get("resources", [])
+    require(all(isinstance(resource, dict) and isinstance(resource.get("address"), str) for resource in resources), "configuration resource schema drifted")
+    config_resources = {resource["address"]: resource for resource in resources}
+    require(len(config_resources) == len(resources), "configuration graph contains duplicate addresses")
+    expected_data = (EXPECTED_DATA - {"data.aws_secretsmanager_secret.admin_password"}) | {secret_data_address}
+    require(set(config_resources) == EXPECTED_MANAGED | expected_data, "configuration graph is not exactly four resources and three data sources")
+    for address in EXPECTED_MANAGED:
+        require(config_resources[address].get("mode") == "managed", f"{address} must be managed")
+    for address in expected_data:
+        require(config_resources[address].get("mode") == "data", f"{address} must be data")
+    expected_expressions = dict(EXPECTED_RESOURCE_EXPRESSIONS)
+    expected_metadata = dict(EXPECTED_RESOURCE_METADATA)
+    if secret_data_address != "data.aws_secretsmanager_secret.admin_password":
+        expected_expressions.pop("data.aws_secretsmanager_secret.admin_password")
+        expected_expressions[secret_data_address] = {
+            "output_path": {"references": ["path.module"]},
+            "source_file": {"references": ["path.module"]},
+            "type": {"constant_value": "zip"},
+        }
+        expected_metadata.pop("data.aws_secretsmanager_secret.admin_password")
+        expected_metadata[secret_data_address] = {
+            "mode": "data",
+            "type": "archive_file",
+            "name": "admin_password",
+            "provider_config_key": "archive",
+            "schema_version": 0,
+        }
+    require(set(expected_expressions) == set(config_resources), "configuration expression contract address set drifted")
+    for address, expected in expected_expressions.items():
+        expected_resource = {
+            "address": address,
+            **expected_metadata[address],
+            "expressions": expected,
+        }
+        require(config_resources[address] == expected_resource, f"{address} exact configuration object drifted")
+    return config_resources
+
+
 def assert_plan(
     plan: dict,
     configuration_root: Path = DEFAULT_CONFIGURATION_ROOT,
@@ -198,76 +433,7 @@ def assert_plan(
         for instance in check.get("instances", []):
             require(instance.get("status") == "pass", f"safety check instance did not pass: {instance.get('address')}")
 
-    configuration = plan.get("configuration", {}).get("root_module", {})
-    provider_config = plan.get("configuration", {}).get("provider_config", {})
-    require(provider_config == (provider_contract or EXPECTED_PROVIDERS), "provider configuration set or values drifted")
-    require(not configuration.get("module_calls"), "candidate-preflight configuration has child modules")
-    config_resources = {resource["address"]: resource for resource in configuration.get("resources", [])}
-    expected_data = (EXPECTED_DATA - {"data.aws_secretsmanager_secret.admin_password"}) | {secret_data_address}
-    require(set(config_resources) == EXPECTED_MANAGED | expected_data, "configuration graph is not exactly four resources and three data sources")
-    for address in EXPECTED_MANAGED:
-        require(config_resources[address].get("mode") == "managed", f"{address} must be managed")
-    for address in expected_data:
-        require(config_resources[address].get("mode") == "data", f"{address} must be data")
-    expected_provider_keys = dict(PROVIDER_KEYS)
-    if secret_data_address != "data.aws_secretsmanager_secret.admin_password":
-        expected_provider_keys.pop("data.aws_secretsmanager_secret.admin_password")
-        expected_provider_keys[secret_data_address] = "archive"
-    for address, expected_key in expected_provider_keys.items():
-        require(config_resources[address].get("provider_config_key") == expected_key, f"{address} provider binding drifted")
-
-    if secret_data_address == "data.aws_secretsmanager_secret.admin_password":
-        secret_data = config_resources[secret_data_address]
-        require(expression_constant(secret_data, "name") == "honua-demo-demo/admin-password", "secret metadata identity drifted")
-
-    policy_config = config_resources["aws_iam_role_policy.candidate_preflight"]
-    require(
-        policy_config["expressions"]["policy"].get("references")
-        == [
-            "local.admin_password_secret_arn",
-            "local.candidate_preflight_app_function_arn",
-            "local.candidate_preflight_candidate_version",
-            "local.candidate_preflight_app_function_arn",
-            "local.candidate_preflight_live_alias_name",
-            "local.candidate_preflight_app_function_arn",
-            "local.candidate_preflight_candidate_version",
-            "local.candidate_preflight_log_group_arn",
-        ],
-        "IAM policy expression provenance drifted",
-    )
-    require(policy_config["expressions"]["role"].get("references") == ["local.candidate_preflight_role_name"], "IAM role expression provenance drifted")
-
-    function_config = config_resources["aws_lambda_function.candidate_preflight"]
-    require(function_config["expressions"]["role"].get("references") == ["local.candidate_preflight_role_arn"], "Lambda role expression provenance drifted")
-    require(
-        function_config["expressions"]["filename"].get("references")
-        == ["data.archive_file.candidate_preflight.output_path", "data.archive_file.candidate_preflight"],
-        "Lambda filename expression provenance drifted",
-    )
-    require(
-        function_config["expressions"]["source_code_hash"].get("references")
-        == ["data.archive_file.candidate_preflight.output_base64sha256", "data.archive_file.candidate_preflight"],
-        "Lambda source hash expression provenance drifted",
-    )
-    require(expression_constant(function_config, "publish") is True, "Lambda immutable publication is disabled")
-    require(
-        function_config["expressions"]["environment"][0]["variables"].get("references")
-        == [
-            "local.admin_password_secret_arn",
-            "local.candidate_preflight_app_function_name",
-            "local.candidate_preflight_artifact_reference",
-            "local.candidate_preflight_candidate_revision_id",
-            "local.candidate_preflight_candidate_version",
-            "local.candidate_preflight_image_digest",
-            "local.candidate_preflight_live_alias_name",
-            "local.candidate_preflight_live_revision_id",
-            "local.candidate_preflight_live_version",
-            "local.candidate_preflight_source_commit",
-            "local.candidate_preflight_classification_sha256",
-            "local.candidate_preflight_handler_sha256",
-        ],
-        "Lambda environment expression provenance drifted",
-    )
+    config_resources = assert_configuration(plan, secret_data_address, provider_contract)
 
     changes = {change["address"]: change for change in plan.get("resource_changes", [])}
     require(set(changes) == EXPECTED_MANAGED, "resource-change set is not exactly the four helper resources")

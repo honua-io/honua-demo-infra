@@ -1,0 +1,508 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.8",
+  "applyable": false,
+  "complete": true,
+  "errored": false,
+  "configuration": {
+    "provider_config": {
+      "archive": {
+        "name": "archive",
+        "full_name": "registry.terraform.io/hashicorp/archive",
+        "version_constraint": ">= 2.4.0, < 3.0.0"
+      },
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": ">= 5.0.0, < 7.0.0",
+        "expressions": {
+          "allowed_account_ids": {
+            "constant_value": [
+              "585192672263"
+            ]
+          },
+          "region": {
+            "constant_value": "us-west-2"
+          }
+        }
+      }
+    },
+    "root_module": {
+      "outputs": {
+        "candidate_preflight_qualified_arn": {
+          "expression": {
+            "references": [
+              "aws_lambda_function.candidate_preflight.qualified_arn",
+              "aws_lambda_function.candidate_preflight"
+            ]
+          },
+          "description": "Immutable published candidate-preflight Lambda ARN; invoke only this qualified ARN."
+        },
+        "candidate_preflight_version": {
+          "expression": {
+            "references": [
+              "aws_lambda_function.candidate_preflight.version",
+              "aws_lambda_function.candidate_preflight"
+            ]
+          },
+          "description": "Immutable published candidate-preflight Lambda version."
+        }
+      },
+      "resources": [
+        {
+          "address": "aws_cloudwatch_log_group.candidate_preflight",
+          "mode": "managed",
+          "type": "aws_cloudwatch_log_group",
+          "name": "candidate_preflight",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "references": [
+                "local.candidate_preflight_log_group"
+              ]
+            },
+            "retention_in_days": {
+              "constant_value": 90
+            },
+            "tags": {
+              "references": [
+                "local.common_tags"
+              ]
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "aws_iam_role.candidate_preflight",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "candidate_preflight",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {
+              "references": [
+                "data.aws_iam_policy_document.candidate_preflight_assume.json",
+                "data.aws_iam_policy_document.candidate_preflight_assume"
+              ]
+            },
+            "name": {
+              "references": [
+                "local.candidate_preflight_role_name"
+              ]
+            },
+            "tags": {
+              "references": [
+                "local.common_tags"
+              ]
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "aws_iam_role_policy.candidate_preflight",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "candidate_preflight",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "credential-safe-candidate-preflight-v1"
+            },
+            "policy": {
+              "references": [
+                "local.admin_password_secret_arn",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_candidate_version",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_live_alias_name",
+                "local.candidate_preflight_app_function_arn",
+                "local.candidate_preflight_candidate_version",
+                "local.candidate_preflight_log_group_arn"
+              ]
+            },
+            "role": {
+              "references": [
+                "local.candidate_preflight_role_name"
+              ]
+            }
+          },
+          "schema_version": 0,
+          "depends_on": [
+            "aws_iam_role.candidate_preflight"
+          ]
+        },
+        {
+          "address": "aws_lambda_function.candidate_preflight",
+          "mode": "managed",
+          "type": "aws_lambda_function",
+          "name": "candidate_preflight",
+          "provider_config_key": "aws",
+          "expressions": {
+            "architectures": {
+              "constant_value": [
+                "arm64"
+              ]
+            },
+            "environment": [
+              {
+                "variables": {
+                  "references": [
+                    "local.admin_password_secret_arn",
+                    "local.candidate_preflight_app_function_name",
+                    "local.candidate_preflight_artifact_reference",
+                    "local.candidate_preflight_candidate_revision_id",
+                    "local.candidate_preflight_candidate_version",
+                    "local.candidate_preflight_image_digest",
+                    "local.candidate_preflight_live_alias_name",
+                    "local.candidate_preflight_live_revision_id",
+                    "local.candidate_preflight_live_version",
+                    "local.candidate_preflight_source_commit",
+                    "local.candidate_preflight_classification_sha256",
+                    "local.candidate_preflight_handler_sha256"
+                  ]
+                }
+              }
+            ],
+            "filename": {
+              "references": [
+                "data.archive_file.candidate_preflight.output_path",
+                "data.archive_file.candidate_preflight"
+              ]
+            },
+            "function_name": {
+              "references": [
+                "local.candidate_preflight_function_name"
+              ]
+            },
+            "handler": {
+              "constant_value": "handler.handler"
+            },
+            "memory_size": {
+              "constant_value": 128
+            },
+            "publish": {
+              "constant_value": true
+            },
+            "reserved_concurrent_executions": {
+              "constant_value": 1
+            },
+            "role": {
+              "references": [
+                "local.candidate_preflight_role_arn"
+              ]
+            },
+            "runtime": {
+              "constant_value": "python3.13"
+            },
+            "source_code_hash": {
+              "references": [
+                "data.archive_file.candidate_preflight.output_base64sha256",
+                "data.archive_file.candidate_preflight"
+              ]
+            },
+            "tags": {
+              "references": [
+                "local.common_tags"
+              ]
+            },
+            "timeout": {
+              "constant_value": 120
+            }
+          },
+          "schema_version": 0,
+          "depends_on": [
+            "aws_cloudwatch_log_group.candidate_preflight",
+            "aws_iam_role_policy.candidate_preflight"
+          ]
+        },
+        {
+          "address": "data.archive_file.candidate_preflight",
+          "mode": "data",
+          "type": "archive_file",
+          "name": "candidate_preflight",
+          "provider_config_key": "archive",
+          "expressions": {
+            "output_path": {
+              "references": [
+                "path.module"
+              ]
+            },
+            "source": [
+              {
+                "content": {
+                  "references": [
+                    "local.candidate_preflight_handler_source"
+                  ]
+                },
+                "filename": {
+                  "constant_value": "handler.py"
+                }
+              },
+              {
+                "content": {
+                  "references": [
+                    "local.candidate_preflight_classification_source"
+                  ]
+                },
+                "filename": {
+                  "constant_value": "classification.v1.json"
+                }
+              }
+            ],
+            "type": {
+              "constant_value": "zip"
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "data.aws_iam_policy_document.candidate_preflight_assume",
+          "mode": "data",
+          "type": "aws_iam_policy_document",
+          "name": "candidate_preflight_assume",
+          "provider_config_key": "aws",
+          "expressions": {
+            "statement": [
+              {
+                "actions": {
+                  "constant_value": [
+                    "sts:AssumeRole"
+                  ]
+                },
+                "principals": [
+                  {
+                    "identifiers": {
+                      "constant_value": [
+                        "lambda.amazonaws.com"
+                      ]
+                    },
+                    "type": {
+                      "constant_value": "Service"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "data.aws_secretsmanager_secret.admin_password",
+          "mode": "data",
+          "type": "aws_secretsmanager_secret",
+          "name": "admin_password",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "honua-demo-demo/admin-password"
+            }
+          },
+          "schema_version": 0
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "address": {
+        "to_display": "aws_lambda_function.candidate_preflight"
+      },
+      "status": "pass"
+    },
+    {
+      "address": {
+        "to_display": "check.default_workspace_only"
+      },
+      "status": "pass"
+    },
+    {
+      "address": {
+        "to_display": "data.archive_file.candidate_preflight"
+      },
+      "status": "pass"
+    },
+    {
+      "address": {
+        "to_display": "data.aws_secretsmanager_secret.admin_password"
+      },
+      "status": "pass"
+    }
+  ],
+  "resource_changes": [
+    {
+      "address": "aws_cloudwatch_log_group.candidate_preflight",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "/aws/lambda/honua-demo-demo-candidate-preflight"
+        },
+        "after": {
+          "name": "/aws/lambda/honua-demo-demo-candidate-preflight"
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.candidate_preflight",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "honua-demo-demo-candidate-preflight-role",
+          "inline_policy": [
+            {
+              "name": "credential-safe-candidate-preflight-v1",
+              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
+            }
+          ]
+        },
+        "after": {
+          "name": "honua-demo-demo-candidate-preflight-role",
+          "inline_policy": [
+            {
+              "name": "credential-safe-candidate-preflight-v1",
+              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
+            }
+          ]
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "inline_policy": [
+            {}
+          ]
+        },
+        "after_sensitive": {
+          "inline_policy": [
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.candidate_preflight",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "credential-safe-candidate-preflight-v1",
+          "role": "honua-demo-demo-candidate-preflight-role",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+        },
+        "after": {
+          "name": "credential-safe-candidate-preflight-v1",
+          "role": "honua-demo-demo-candidate-preflight-role",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_lambda_function.candidate_preflight",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "function_name": "honua-demo-demo-candidate-preflight",
+          "layers": []
+        },
+        "after": {
+          "function_name": "honua-demo-demo-candidate-preflight",
+          "layers": []
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "layers": []
+        },
+        "after_sensitive": {
+          "layers": []
+        }
+      }
+    }
+  ],
+  "output_changes": {
+    "candidate_preflight_qualified_arn": {
+      "actions": [
+        "no-op"
+      ],
+      "before": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1",
+      "after": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    },
+    "candidate_preflight_version": {
+      "actions": [
+        "no-op"
+      ],
+      "before": "1",
+      "after": "1",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    }
+  },
+  "resource_drift": [
+    {
+      "address": "aws_iam_role.candidate_preflight",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "name": "honua-demo-demo-candidate-preflight-role",
+          "inline_policy": []
+        },
+        "after": {
+          "name": "honua-demo-demo-candidate-preflight-role",
+          "inline_policy": [
+            {
+              "name": "credential-safe-candidate-preflight-v1",
+              "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+            }
+          ]
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "inline_policy": []
+        },
+        "after_sensitive": {
+          "inline_policy": [
+            {}
+          ]
+        },
+        "replace_paths": []
+      }
+    },
+    {
+      "address": "aws_lambda_function.candidate_preflight",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "function_name": "honua-demo-demo-candidate-preflight",
+          "layers": null
+        },
+        "after": {
+          "function_name": "honua-demo-demo-candidate-preflight",
+          "layers": []
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {
+          "layers": []
+        },
+        "replace_paths": []
+      }
+    }
+  ]
+}
