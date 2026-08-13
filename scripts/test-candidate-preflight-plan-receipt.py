@@ -44,6 +44,12 @@ class CandidatePreflightPlanReceiptTests(unittest.TestCase):
     def test_exact_receipt_passes(self):
         RECEIPT.validate_receipt(valid_receipt(), MERGED_SHA)
 
+    def test_cross_checkout_is_only_allowed_for_exact_deployment(self):
+        RECEIPT.validate_checkout_binding(RECEIPT.DEPLOYMENT_SHA, "b" * 40)
+        RECEIPT.validate_checkout_binding(MERGED_SHA, MERGED_SHA)
+        with self.assertRaises(RuntimeError):
+            RECEIPT.validate_checkout_binding(MERGED_SHA, "b" * 40)
+
     def test_schema_hash_and_keyset_mutations_fail_closed(self):
         mutations = {
             "root extra": lambda r: r.update(extra=True),

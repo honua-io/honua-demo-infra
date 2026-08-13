@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 MERGED_SHA EVIDENCE_DIR" >&2
+if [[ $# -ne 3 ]]; then
+  echo "usage: $0 GOVERNANCE_SHA DEPLOYMENT_SHA EVIDENCE_DIR" >&2
   exit 64
 fi
 
-readonly MERGED_SHA="$1"
-readonly EVIDENCE_DIR="$2"
+readonly GOVERNANCE_SHA="$1"
+readonly DEPLOYMENT_SHA="$2"
+readonly EVIDENCE_DIR="$3"
 readonly ARCHIVE="stacks/aws-candidate-preflight/candidate-preflight.zip"
 readonly HELPER_NAME="honua-demo-demo-candidate-preflight"
 readonly ROLE_NAME="${HELPER_NAME}-role"
@@ -15,9 +16,15 @@ readonly POLICY_NAME="credential-safe-candidate-preflight-v1"
 readonly IMAGE_DIGEST="sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 readonly CONFIG_DIGEST="sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f"
 
-[[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
+[[ "$GOVERNANCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+test "$DEPLOYMENT_SHA" = "3a00dfd36c298def8f8f49757dd56595d29097cb"
+test "$GOVERNANCE_SHA" != "$DEPLOYMENT_SHA"
+export AWS_MAX_ATTEMPTS=1
+export AWS_RETRY_MODE=standard
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+test "$(git rev-parse HEAD)" = "$GOVERNANCE_SHA"
+test -z "$(git status --porcelain)"
 
 capture_helper_audit() {
   local prefix="$1"
@@ -25,8 +32,8 @@ capture_helper_audit() {
   aws lambda get-function-concurrency --function-name "$HELPER_NAME" > "$EVIDENCE_DIR/$prefix-concurrency.json" || return
   aws iam get-role --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-role.json" || return
   aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" > "$EVIDENCE_DIR/$prefix-role-policy.json" || return
-  aws iam list-attached-role-policies --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-attached-policies.json" || return
-  aws iam list-role-policies --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-inline-policies.json" || return
+  aws iam list-attached-role-policies --no-paginate --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-attached-policies.json" || return
+  aws iam list-role-policies --no-paginate --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-inline-policies.json" || return
 }
 
 capture_ecr_audit() {
@@ -69,21 +76,36 @@ runtime_audit() {
     --inline-policies "$EVIDENCE_DIR/$prefix-inline-policies.json" \
     --ecr-evidence "$EVIDENCE_DIR/$prefix-ecr-evidence.json" \
     --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
-    --merged-sha "$MERGED_SHA" \
-    --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+    --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
+    --governance-sha "$GOVERNANCE_SHA" \
+    --deployment-sha "$DEPLOYMENT_SHA" \
+    --receipt "$EVIDENCE_DIR/governed-deployment-receipt.json"
 }
 
 plan_receipt_verify() {
   python scripts/candidate-preflight-plan-receipt.py verify \
-    --merged-sha "$MERGED_SHA" \
+    --merged-sha "$DEPLOYMENT_SHA" \
+    --checkout-sha "$GOVERNANCE_SHA" \
     --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
     --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
     --archive "$ARCHIVE" \
     --receipt "$EVIDENCE_DIR/plan-receipt.json"
 }
 
+governance_receipt_verify() {
+  python scripts/candidate-preflight-governance-receipt.py verify \
+    --governance-sha "$GOVERNANCE_SHA" \
+    --deployment-sha "$DEPLOYMENT_SHA" \
+    --receipt "$EVIDENCE_DIR/governance-receipt.json"
+}
+
 # Post-apply and pre-invocation gates are entirely fail-fast. Any failure here
 # exits before aws lambda invoke is reachable.
+python scripts/candidate-preflight-governance-receipt.py create \
+  --governance-sha "$GOVERNANCE_SHA" \
+  --deployment-sha "$DEPLOYMENT_SHA" \
+  --receipt "$EVIDENCE_DIR/governance-receipt.json"
+governance_receipt_verify
 plan_receipt_verify
 readonly QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn)"
 readonly HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
@@ -92,13 +114,15 @@ test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:$HELPER_
 capture_helper_audit postapply
 capture_ecr_audit postapply
 runtime_audit create postapply
-sha256sum "$EVIDENCE_DIR/deployment-receipt.json" > "$EVIDENCE_DIR/deployment-receipt.sha256"
+sha256sum "$EVIDENCE_DIR/governed-deployment-receipt.json" > "$EVIDENCE_DIR/governed-deployment-receipt.sha256"
 
-sha256sum --check "$EVIDENCE_DIR/deployment-receipt.sha256"
+sha256sum --check "$EVIDENCE_DIR/governed-deployment-receipt.sha256"
+governance_receipt_verify
 plan_receipt_verify
 capture_helper_audit preinvoke
 capture_ecr_audit preinvoke
 runtime_audit verify preinvoke
+governance_receipt_verify
 
 # Controlled aggregation begins only at invocation. Invocation and semantic
 # failures must not prevent the post-invocation audit, but any failure remains
@@ -118,7 +142,7 @@ if ! python scripts/assert-candidate-preflight-invocation.py create \
   --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
   --payload "$EVIDENCE_DIR/invocation-payload.json" \
   --expected-version "$HELPER_VERSION" \
-  --deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --deployment-receipt "$EVIDENCE_DIR/governed-deployment-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/preinvoke-ecr-evidence.json" \
   --receipt "$EVIDENCE_DIR/invocation-receipt.json"; then
   invocation_status=1
@@ -132,11 +156,14 @@ fi
 if ! runtime_audit verify postinvoke; then
   invocation_status=1
 fi
+if ! governance_receipt_verify; then
+  invocation_status=1
+fi
 if ! python scripts/assert-candidate-preflight-invocation.py verify \
   --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
   --payload "$EVIDENCE_DIR/invocation-payload.json" \
   --expected-version "$HELPER_VERSION" \
-  --deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --deployment-receipt "$EVIDENCE_DIR/governed-deployment-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/postinvoke-ecr-evidence.json" \
   --receipt "$EVIDENCE_DIR/invocation-receipt.json"; then
   invocation_status=1
@@ -145,6 +172,8 @@ if ! sha256sum \
   "$EVIDENCE_DIR/invocation-metadata.json" \
   "$EVIDENCE_DIR/invocation-payload.json" \
   "$EVIDENCE_DIR/invocation-receipt.json" \
+  "$EVIDENCE_DIR/governance-receipt.json" \
+  "$EVIDENCE_DIR/governed-deployment-receipt.json" \
   "$EVIDENCE_DIR/postinvoke-ecr-evidence.json" \
   > "$EVIDENCE_DIR/invocation-artifacts.sha256"; then
   invocation_status=1

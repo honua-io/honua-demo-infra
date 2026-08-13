@@ -136,6 +136,16 @@ policy, empty attached-policy set, exact inline-policy-name set, and normalized
 ECR evidence. Bind them to the reviewed plan receipt and verify the resulting
 deployment receipt before any separately authorized invocation:
 
+The immutable deployment plan receipt remains unchanged and bound to deployment
+commit `3a00dfd36c298def8f8f49757dd56595d29097cb`. Invocation governance runs from a
+different clean, exact merged governance commit. A governance receipt binds that
+commit, the unchanged deployment Terraform/helper source, the operator and
+assertion source hashes, qualified-only payload, disabled tail logging, one AWS
+attempt, and terminal IAM pagination. Arbitrary or equal governance/deployment
+SHA pairs fail closed; never rewrite the historical plan receipt.
+The governed v2 deployment receipt is written to a new file and never
+overwrites the sealed historical v1 deployment receipt.
+
 ```bash
 python scripts/assert-candidate-preflight-runtime.py create \
   --function "$EVIDENCE_DIR/postapply-function.json" \
@@ -145,8 +155,10 @@ python scripts/assert-candidate-preflight-runtime.py create \
   --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
   --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
   --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
-  --merged-sha "$MERGED_SHA" \
+  --governance-sha "$GOVERNANCE_SHA" \
+  --deployment-sha "$DEPLOYMENT_SHA" \
   --receipt "$EVIDENCE_DIR/deployment-receipt.json"
 python scripts/assert-candidate-preflight-runtime.py verify \
   --function "$EVIDENCE_DIR/postapply-function.json" \
@@ -156,8 +168,10 @@ python scripts/assert-candidate-preflight-runtime.py verify \
   --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
   --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
   --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
   --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
-  --merged-sha "$MERGED_SHA" \
+  --governance-sha "$GOVERNANCE_SHA" \
+  --deployment-sha "$DEPLOYMENT_SHA" \
   --receipt "$EVIDENCE_DIR/deployment-receipt.json"
 ```
 
@@ -195,7 +209,9 @@ unqualified helper-name output. After explicit release-owner authorization,
 run the second executable procedure:
 
 ```bash
-scripts/candidate-preflight-invoke.sh "$MERGED_SHA" "$EVIDENCE_DIR"
+GOVERNANCE_SHA="$(git rev-parse HEAD)"
+DEPLOYMENT_SHA="3a00dfd36c298def8f8f49757dd56595d29097cb"
+scripts/candidate-preflight-invoke.sh "$GOVERNANCE_SHA" "$DEPLOYMENT_SHA" "$EVIDENCE_DIR"
 ```
 
 The procedure uses `set -euo pipefail` from post-apply receipt verification
@@ -208,6 +224,9 @@ qualified ARN with tail logging disabled (`--log-type None`). Any post-apply or 
 failure exits before invoke. Controlled failure aggregation begins only at the
 invoke: invoke or semantic assertion failure still attempts the complete
 post-invocation runtime/IAM audit, and the procedure then exits nonzero.
+Both IAM list calls use `--no-paginate`; missing or true `IsTruncated` is a hard
+stop. `AWS_MAX_ATTEMPTS=1` forbids an SDK/CLI retry of the single authorized
+qualified invocation.
 
 The invocation assertion requires transport `StatusCode=200`, no
 `FunctionError`, `ExecutedVersion` equal to the exact published helper version,

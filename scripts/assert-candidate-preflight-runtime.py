@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -26,7 +27,7 @@ HANDLER_SHA256 = "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5
 CLASSIFICATION_SHA256 = "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579"
 IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 PLAN_RECEIPT_SCHEMA = "honua-candidate-preflight-plan-receipt-v1"
-DEPLOYMENT_RECEIPT_SCHEMA = "honua-candidate-preflight-deployment-receipt-v1"
+DEPLOYMENT_RECEIPT_SCHEMA = "honua-candidate-preflight-deployment-receipt-v2"
 ECR_EVIDENCE_SCHEMA = "honua-candidate-preflight-ecr-evidence-v1"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
@@ -37,6 +38,20 @@ SOURCE_HASHES = {
 }
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 MERGED_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+ROOT = Path(__file__).resolve().parents[1]
+GOVERNANCE_ASSERTION = ROOT / "scripts" / "candidate-preflight-governance-receipt.py"
+
+
+def load_governance_assertion():
+    spec = importlib.util.spec_from_file_location("candidate_governance_receipt", GOVERNANCE_ASSERTION)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("governance receipt assertion is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+GOVERNANCE = load_governance_assertion()
 
 
 def load(path: Path) -> dict:
@@ -78,15 +93,18 @@ def validate_plan_receipt(receipt: dict, merged_sha: str) -> None:
     require(receipt["sourceSha256"] == SOURCE_HASHES, "plan receipt source hash set drifted")
 
 
-def validate_deployment_receipt(receipt: dict, merged_sha: str) -> None:
+def validate_deployment_receipt(receipt: dict, governance_sha: str, deployment_sha: str, governance_receipt_sha256: str) -> None:
     require(isinstance(receipt, dict), "deployment receipt must be a JSON object")
     require(
         set(receipt)
-        == {"schema", "mergedSha", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
+        == {"schema", "governanceSha", "deploymentSha", "governanceReceiptSha256", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
         "deployment receipt keyset drifted",
     )
     require(receipt["schema"] == DEPLOYMENT_RECEIPT_SCHEMA, "deployment receipt schema drifted")
-    require(receipt["mergedSha"] == merged_sha, "deployment receipt merged SHA drifted")
+    require(receipt["governanceSha"] == governance_sha, "deployment receipt governance SHA drifted")
+    require(receipt["deploymentSha"] == deployment_sha, "deployment receipt deployment SHA drifted")
+    require(receipt["governanceReceiptSha256"] == governance_receipt_sha256, "deployment receipt governance hash drifted")
+    require(SHA256_PATTERN.fullmatch(receipt["governanceReceiptSha256"]) is not None, "deployment receipt governance hash is invalid")
     require(SHA256_PATTERN.fullmatch(receipt["planReceiptSha256"]) is not None, "deployment receipt plan hash is invalid")
     require(SHA256_PATTERN.fullmatch(receipt["ecrEvidenceSha256"]) is not None, "deployment receipt ECR hash is invalid")
     require(VERSION_PATTERN.fullmatch(receipt["version"]) is not None, "deployment receipt helper version is invalid")
@@ -156,8 +174,10 @@ def audit(args) -> dict:
     attached = load(args.attached_policies)
     inline = load(args.inline_policies)
     plan_receipt = load(args.plan_receipt)
+    governance_receipt = load(args.governance_receipt)
     ecr_evidence = load(args.ecr_evidence)
-    validate_plan_receipt(plan_receipt, args.merged_sha)
+    validate_plan_receipt(plan_receipt, args.deployment_sha)
+    GOVERNANCE.validate_receipt(governance_receipt, args.governance_sha, args.deployment_sha)
     validate_ecr_evidence(ecr_evidence)
 
     version = str(function.get("Version", ""))
@@ -216,7 +236,9 @@ def audit(args) -> dict:
 
     receipt = {
         "schema": DEPLOYMENT_RECEIPT_SCHEMA,
-        "mergedSha": args.merged_sha,
+        "governanceSha": args.governance_sha,
+        "deploymentSha": args.deployment_sha,
+        "governanceReceiptSha256": sha256(args.governance_receipt),
         "planReceiptSha256": sha256(args.plan_receipt),
         "ecrEvidenceSha256": sha256(args.ecr_evidence),
         "qualifiedArn": qualified_arn,
@@ -227,7 +249,7 @@ def audit(args) -> dict:
         "policyName": POLICY_NAME,
         "secretArn": secret_arn,
     }
-    validate_deployment_receipt(receipt, args.merged_sha)
+    validate_deployment_receipt(receipt, args.governance_sha, args.deployment_sha, sha256(args.governance_receipt))
     return receipt
 
 
@@ -241,8 +263,10 @@ def main() -> None:
     parser.add_argument("--attached-policies", type=Path, required=True)
     parser.add_argument("--inline-policies", type=Path, required=True)
     parser.add_argument("--plan-receipt", type=Path, required=True)
+    parser.add_argument("--governance-receipt", type=Path, required=True)
     parser.add_argument("--ecr-evidence", type=Path, required=True)
-    parser.add_argument("--merged-sha", required=True)
+    parser.add_argument("--governance-sha", required=True)
+    parser.add_argument("--deployment-sha", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
     actual = audit(args)
@@ -250,7 +274,7 @@ def main() -> None:
         args.receipt.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     else:
         expected = load(args.receipt)
-        validate_deployment_receipt(expected, args.merged_sha)
+        validate_deployment_receipt(expected, args.governance_sha, args.deployment_sha, sha256(args.governance_receipt))
         if actual != expected:
             raise RuntimeError("published helper differs from the deployment receipt")
     print(f"candidate-preflight runtime audit {args.mode}: PASS")

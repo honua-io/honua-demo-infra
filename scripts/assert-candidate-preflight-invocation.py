@@ -35,7 +35,15 @@ CHECKS = [
 ]
 VERSION_PATTERN = re.compile(r"^[1-9][0-9]*$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-INVOCATION_RECEIPT_SCHEMA = "honua-candidate-preflight-invocation-receipt-v1"
+INVOCATION_RECEIPT_SCHEMA = "honua-candidate-preflight-invocation-receipt-v2"
+DEPLOYMENT_RECEIPT_SCHEMA = "honua-candidate-preflight-deployment-receipt-v2"
+DEPLOYMENT_SHA = "3a00dfd36c298def8f8f49757dd56595d29097cb"
+GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+DEPLOYMENT_RECEIPT_KEYS = {
+    "schema", "governanceSha", "deploymentSha", "governanceReceiptSha256",
+    "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version",
+    "revisionId", "codeSha256", "roleArn", "policyName", "secretArn",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -111,9 +119,15 @@ def build_receipt(
     evidence = load_document(evidence_path)
     assert_invocation(metadata, payload, expected_version)
     require(
-        deployment.get("schema") == "honua-candidate-preflight-deployment-receipt-v1",
+        set(deployment) == DEPLOYMENT_RECEIPT_KEYS and deployment.get("schema") == DEPLOYMENT_RECEIPT_SCHEMA,
         "deployment receipt schema drifted",
     )
+    governance_sha = deployment.get("governanceSha", "")
+    deployment_sha = deployment.get("deploymentSha", "")
+    require(GIT_SHA_PATTERN.fullmatch(governance_sha) is not None, "deployment receipt governance SHA is invalid")
+    require(deployment_sha == DEPLOYMENT_SHA, "deployment receipt is not bound to the immutable deployment")
+    require(governance_sha != deployment_sha, "deployment and governance provenance are not distinct")
+    require(SHA256_PATTERN.fullmatch(deployment.get("governanceReceiptSha256", "")) is not None, "deployment receipt governance hash is invalid")
     require(
         evidence.get("schema") == "honua-candidate-preflight-ecr-evidence-v1",
         "ECR evidence schema drifted",
@@ -125,6 +139,9 @@ def build_receipt(
     )
     return {
         "schema": INVOCATION_RECEIPT_SCHEMA,
+        "governanceSha": governance_sha,
+        "deploymentSha": deployment_sha,
+        "governanceReceiptSha256": deployment["governanceReceiptSha256"],
         "deploymentReceiptSha256": sha256(deployment_path),
         "ecrEvidenceSha256": evidence_hash,
         "invocationMetadataSha256": sha256(metadata_path),
@@ -140,6 +157,9 @@ def validate_receipt(receipt: dict) -> None:
         set(receipt)
         == {
             "schema",
+            "governanceSha",
+            "deploymentSha",
+            "governanceReceiptSha256",
             "deploymentReceiptSha256",
             "ecrEvidenceSha256",
             "invocationMetadataSha256",
@@ -151,7 +171,11 @@ def validate_receipt(receipt: dict) -> None:
         "invocation receipt keyset drifted",
     )
     require(receipt["schema"] == INVOCATION_RECEIPT_SCHEMA, "invocation receipt schema drifted")
+    require(GIT_SHA_PATTERN.fullmatch(receipt["governanceSha"]) is not None, "invocation receipt governance SHA is invalid")
+    require(receipt["deploymentSha"] == DEPLOYMENT_SHA, "invocation receipt deployment SHA drifted")
+    require(receipt["governanceSha"] != receipt["deploymentSha"], "invocation receipt provenance is not distinct")
     for key in (
+        "governanceReceiptSha256",
         "deploymentReceiptSha256",
         "ecrEvidenceSha256",
         "invocationMetadataSha256",

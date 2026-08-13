@@ -88,7 +88,7 @@ class RuntimeAuditTests(unittest.TestCase):
             "inline_policies": {"PolicyNames": [AUDIT.POLICY_NAME], "IsTruncated": False},
             "plan_receipt": {
                 "schema": AUDIT.PLAN_RECEIPT_SCHEMA,
-                "mergedSha": "a" * 40,
+                "mergedSha": AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
                 "terraformVersion": AUDIT.TERRAFORM_VERSION,
                 "planFormatVersion": AUDIT.PLAN_FORMAT_VERSION,
                 "artifacts": {
@@ -97,6 +97,13 @@ class RuntimeAuditTests(unittest.TestCase):
                     "archiveSha256": AUDIT.ARCHIVE_SHA256,
                 },
                 "sourceSha256": AUDIT.SOURCE_HASHES,
+            },
+            "governance_receipt": {
+                "schema": AUDIT.GOVERNANCE.SCHEMA,
+                "governanceSha": "a" * 40,
+                "deploymentSha": AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+                "sourceSha256": AUDIT.GOVERNANCE.source_hashes(),
+                "operatorContract": AUDIT.GOVERNANCE.OPERATOR_CONTRACT,
             },
             "ecr_evidence": {
                 "schema": AUDIT.ECR_EVIDENCE_SCHEMA,
@@ -134,7 +141,11 @@ class RuntimeAuditTests(unittest.TestCase):
             path = self.root / f"{name}.json"
             path.write_text(json.dumps(document), encoding="utf-8")
             paths[name] = path
-        return SimpleNamespace(**paths, merged_sha="a" * 40)
+        return SimpleNamespace(
+            **paths,
+            governance_sha="a" * 40,
+            deployment_sha=AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+        )
 
     def test_exact_qualified_runtime_passes(self):
         receipt = AUDIT.audit(self.args(self.documents))
@@ -154,7 +165,11 @@ class RuntimeAuditTests(unittest.TestCase):
             "DLQ": lambda d: d["function"]["Configuration"].update(DeadLetterConfig={"TargetArn": "arn:bad"}),
             "concurrency": lambda d: d["concurrency"].update(ReservedConcurrentExecutions=2),
             "managed policy": lambda d: d["attached_policies"].update(AttachedPolicies=[{"PolicyArn": "arn:bad"}]),
+            "missing attached pagination": lambda d: d["attached_policies"].pop("IsTruncated"),
+            "truncated attached pagination": lambda d: d["attached_policies"].update(IsTruncated=True),
             "inline policy set": lambda d: d["inline_policies"].update(PolicyNames=[AUDIT.POLICY_NAME, "bad"]),
+            "missing inline pagination": lambda d: d["inline_policies"].pop("IsTruncated"),
+            "truncated inline pagination": lambda d: d["inline_policies"].update(IsTruncated=True),
             "widened policy": lambda d: d["role_policy"]["PolicyDocument"]["Statement"][0].update(Resource=["*"]),
         }
         for label, mutation in mutations.items():
@@ -174,7 +189,7 @@ class RuntimeAuditTests(unittest.TestCase):
         mutations = {
             "root extra": lambda r: r.update(extra=True),
             "schema": lambda r: r.update(schema="wrong"),
-            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "deployment SHA": lambda r: r.update(mergedSha="b" * 40),
             "Terraform version": lambda r: r.update(terraformVersion="1.15.9"),
             "format version": lambda r: r.update(planFormatVersion="1.3"),
             "artifact extra": lambda r: r["artifacts"].update(extra="0" * 64),
@@ -196,7 +211,9 @@ class RuntimeAuditTests(unittest.TestCase):
         mutations = {
             "root extra": lambda r: r.update(extra=True),
             "schema": lambda r: r.update(schema="wrong"),
-            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "governance SHA": lambda r: r.update(governanceSha="b" * 40),
+            "deployment SHA": lambda r: r.update(deploymentSha="b" * 40),
+            "governance receipt hash": lambda r: r.update(governanceReceiptSha256="bad"),
             "plan receipt hash": lambda r: r.update(planReceiptSha256="bad"),
             "qualified ARN": lambda r: r.update(qualifiedArn=r["qualifiedArn"].rsplit(":", 1)[0]),
             "version": lambda r: r.update(version="$LATEST"),
@@ -211,7 +228,25 @@ class RuntimeAuditTests(unittest.TestCase):
             changed = copy.deepcopy(receipt)
             mutation(changed)
             with self.subTest(label=label), self.assertRaises(RuntimeError):
-                AUDIT.validate_deployment_receipt(changed, "a" * 40)
+                AUDIT.validate_deployment_receipt(
+                    changed,
+                    "a" * 40,
+                    AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+                    AUDIT.sha256(self.args(self.documents).governance_receipt),
+                )
+
+    def test_governance_cross_binding_mutations_fail_closed(self):
+        mutations = {
+            "wrong governance": lambda d: d["governance_receipt"].update(governanceSha="b" * 40),
+            "wrong deployment": lambda d: d["governance_receipt"].update(deploymentSha="b" * 40),
+            "wrong controls": lambda d: d["governance_receipt"]["operatorContract"].update(awsMaxAttempts=2),
+            "wrong source": lambda d: d["governance_receipt"]["sourceSha256"].update(**{AUDIT.GOVERNANCE.CONTROL_PATHS[0]: "0" * 64}),
+        }
+        for label, mutation in mutations.items():
+            documents = copy.deepcopy(self.documents)
+            mutation(documents)
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                AUDIT.audit(self.args(documents))
 
     def test_ecr_evidence_mutations_fail_closed(self):
         mutations = {
