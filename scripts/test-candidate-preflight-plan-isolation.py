@@ -39,7 +39,7 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
         cls.root = Path(cls.temporary.name)
         cls.stack = cls.root / "stacks" / "aws-candidate-preflight"
         cls.source = cls.root / "stacks" / "aws" / "candidate-preflight"
-        shutil.copytree(STACK, cls.stack)
+        shutil.copytree(STACK, cls.stack, ignore=shutil.ignore_patterns(".terraform"))
         shutil.copytree(SOURCE, cls.source)
 
         versions_path = cls.stack / "versions.tf"
@@ -146,7 +146,18 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
         before["version"] = "1"
         before["qualified_arn"] = f"arn:aws:lambda:{ASSERTION_MODULE.REGION}:{ASSERTION_MODULE.ACCOUNT}:function:{ASSERTION_MODULE.HELPER_NAME}:1"
         before["qualified_invoke_arn"] = f"arn:aws:apigateway:{ASSERTION_MODULE.REGION}:lambda:path/2015-03-31/functions/{before['qualified_arn']}/invocations"
-        computed = ("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "source_code_size", "version")
+        passthrough = {
+            "code_sha256": ASSERTION_MODULE.HISTORICAL_ARCHIVE_BASE64SHA256,
+            "source_code_size": ASSERTION_MODULE.HISTORICAL_ARCHIVE_BYTES,
+        }
+        after.update(passthrough)
+        planned_function = next(
+            item["values"]
+            for item in cls.valid_plan["planned_values"]["root_module"]["resources"]
+            if item["address"] == "aws_lambda_function.candidate_preflight"
+        )
+        planned_function.update(passthrough)
+        computed = ("last_modified", "qualified_arn", "qualified_invoke_arn", "version")
         for name in computed:
             after[name] = None
         function["after_unknown"] = {name: True for name in computed}
@@ -214,7 +225,14 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "policy update": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_iam_role_policy.candidate_preflight")["change"].update(actions=["update"]),
             "wrong prior version": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["before"].update(version="2"),
             "known next version": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(version="2"),
+            "wrong passthrough code hash": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(code_sha256="wrong"),
+            "falsely expected v2 computed code hash": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(code_sha256=ASSERTION_MODULE.ARCHIVE_BASE64SHA256),
+            "wrong passthrough source size": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(source_code_size=ASSERTION_MODULE.ARCHIVE_BYTES),
+            "wrong planned passthrough code hash": lambda p: next(item for item in p["planned_values"]["root_module"]["resources"] if item["address"] == "aws_lambda_function.candidate_preflight")["values"].update(code_sha256="wrong"),
+            "wrong planned passthrough source size": lambda p: next(item for item in p["planned_values"]["root_module"]["resources"] if item["address"] == "aws_lambda_function.candidate_preflight")["values"].update(source_code_size=ASSERTION_MODULE.ARCHIVE_BYTES),
             "extra unknown": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after_unknown"].update(role=True),
+            "missing unknown": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after_unknown"].pop("version"),
+            "wrong v2 source hash": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["after"].update(source_code_hash=ASSERTION_MODULE.HISTORICAL_ARCHIVE_BASE64SHA256),
             "environment widened": lambda p: next(item for item in p["resource_changes"] if item["address"] == "aws_lambda_function.candidate_preflight")["change"]["before"]["environment"][0]["variables"].update(EXPECTED_LIVE_VERSION="38"),
         }.items():
             candidate = copy.deepcopy(self.valid_plan)
