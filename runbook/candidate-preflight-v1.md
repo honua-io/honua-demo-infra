@@ -63,33 +63,14 @@ source, third file, layer, filesystem, dead-letter destination, VPC attachment,
 or copied/derived secret ARN.
 
 After PR merge, use a clean checkout at the exact reviewed merge SHA. Set
-`MERGED_SHA` to that immutable commit and require every command below to pass:
+`MERGED_SHA` to that immutable commit. The executable operator procedure uses
+`set -euo pipefail` across plan creation, validation, receipt binding, every
+pre-apply recheck, and the exact saved-plan apply. Any failed command exits
+before `terraform apply` is reachable:
 
 ```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
 EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-$MERGED_SHA"
-mkdir -p "$EVIDENCE_DIR"
-test "$(git rev-parse HEAD)" = "$MERGED_SHA"
-git diff --exit-code
-git diff --cached --exit-code
-test -z "$(git status --porcelain)"
-terraform -chdir=stacks/aws-candidate-preflight init -input=false -lockfile=readonly
-terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out="$EVIDENCE_DIR/candidate-preflight.tfplan"
-terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/candidate-preflight.show.json"
-python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/candidate-preflight.show.json"
-test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554"
-python scripts/candidate-preflight-plan-receipt.py create \
-  --merged-sha "$MERGED_SHA" \
-  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
-  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
-  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
-  --receipt "$EVIDENCE_DIR/plan-receipt.json"
-sha256sum \
-  "$EVIDENCE_DIR/candidate-preflight.tfplan" \
-  "$EVIDENCE_DIR/candidate-preflight.show.json" \
-  stacks/aws-candidate-preflight/candidate-preflight.zip \
-  "$EVIDENCE_DIR/plan-receipt.json" \
-  > "$EVIDENCE_DIR/reviewed-artifacts.sha256"
+scripts/candidate-preflight-plan-apply.sh "$MERGED_SHA" "$EVIDENCE_DIR"
 ```
 
 Keep the saved plan, show JSON, generated ZIP, ZIP checksum, `MERGED_SHA`, and
@@ -100,28 +81,10 @@ outputs, child modules, or resources beyond the exact helper graph. It verifies
 the exact role ARN, least-privilege IAM, environment, source member hashes,
 ZIP `source_code_hash`, filename, and absence of layers/VPC/filesystems/DLQ.
 
-Immediately before an authorized apply, repeat the clean-SHA checks and verify
-the plan, show JSON, ZIP, and receipt hashes. Re-render and re-assert that same
-saved plan, then require the new show JSON to be byte-identical. Apply only the
-exact saved plan; do not re-plan or regenerate the ZIP:
-
-```bash
-test "$(git rev-parse HEAD)" = "$MERGED_SHA"
-git diff --exit-code
-git diff --cached --exit-code
-test -z "$(git status --porcelain)"
-sha256sum --check "$EVIDENCE_DIR/reviewed-artifacts.sha256"
-python scripts/candidate-preflight-plan-receipt.py verify \
-  --merged-sha "$MERGED_SHA" \
-  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
-  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
-  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
-  --receipt "$EVIDENCE_DIR/plan-receipt.json"
-terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/preapply.show.json"
-python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/preapply.show.json"
-cmp "$EVIDENCE_DIR/candidate-preflight.show.json" "$EVIDENCE_DIR/preapply.show.json"
-terraform -chdir=stacks/aws-candidate-preflight apply "$EVIDENCE_DIR/candidate-preflight.tfplan"
-```
+The procedure hashes the saved plan and show JSON immediately after assertion,
+then repeats the clean-SHA check, receipt/hash verification, exact saved-plan
+show, plan assertion, and byte comparison immediately before applying that same
+file. It never replans or regenerates the ZIP between review and apply.
 
 Any mismatch is a hard stop. Do not use `terraform state` editing, `-target`,
 `ignore_changes`, a copied secret ARN, an unsaved plan, or a dirty/different
@@ -143,115 +106,23 @@ code instead.
 ## Published-helper receipt and authorized invocation
 
 The apply publishes an immutable helper version. There is deliberately no
-unqualified helper-name output. Capture the qualified ARN and numeric version,
-then record a deployment receipt after auditing the exact function, concurrency,
-role, inline policy, and absence of managed-policy attachments:
+unqualified helper-name output. After explicit release-owner authorization,
+run the second executable procedure:
 
 ```bash
-QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn)"
-HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
-test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:$HELPER_VERSION"
-
-capture_helper_audit() (
-  set -e
-  prefix="$1"
-  aws lambda get-function --function-name "$QUALIFIED_ARN" > "$EVIDENCE_DIR/$prefix-function.json"
-  aws lambda get-function-concurrency --function-name honua-demo-demo-candidate-preflight > "$EVIDENCE_DIR/$prefix-concurrency.json"
-  aws iam get-role --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-role.json"
-  aws iam get-role-policy --role-name honua-demo-demo-candidate-preflight-role --policy-name credential-safe-candidate-preflight-v1 > "$EVIDENCE_DIR/$prefix-role-policy.json"
-  aws iam list-attached-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-attached-policies.json"
-  aws iam list-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-inline-policies.json"
-)
-
-python scripts/candidate-preflight-plan-receipt.py verify \
-  --merged-sha "$MERGED_SHA" \
-  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
-  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
-  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
-  --receipt "$EVIDENCE_DIR/plan-receipt.json"
-capture_helper_audit postapply
-python scripts/assert-candidate-preflight-runtime.py create \
-  --function "$EVIDENCE_DIR/postapply-function.json" \
-  --concurrency "$EVIDENCE_DIR/postapply-concurrency.json" \
-  --role "$EVIDENCE_DIR/postapply-role.json" \
-  --role-policy "$EVIDENCE_DIR/postapply-role-policy.json" \
-  --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
-  --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
-  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
-  --merged-sha "$MERGED_SHA" \
-  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
-sha256sum "$EVIDENCE_DIR/deployment-receipt.json" > "$EVIDENCE_DIR/deployment-receipt.sha256"
+scripts/candidate-preflight-invoke.sh "$MERGED_SHA" "$EVIDENCE_DIR"
 ```
 
-The runtime audit requires the exact qualified `FunctionArn`, numeric `Version`,
+The procedure uses `set -euo pipefail` from post-apply receipt verification
+through all pre-invocation gates. The runtime audit requires the exact qualified `FunctionArn`, numeric `Version`,
 ZIP `CodeSha256`, `RevisionId`, runtime, architecture, handler, role, environment,
 layers, VPC, filesystem, dead-letter configuration, reserved concurrency, role
 trust, inline policy, and attachment sets. Before invocation, re-read everything
 and require exact agreement with the deployment receipt. Invoke only the
-qualified ARN with tail logging disabled:
-
-```bash
-sha256sum --check "$EVIDENCE_DIR/deployment-receipt.sha256"
-python scripts/candidate-preflight-plan-receipt.py verify \
-  --merged-sha "$MERGED_SHA" \
-  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
-  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
-  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
-  --receipt "$EVIDENCE_DIR/plan-receipt.json"
-capture_helper_audit preinvoke
-python scripts/assert-candidate-preflight-runtime.py verify \
-  --function "$EVIDENCE_DIR/preinvoke-function.json" \
-  --concurrency "$EVIDENCE_DIR/preinvoke-concurrency.json" \
-  --role "$EVIDENCE_DIR/preinvoke-role.json" \
-  --role-policy "$EVIDENCE_DIR/preinvoke-role-policy.json" \
-  --attached-policies "$EVIDENCE_DIR/preinvoke-attached-policies.json" \
-  --inline-policies "$EVIDENCE_DIR/preinvoke-inline-policies.json" \
-  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
-  --merged-sha "$MERGED_SHA" \
-  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
-
-invocation_status=0
-if ! aws lambda invoke \
-  --function-name "$QUALIFIED_ARN" \
-  --cli-binary-format raw-in-base64-out \
-  --invocation-type RequestResponse \
-  --log-type None \
-  --payload '{"operation":"candidate-preflight-v1"}' \
-  "$EVIDENCE_DIR/invocation-payload.json" \
-  > "$EVIDENCE_DIR/invocation-metadata.json"; then
-  invocation_status=1
-fi
-if ! python scripts/assert-candidate-preflight-invocation.py \
-  --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
-  --payload "$EVIDENCE_DIR/invocation-payload.json" \
-  --expected-version "$HELPER_VERSION"; then
-  invocation_status=1
-fi
-
-# Always attempt the post-invocation audit, including after invoke/assert failure.
-if ! capture_helper_audit postinvoke; then
-  invocation_status=1
-fi
-if ! python scripts/assert-candidate-preflight-runtime.py verify \
-  --function "$EVIDENCE_DIR/postinvoke-function.json" \
-  --concurrency "$EVIDENCE_DIR/postinvoke-concurrency.json" \
-  --role "$EVIDENCE_DIR/postinvoke-role.json" \
-  --role-policy "$EVIDENCE_DIR/postinvoke-role-policy.json" \
-  --attached-policies "$EVIDENCE_DIR/postinvoke-attached-policies.json" \
-  --inline-policies "$EVIDENCE_DIR/postinvoke-inline-policies.json" \
-  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
-  --merged-sha "$MERGED_SHA" \
-  --receipt "$EVIDENCE_DIR/deployment-receipt.json"; then
-  invocation_status=1
-fi
-if ! sha256sum \
-  "$EVIDENCE_DIR/invocation-metadata.json" \
-  "$EVIDENCE_DIR/invocation-payload.json" \
-  > "$EVIDENCE_DIR/invocation-artifacts.sha256"; then
-  invocation_status=1
-fi
-test "$invocation_status" -eq 0
-```
+qualified ARN with tail logging disabled (`--log-type None`). Any post-apply or pre-invocation gate
+failure exits before invoke. Controlled failure aggregation begins only at the
+invoke: invoke or semantic assertion failure still attempts the complete
+post-invocation runtime/IAM audit, and the procedure then exits nonzero.
 
 The invocation assertion requires transport `StatusCode=200`, no
 `FunctionError`, `ExecutedVersion` equal to the exact published helper version,

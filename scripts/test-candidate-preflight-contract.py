@@ -14,6 +14,8 @@ IAC_VERSIONS = ROOT / "stacks" / "aws-candidate-preflight" / "versions.tf"
 HANDLER = ROOT / "stacks" / "aws" / "candidate-preflight" / "handler.py"
 MANIFEST = ROOT / "stacks" / "aws" / "candidate-preflight" / "classification.v1.json"
 RUNBOOK = ROOT / "runbook" / "candidate-preflight-v1.md"
+PLAN_APPLY_PROCEDURE = ROOT / "scripts" / "candidate-preflight-plan-apply.sh"
+INVOKE_PROCEDURE = ROOT / "scripts" / "candidate-preflight-invoke.sh"
 MAIN = ROOT / "stacks" / "aws" / "main.tf"
 INTERFACE = ROOT / "stacks" / "aws" / "validation" / "honua-module-interface"
 
@@ -122,37 +124,35 @@ class CandidatePreflightContractTests(unittest.TestCase):
 
     def test_runbook_keeps_execution_manual_and_non_mutating(self):
         runbook = RUNBOOK.read_text(encoding="utf-8")
+        plan_apply = PLAN_APPLY_PROCEDURE.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
         self.assertIn("operator-invoked", runbook)
         self.assertIn("candidate-preflight-v1", runbook)
         self.assertIn("--log-type None", runbook)
         self.assertIn("does not move `live`", runbook)
         self.assertIn("does not run migrations", runbook)
         self.assertIn("Do not invoke", runbook)
-        self.assertIn("assert-candidate-preflight-plan.py", runbook)
-        self.assertIn("-refresh=false", runbook)
-        self.assertIn("git diff --exit-code", runbook)
-        self.assertIn("candidate_preflight_qualified_arn", runbook)
-        self.assertIn("candidate-preflight-plan-receipt.py", runbook)
-        self.assertIn("assert-candidate-preflight-runtime.py", runbook)
-        self.assertIn("assert-candidate-preflight-invocation.py", runbook)
-        self.assertIn("invocation-metadata.json", runbook)
-        self.assertIn("invocation-payload.json", runbook)
+        self.assertIn("-refresh=false", plan_apply)
+        self.assertIn("candidate-preflight-plan-apply.sh", runbook)
+        self.assertIn("candidate-preflight-invoke.sh", runbook)
+        self.assertIn("assert-candidate-preflight-plan.py", plan_apply)
+        self.assertIn("git diff --exit-code", plan_apply)
+        self.assertIn("candidate-preflight-plan-receipt.py", plan_apply + invoke)
+        self.assertIn("candidate_preflight_qualified_arn", invoke)
+        self.assertIn("assert-candidate-preflight-runtime.py", invoke)
+        self.assertIn("assert-candidate-preflight-invocation.py", invoke)
         self.assertNotIn("candidate_preflight_function_name", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
 
-    def test_runbook_init_is_readonly_and_negative_mutation_is_rejected(self):
-        runbook = RUNBOOK.read_text(encoding="utf-8")
-
-        def require_readonly_init(document: str) -> None:
-            commands = [line for line in document.splitlines() if line.startswith("terraform -chdir=stacks/aws-candidate-preflight init")]
-            self.assertEqual(
-                ["terraform -chdir=stacks/aws-candidate-preflight init -input=false -lockfile=readonly"],
-                commands,
-            )
-
-        require_readonly_init(runbook)
-        with self.assertRaises(AssertionError):
-            require_readonly_init(runbook.replace(" -lockfile=readonly", ""))
+    def test_operator_procedures_are_fail_fast_and_readonly_initialized(self):
+        plan_apply = PLAN_APPLY_PROCEDURE.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
+        self.assertTrue(plan_apply.startswith("#!/usr/bin/env bash\nset -euo pipefail\n"))
+        self.assertTrue(invoke.startswith("#!/usr/bin/env bash\nset -euo pipefail\n"))
+        self.assertIn("init -input=false -lockfile=readonly", plan_apply)
+        self.assertIn('apply "$EVIDENCE_DIR/candidate-preflight.tfplan"', plan_apply)
+        self.assertIn("Controlled aggregation begins only at invocation", invoke)
+        self.assertIn("capture_helper_audit postinvoke", invoke)
 
 
 if __name__ == "__main__":

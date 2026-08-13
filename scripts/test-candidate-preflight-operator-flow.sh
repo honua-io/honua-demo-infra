@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly TEMP_ROOT="$(mktemp -d)"
+readonly MOCK_BIN="$TEMP_ROOT/bin"
+readonly MOCK_LOG="$TEMP_ROOT/commands.log"
+readonly MOCK_COUNT="$TEMP_ROOT/failure-count"
+readonly MERGED_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+trap 'rm -rf "$TEMP_ROOT"' EXIT
+mkdir -p "$MOCK_BIN"
+
+cat > "$MOCK_BIN/dispatcher" <<'PY'
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+
+command = Path(sys.argv[0]).name
+args = sys.argv[1:]
+line = " ".join([command, *args])
+log = Path(os.environ["MOCK_LOG"])
+with log.open("a", encoding="utf-8") as stream:
+    stream.write(line + "\n")
+
+match = os.environ.get("MOCK_FAIL_MATCH", "")
+if match and match in line:
+    count_path = Path(os.environ["MOCK_COUNT"])
+    count = int(count_path.read_text(encoding="utf-8")) + 1 if count_path.exists() else 1
+    count_path.write_text(str(count), encoding="utf-8")
+    if count == int(os.environ.get("MOCK_FAIL_AT", "1")):
+        raise SystemExit(71)
+
+if command == "git" and args[:2] == ["rev-parse", "--show-toplevel"]:
+    print(os.environ["MOCK_REPO_ROOT"])
+elif command == "git" and args[:2] == ["rev-parse", "HEAD"]:
+    print(os.environ["MOCK_MERGED_SHA"])
+elif command == "terraform" and "output" in args:
+    if args[-1] == "candidate_preflight_qualified_arn":
+        print("arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1")
+    elif args[-1] == "candidate_preflight_version":
+        print("1")
+elif command == "terraform" and "show" in args:
+    print("{}")
+elif command == "sha256sum" and (not args or args[0] != "--check"):
+    for path in args:
+        print("52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554  " + path)
+elif command == "aws" and args[:2] == ["lambda", "invoke"]:
+    print('{"StatusCode":200,"ExecutedVersion":"1"}')
+PY
+chmod +x "$MOCK_BIN/dispatcher"
+for command in git terraform python sha256sum cmp aws; do
+  cp "$MOCK_BIN/dispatcher" "$MOCK_BIN/$command"
+done
+
+export PATH="$MOCK_BIN:$PATH"
+export MOCK_LOG MOCK_COUNT
+export MOCK_REPO_ROOT="$ROOT"
+export MOCK_MERGED_SHA="$MERGED_SHA"
+
+reset_case() {
+  : > "$MOCK_LOG"
+  rm -f "$MOCK_COUNT"
+  unset MOCK_FAIL_MATCH MOCK_FAIL_AT
+}
+
+run_script() {
+  local script="$1"
+  local evidence="$2"
+  mkdir -p "$evidence"
+  set +e
+  bash "$script" "$MERGED_SHA" "$evidence"
+  local status=$?
+  set -e
+  return "$status"
+}
+
+assert_no_apply() {
+  ! grep -Fq "terraform -chdir=stacks/aws-candidate-preflight apply " "$MOCK_LOG"
+}
+
+assert_no_invoke() {
+  ! grep -Fq "aws lambda invoke " "$MOCK_LOG"
+}
+
+reset_case
+run_script "$ROOT/scripts/candidate-preflight-plan-apply.sh" "$TEMP_ROOT/plan-success"
+grep -Fq "terraform -chdir=stacks/aws-candidate-preflight apply " "$MOCK_LOG"
+
+plan_failures=(
+  "terraform -chdir=stacks/aws-candidate-preflight init|1"
+  "terraform -chdir=stacks/aws-candidate-preflight plan|1"
+  "python scripts/assert-candidate-preflight-plan.py|1"
+  "python scripts/candidate-preflight-plan-receipt.py create|1"
+  "git diff --exit-code|2"
+  "sha256sum --check|1"
+  "python scripts/candidate-preflight-plan-receipt.py verify|1"
+  "terraform -chdir=stacks/aws-candidate-preflight show|2"
+  "python scripts/assert-candidate-preflight-plan.py|2"
+  "cmp |1"
+)
+for fixture in "${plan_failures[@]}"; do
+  reset_case
+  export MOCK_FAIL_MATCH="${fixture%|*}"
+  export MOCK_FAIL_AT="${fixture##*|}"
+  if run_script "$ROOT/scripts/candidate-preflight-plan-apply.sh" "$TEMP_ROOT/plan-failure"; then
+    echo "expected plan/apply gate failure: $fixture" >&2
+    exit 1
+  fi
+  assert_no_apply
+done
+
+reset_case
+run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/invoke-success"
+grep -Fq "aws lambda invoke " "$MOCK_LOG"
+test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
+
+preinvoke_failures=(
+  "python scripts/candidate-preflight-plan-receipt.py verify|1"
+  "terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn|1"
+  "aws lambda get-function --|1"
+  "python scripts/assert-candidate-preflight-runtime.py create|1"
+  "sha256sum --check|1"
+  "python scripts/candidate-preflight-plan-receipt.py verify|2"
+  "aws lambda get-function --|2"
+  "python scripts/assert-candidate-preflight-runtime.py verify|1"
+)
+for fixture in "${preinvoke_failures[@]}"; do
+  reset_case
+  export MOCK_FAIL_MATCH="${fixture%|*}"
+  export MOCK_FAIL_AT="${fixture##*|}"
+  if run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/preinvoke-failure"; then
+    echo "expected pre-invocation gate failure: $fixture" >&2
+    exit 1
+  fi
+  assert_no_invoke
+done
+
+postinvoke_failures=(
+  "aws lambda invoke|1"
+  "python scripts/assert-candidate-preflight-invocation.py|1"
+  "aws lambda get-function --|3"
+  "python scripts/assert-candidate-preflight-runtime.py verify|2"
+)
+for fixture in "${postinvoke_failures[@]}"; do
+  reset_case
+  export MOCK_FAIL_MATCH="${fixture%|*}"
+  export MOCK_FAIL_AT="${fixture##*|}"
+  if run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/postinvoke-failure"; then
+    echo "expected invocation/post-audit failure: $fixture" >&2
+    exit 1
+  fi
+  grep -Fq "aws lambda invoke " "$MOCK_LOG"
+  test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
+done
+
+echo "candidate-preflight operator control flow: PASS"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -11,10 +12,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "assert-candidate-preflight-invocation.py"
+HANDLER_TEST_SCRIPT = ROOT / "scripts" / "test-candidate-preflight-handler.py"
 
 
-def load_module():
-    spec = importlib.util.spec_from_file_location("invocation_assertion", SCRIPT)
+def load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError("could not load invocation assertion")
     module = importlib.util.module_from_spec(spec)
@@ -22,7 +24,8 @@ def load_module():
     return module
 
 
-ASSERTION = load_module()
+ASSERTION = load_module("invocation_assertion", SCRIPT)
+HANDLER_TEST = load_module("handler_test", HANDLER_TEST_SCRIPT)
 
 
 def valid_payload():
@@ -46,6 +49,19 @@ def valid_payload():
 class InvocationAssertionTests(unittest.TestCase):
     def test_exact_invocation_passes(self):
         ASSERTION.assert_invocation({"StatusCode": 200, "ExecutedVersion": "1"}, valid_payload(), "1")
+        self.assertEqual(
+            "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7",
+            ASSERTION.PENDING_DIGEST,
+        )
+
+    def test_actual_handler_success_result_passes_invocation_assertion(self):
+        case = HANDLER_TEST.CandidatePreflightHandlerTests(methodName="test_success_is_sanitized_and_invokes_only_qualified_candidate")
+        case.setUp()
+        try:
+            payload, *_ = case.execute()
+        finally:
+            case.doCleanups()
+        ASSERTION.assert_invocation({"StatusCode": 200, "ExecutedVersion": "1"}, payload, "1")
 
     def test_every_transport_and_semantic_failure_is_rejected(self):
         mutations = {
@@ -59,7 +75,13 @@ class InvocationAssertionTests(unittest.TestCase):
             "phase": lambda m, p: p["migration"].update(phase="Contract"),
             "count": lambda m, p: p["migration"].update(pendingScriptCount=13),
             "digest": lambda m, p: p["migration"].update(pendingScriptsSha256="wrong"),
-            "checks": lambda m, p: p["checks"].append("extra"),
+            "pending order": lambda m, p: p["migration"].update(
+                pendingScriptsSha256=hashlib.sha256(
+                    "\n".join(reversed(ASSERTION.PENDING_NAMES)).encode("utf-8")
+                ).hexdigest()
+            ),
+            "checks extra": lambda m, p: p["checks"].append("extra"),
+            "checks order": lambda m, p: p.update(checks=list(reversed(p["checks"]))),
             "extra payload": lambda m, p: p.update(extra=True),
         }
         for label, mutation in mutations.items():

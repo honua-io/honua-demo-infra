@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -11,7 +12,16 @@ import re
 
 SCHEMA = "honua-candidate-preflight-result-v1"
 OPERATION = "candidate-preflight-v1"
-PENDING_DIGEST = "f3f369faea3f95940ab4a8ad9c0a26719eefae5eff2dbc8b6a229b198a534438"
+CLASSIFICATION_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "stacks"
+    / "aws"
+    / "candidate-preflight"
+    / "classification.v1.json"
+)
+CLASSIFICATION = json.loads(CLASSIFICATION_PATH.read_text(encoding="utf-8"))
+PENDING_NAMES = [entry["name"] for entry in CLASSIFICATION["scripts"]]
+PENDING_DIGEST = hashlib.sha256("\n".join(PENDING_NAMES).encode("utf-8")).hexdigest()
 CHECKS = [
     "candidate-config",
     "live-alias-pre",
@@ -41,6 +51,12 @@ def load_document(path: Path) -> dict:
 
 
 def assert_invocation(metadata: dict, payload: dict, expected_version: str) -> None:
+    require(
+        CLASSIFICATION.get("schemaVersion") == "honua-candidate-preflight-classification-v1"
+        and len(PENDING_NAMES) == 14
+        and all(entry.get("phase") == "Expand" for entry in CLASSIFICATION["scripts"]),
+        "canonical classification manifest drifted",
+    )
     require(VERSION_PATTERN.fullmatch(expected_version) is not None, "expected helper version is not immutable and numeric")
     require(set(metadata) == {"StatusCode", "ExecutedVersion"}, "invoke metadata schema drifted or contains FunctionError")
     require(metadata["StatusCode"] == 200, "invoke transport status is not 200")
