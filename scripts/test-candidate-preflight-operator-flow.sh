@@ -8,8 +8,10 @@ readonly MOCK_LOG="$TEMP_ROOT/commands.log"
 readonly MOCK_COUNT="$TEMP_ROOT/failure-count"
 readonly MERGED_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 readonly DEPLOYMENT_SHA="3a00dfd36c298def8f8f49757dd56595d29097cb"
+readonly DEPLOYMENT_ROOT="$TEMP_ROOT/candidate-preflight-plan-3a00dfd3"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 mkdir -p "$MOCK_BIN"
+mkdir -p "$DEPLOYMENT_ROOT"
 
 cat > "$MOCK_BIN/dispatcher" <<'PY'
 #!/usr/bin/env python3
@@ -84,7 +86,7 @@ run_script() {
   printf '%s' 'sealed-v1-deployment-receipt' > "$evidence/postapply-deployment-receipt.json"
   set +e
   if [[ "$script" == *candidate-preflight-invoke.sh ]]; then
-    bash "$script" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$evidence"
+    bash "$script" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$evidence" "$DEPLOYMENT_ROOT"
   else
     bash "$script" "$MERGED_SHA" "$evidence"
   fi
@@ -141,14 +143,14 @@ grep -Fq "sha256sum --check" "$MOCK_LOG"
 
 reset_case
 mkdir -p "$TEMP_ROOT/missing-historical"
-if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$TEMP_ROOT/missing-historical"; then
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "$DEPLOYMENT_SHA" "$TEMP_ROOT/missing-historical" "$DEPLOYMENT_ROOT"; then
   echo "expected missing exact historical receipt failure" >&2
   exit 1
 fi
 assert_no_invoke
 
 reset_case
-if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$TEMP_ROOT/wrong-deployment"; then
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$TEMP_ROOT/wrong-deployment" "$DEPLOYMENT_ROOT"; then
   echo "expected wrong deployment binding failure" >&2
   exit 1
 fi
@@ -163,7 +165,7 @@ fi
 assert_no_invoke
 
 reset_case
-if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$DEPLOYMENT_SHA" "$TEMP_ROOT/wrong-governance"; then
+if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$DEPLOYMENT_SHA" "$TEMP_ROOT/wrong-governance" "$DEPLOYMENT_ROOT"; then
   echo "expected wrong governance binding failure" >&2
   exit 1
 fi
@@ -172,6 +174,7 @@ assert_no_invoke
 preinvoke_failures=(
   "python scripts/candidate-preflight-governance-receipt.py create|1"
   "python scripts/candidate-preflight-governance-receipt.py verify|1"
+  "python scripts/materialize-candidate-preflight-archive.py|1"
   "python scripts/candidate-preflight-plan-receipt.py verify|1"
   "terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn|1"
   "aws lambda get-function --|1"

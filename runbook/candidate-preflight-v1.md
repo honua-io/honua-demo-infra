@@ -146,6 +146,18 @@ SHA pairs fail closed; never rewrite the historical plan receipt.
 The governed v2 deployment receipt is written to a new file and never
 overwrites the sealed historical v1 deployment receipt.
 
+The deterministic ZIP is intentionally ignored and is not present in a fresh
+governance checkout. Before receipt verification, the invocation operator
+materializes only the exact archive retained in the exact clean deployment
+worktree `candidate-preflight-plan-3a00dfd3`. The materializer requires the
+deployment worktree at commit `3a00dfd36c298def8f8f49757dd56595d29097cb`,
+the governance worktree at the requested governance commit, the same canonical
+Git repository and origin, unchanged helper/Terraform sources, the exact
+archive SHA-256, and the exact ordered member names and hashes. It repeats the
+byte and member checks after copying, requires the destination to be ignored,
+and requires both worktrees to remain clean. An existing byte-identical archive
+is accepted; an existing different archive fails closed and is never replaced.
+
 Before any invocation audit, verify the preserved historical receipt byte for
 byte and never use it as the v2 output path:
 
@@ -220,8 +232,17 @@ run the second executable procedure:
 ```bash
 GOVERNANCE_SHA="$(git rev-parse HEAD)"
 DEPLOYMENT_SHA="3a00dfd36c298def8f8f49757dd56595d29097cb"
-scripts/candidate-preflight-invoke.sh "$GOVERNANCE_SHA" "$DEPLOYMENT_SHA" "$EVIDENCE_DIR"
+DEPLOYMENT_ROOT="/c/Users/mike/honua-io/.worktrees/candidate-preflight-plan-3a00dfd3"
+scripts/candidate-preflight-invoke.sh "$GOVERNANCE_SHA" "$DEPLOYMENT_SHA" "$EVIDENCE_DIR" "$DEPLOYMENT_ROOT"
 ```
+
+On Windows, open **Git for Windows Bash** explicitly (for example,
+`C:\Program Files\Git\bin\bash.exe`) and run the block there. Do not use the
+default `C:\Windows\System32\bash.exe`: that launches WSL, whose `/mnt/c/...`
+paths cannot resolve this repository's Windows absolute linked-worktree Git
+metadata. The materializer rejects WSL path forms. Do not wrap this procedure
+in Windows PowerShell-generated scripts; Windows PowerShell 5.1 does not support
+`utf8NoBOM` or `[Convert]::ToHexString`, and neither is part of this operator.
 
 The procedure uses `set -euo pipefail` from post-apply receipt verification
 through all pre-invocation gates. The runtime audit requires the exact qualified `FunctionArn`, numeric `Version`,
