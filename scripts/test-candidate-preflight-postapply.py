@@ -90,12 +90,55 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
             "output difference": lambda p: p["output_changes"]["candidate_preflight_version"].update(after="2"),
             "provider": lambda p: p["configuration"]["provider_config"]["aws"]["expressions"]["region"].update(constant_value="us-east-1"),
             "configuration resource": lambda p: p["configuration"]["root_module"]["resources"].append({"address": "aws_db_instance.bad", "mode": "managed", "provider_config_key": "aws"}),
+            "extra resource expression": lambda p: p["configuration"]["root_module"]["resources"][0]["expressions"].update(hostile={"constant_value": True}),
+            "missing resource expression": lambda p: p["configuration"]["root_module"]["resources"][0]["expressions"].pop("name"),
             "child module": lambda p: p["configuration"]["root_module"].update(module_calls={"bad": {}}),
             "failed check": lambda p: p["checks"][0].update(status="fail"),
             "missing check": lambda p: p["checks"].pop(),
         }
         for label, mutation in mutations.items():
             self.assert_rejected(label, mutation)
+
+    def test_every_configuration_expression_mutation_fails_with_noop_actions(self) -> None:
+        def leaves(value, path=()):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key in {"constant_value", "references"}:
+                        yield path + (key,), value, key
+                    else:
+                        yield from leaves(child, path + (key,))
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    yield from leaves(child, path + (str(index),))
+
+        resources = self.valid["configuration"]["root_module"]["resources"]
+        cases = []
+        for index, resource in enumerate(resources):
+            for path, _, key in leaves(resource.get("expressions", {})):
+                cases.append((resource["address"], index, path, key))
+
+        self.assertGreater(len(cases), 0)
+        for address, index, path, key in cases:
+            candidate = copy.deepcopy(self.valid)
+            node = candidate["configuration"]["root_module"]["resources"][index]["expressions"]
+            for component in path[:-1]:
+                node = node[int(component)] if component.isdigit() else node[component]
+            if key == "references":
+                node[key] = [*node[key], "local.hostile_configuration_churn"]
+            else:
+                current = node[key]
+                if isinstance(current, bool):
+                    node[key] = not current
+                elif isinstance(current, int):
+                    node[key] = current + 1
+                elif isinstance(current, list):
+                    node[key] = [*current, "hostile-configuration-churn"]
+                else:
+                    node[key] = "hostile-configuration-churn"
+            with self.subTest(address=address, expression=".".join(path)):
+                self.assertTrue(all(item["change"]["actions"] == ["no-op"] for item in candidate["resource_changes"]))
+                with self.assertRaises(RuntimeError):
+                    POSTAPPLY.assert_postapply(candidate)
 
     def test_every_provider_readback_mutation_fails_closed(self) -> None:
         policy_address = "aws_iam_role.candidate_preflight"

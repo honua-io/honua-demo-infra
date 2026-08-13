@@ -24,31 +24,6 @@ SOURCE_LF_SHA256 = {
     "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",
     "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
 }
-EXPECTED_PROVIDER_CONFIG = {
-    "archive": {
-        "name": "archive",
-        "full_name": "registry.terraform.io/hashicorp/archive",
-        "version_constraint": ">= 2.4.0, < 3.0.0",
-    },
-    "aws": {
-        "name": "aws",
-        "full_name": "registry.terraform.io/hashicorp/aws",
-        "version_constraint": ">= 5.0.0, < 7.0.0",
-        "expressions": {
-            "allowed_account_ids": {"constant_value": ["585192672263"]},
-            "region": {"constant_value": "us-west-2"},
-        },
-    },
-}
-EXPECTED_CONFIGURATION = {
-    "aws_cloudwatch_log_group.candidate_preflight": ("managed", "aws"),
-    "aws_iam_role.candidate_preflight": ("managed", "aws"),
-    "aws_iam_role_policy.candidate_preflight": ("managed", "aws"),
-    "aws_lambda_function.candidate_preflight": ("managed", "aws"),
-    "data.archive_file.candidate_preflight": ("data", "archive"),
-    "data.aws_iam_policy_document.candidate_preflight_assume": ("data", "aws"),
-    "data.aws_secretsmanager_secret.admin_password": ("data", "aws"),
-}
 EXPECTED_RESOURCE_CHANGES = {
     "aws_cloudwatch_log_group.candidate_preflight",
     "aws_iam_role.candidate_preflight",
@@ -94,8 +69,11 @@ def load_preapply_assertion():
     return module
 
 
+PREAPPLY = load_preapply_assertion()
+
+
 def assert_exact_source(configuration_root: Path) -> None:
-    load_preapply_assertion().assert_production_source(configuration_root)
+    PREAPPLY.assert_production_source(configuration_root)
     source_root = configuration_root.parent / "aws" / "candidate-preflight"
     paths = {
         "main.tf": configuration_root / "main.tf",
@@ -128,19 +106,7 @@ def resource_map(plan: dict) -> dict[str, dict]:
 
 
 def assert_configuration(plan: dict) -> None:
-    configuration = plan.get("configuration")
-    require(isinstance(configuration, dict), "post-apply configuration is missing")
-    require(configuration.get("provider_config") == EXPECTED_PROVIDER_CONFIG, "post-apply provider configuration drifted")
-    root = configuration.get("root_module")
-    require(isinstance(root, dict) and not root.get("module_calls"), "post-apply configuration contains a child module")
-    resources = root.get("resources")
-    require(isinstance(resources, list), "post-apply configuration resources are missing")
-    actual: dict[str, tuple[str, str]] = {}
-    for resource in resources:
-        address = resource.get("address")
-        require(isinstance(address, str) and address not in actual, "post-apply configuration address is invalid or duplicated")
-        actual[address] = (resource.get("mode"), resource.get("provider_config_key"))
-    require(actual == EXPECTED_CONFIGURATION, "post-apply configuration graph drifted")
+    PREAPPLY.assert_configuration(plan)
 
 
 def assert_checks(plan: dict) -> None:
