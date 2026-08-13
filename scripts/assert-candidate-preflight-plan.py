@@ -570,7 +570,17 @@ def assert_plan(
     require(function_before["version"] == "1", "helper-v2 publication does not start from version 1")
     require(function_before["qualified_arn"] == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1", "helper-v2 publication v1 qualified ARN drifted")
     require(function_before["qualified_invoke_arn"] == f"arn:aws:apigateway:{REGION}:lambda:path/2015-03-31/functions/arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1/invocations", "helper-v2 publication v1 qualified invoke ARN drifted")
-    computed = {"code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "source_code_size", "version"}
+    provider_passthrough = {
+        "code_sha256": HISTORICAL_ARCHIVE_BASE64SHA256,
+        "source_code_size": HISTORICAL_ARCHIVE_BYTES,
+    }
+    for name, value in provider_passthrough.items():
+        require(function.get(name) == value, f"helper-v2 provider passthrough field {name} drifted")
+        require(
+            planned_resources["aws_lambda_function.candidate_preflight"].get("values", {}).get(name) == value,
+            f"helper-v2 planned provider passthrough field {name} drifted",
+        )
+    computed = {"last_modified", "qualified_arn", "qualified_invoke_arn", "version"}
     def unknown_leaves(value, prefix=()):
         if isinstance(value, dict):
             return {leaf for key, child in value.items() for leaf in unknown_leaves(child, prefix + (key,))}

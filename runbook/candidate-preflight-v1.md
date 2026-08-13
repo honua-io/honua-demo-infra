@@ -100,6 +100,13 @@ it must publish archive SHA-256
 `b4715ea1256a9bf139088b2764d45d2859ed734d063fb4a0fe532bb68a61e299`
 with handler SHA-256
 `589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140`.
+In the pre-apply plan, the configured `source_code_hash` must already be the
+exact version-2 Base64 SHA-256, while the AWS provider-computed `code_sha256`
+and `source_code_size` must remain their exact historical version-1 values until publication:
+`TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA=` and `5646`. Only
+`last_modified`, `qualified_arn`, `qualified_invoke_arn`, and `version` may be
+unknown. Post-apply proof must instead report exact version-2 `code_sha256`
+`tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk=`, size `5732`, and version `2`.
 Apply and any version-2 invocation each require separate release-owner
 authorization, clean merged-SHA evidence directories, and fresh receipts. The
 sealed failed bundles do not authorize either operation.
