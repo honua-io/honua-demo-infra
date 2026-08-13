@@ -89,7 +89,7 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                     RECEIPT.validate_historical_deployment_receipt(path)
 
     def test_real_git_binding_rejects_wrong_head_dirty_nonancestor_drift_and_second_invoke(self):
-        with tempfile.TemporaryDirectory(prefix="candidate-governance-git-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="candidate-governance-git-", ignore_cleanup_errors=True) as temporary:
             root = Path(temporary) / "repo"
             root.mkdir()
 
