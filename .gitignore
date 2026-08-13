@@ -1,5 +1,6 @@
 .terraform/
 .artifacts/
+__pycache__/
 # Local operator inputs/state — terraform.tfvars contains secrets, never commit.
 terraform.tfvars
 *.tfstate
