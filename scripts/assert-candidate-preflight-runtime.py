@@ -18,6 +18,8 @@ ROLE_NAME = f"{NAME}-role"
 ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/{ROLE_NAME}"
 POLICY_NAME = "credential-safe-candidate-preflight-v1"
 CODE_SHA256 = "TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA="
+HELPER_VERSION = "1"
+HELPER_REVISION_ID = "23959775-30a4-4654-a3dd-1e430915e1b1"
 SECRET_PATTERN = re.compile(
     rf"^arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:honua-demo-demo/admin-password-[A-Za-z0-9]{{6}}$"
 )
@@ -97,22 +99,24 @@ def validate_deployment_receipt(receipt: dict, governance_sha: str, deployment_s
     require(isinstance(receipt, dict), "deployment receipt must be a JSON object")
     require(
         set(receipt)
-        == {"schema", "governanceSha", "deploymentSha", "governanceReceiptSha256", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
+        == {"schema", "governanceSha", "deploymentSha", "historicalDeploymentReceiptSha256", "governanceReceiptSha256", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version", "revisionId", "codeSha256", "roleArn", "policyName", "secretArn"},
         "deployment receipt keyset drifted",
     )
     require(receipt["schema"] == DEPLOYMENT_RECEIPT_SCHEMA, "deployment receipt schema drifted")
     require(receipt["governanceSha"] == governance_sha, "deployment receipt governance SHA drifted")
     require(receipt["deploymentSha"] == deployment_sha, "deployment receipt deployment SHA drifted")
+    require(receipt["historicalDeploymentReceiptSha256"] == GOVERNANCE.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256, "deployment receipt historical binding drifted")
     require(receipt["governanceReceiptSha256"] == governance_receipt_sha256, "deployment receipt governance hash drifted")
     require(SHA256_PATTERN.fullmatch(receipt["governanceReceiptSha256"]) is not None, "deployment receipt governance hash is invalid")
     require(SHA256_PATTERN.fullmatch(receipt["planReceiptSha256"]) is not None, "deployment receipt plan hash is invalid")
     require(SHA256_PATTERN.fullmatch(receipt["ecrEvidenceSha256"]) is not None, "deployment receipt ECR hash is invalid")
-    require(VERSION_PATTERN.fullmatch(receipt["version"]) is not None, "deployment receipt helper version is invalid")
+    require(receipt["version"] == HELPER_VERSION, "deployment receipt helper version drifted")
     require(
         receipt["qualifiedArn"] == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{NAME}:{receipt['version']}",
         "deployment receipt qualified ARN drifted",
     )
     require(REVISION_PATTERN.fullmatch(receipt["revisionId"]) is not None, "deployment receipt revision id is invalid")
+    require(receipt["revisionId"] == HELPER_REVISION_ID, "deployment receipt revision id drifted")
     require(receipt["codeSha256"] == CODE_SHA256, "deployment receipt code hash drifted")
     require(receipt["roleArn"] == ROLE_ARN, "deployment receipt role ARN drifted")
     require(receipt["policyName"] == POLICY_NAME, "deployment receipt policy name drifted")
@@ -175,9 +179,11 @@ def audit(args) -> dict:
     inline = load(args.inline_policies)
     plan_receipt = load(args.plan_receipt)
     governance_receipt = load(args.governance_receipt)
+    GOVERNANCE.validate_historical_deployment_receipt(args.historical_deployment_receipt)
     ecr_evidence = load(args.ecr_evidence)
     validate_plan_receipt(plan_receipt, args.deployment_sha)
     GOVERNANCE.validate_receipt(governance_receipt, args.governance_sha, args.deployment_sha)
+    require(governance_receipt["historicalDeploymentReceiptSha256"] == sha256(args.historical_deployment_receipt), "governance receipt is not cross-bound to historical deployment receipt")
     validate_ecr_evidence(ecr_evidence)
 
     version = str(function.get("Version", ""))
@@ -202,7 +208,7 @@ def audit(args) -> dict:
         "SOURCE_CLASSIFICATION_SHA256": CLASSIFICATION_SHA256,
         "SOURCE_HANDLER_SHA256": HANDLER_SHA256,
     }
-    require(VERSION_PATTERN.fullmatch(version) is not None, "helper version is not immutable and numeric")
+    require(version == HELPER_VERSION, "helper version is not the exact deployed immutable version")
     require(function.get("FunctionName") == NAME, "helper function name drifted")
     require(function.get("FunctionArn") == qualified_arn, "helper function ARN is not exactly qualified")
     require(function.get("Runtime") == "python3.13", "helper runtime drifted")
@@ -210,6 +216,7 @@ def audit(args) -> dict:
     require(function.get("Handler") == "handler.handler", "helper handler drifted")
     require(function.get("CodeSha256") == CODE_SHA256, "helper code hash drifted")
     require(REVISION_PATTERN.fullmatch(revision) is not None, "helper revision id is invalid")
+    require(revision == HELPER_REVISION_ID, "helper revision id differs from the sealed deployment")
     require(function.get("PackageType") == "Zip", "helper package type drifted")
     require(function.get("Architectures") == ["arm64"], "helper architecture drifted")
     require(function.get("Timeout") == 120 and function.get("MemorySize") == 128, "helper resource bounds drifted")
@@ -238,6 +245,7 @@ def audit(args) -> dict:
         "schema": DEPLOYMENT_RECEIPT_SCHEMA,
         "governanceSha": args.governance_sha,
         "deploymentSha": args.deployment_sha,
+        "historicalDeploymentReceiptSha256": sha256(args.historical_deployment_receipt),
         "governanceReceiptSha256": sha256(args.governance_receipt),
         "planReceiptSha256": sha256(args.plan_receipt),
         "ecrEvidenceSha256": sha256(args.ecr_evidence),
@@ -264,6 +272,7 @@ def main() -> None:
     parser.add_argument("--inline-policies", type=Path, required=True)
     parser.add_argument("--plan-receipt", type=Path, required=True)
     parser.add_argument("--governance-receipt", type=Path, required=True)
+    parser.add_argument("--historical-deployment-receipt", type=Path, required=True)
     parser.add_argument("--ecr-evidence", type=Path, required=True)
     parser.add_argument("--governance-sha", required=True)
     parser.add_argument("--deployment-sha", required=True)

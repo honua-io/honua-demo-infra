@@ -60,7 +60,7 @@ class RuntimeAuditTests(unittest.TestCase):
                     "Handler": "handler.handler",
                     "CodeSha256": AUDIT.CODE_SHA256,
                     "Version": version,
-                    "RevisionId": "0326e209-4231-4acd-9bb4-d3cb89402db1",
+                    "RevisionId": AUDIT.HELPER_REVISION_ID,
                     "PackageType": "Zip",
                     "Architectures": ["arm64"],
                     "Timeout": 120,
@@ -102,9 +102,11 @@ class RuntimeAuditTests(unittest.TestCase):
                 "schema": AUDIT.GOVERNANCE.SCHEMA,
                 "governanceSha": "a" * 40,
                 "deploymentSha": AUDIT.GOVERNANCE.DEPLOYMENT_SHA,
+                "historicalDeploymentReceiptSha256": AUDIT.GOVERNANCE.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256,
                 "sourceSha256": AUDIT.GOVERNANCE.source_hashes(),
                 "operatorContract": AUDIT.GOVERNANCE.OPERATOR_CONTRACT,
             },
+            "historical_deployment_receipt": AUDIT.GOVERNANCE.HISTORICAL_DEPLOYMENT_RECEIPT,
             "ecr_evidence": {
                 "schema": AUDIT.ECR_EVIDENCE_SCHEMA,
                 "registryId": AUDIT.ACCOUNT,
@@ -139,7 +141,10 @@ class RuntimeAuditTests(unittest.TestCase):
         paths = {}
         for name, document in documents.items():
             path = self.root / f"{name}.json"
-            path.write_text(json.dumps(document), encoding="utf-8")
+            if name == "historical_deployment_receipt":
+                path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            else:
+                path.write_text(json.dumps(document), encoding="utf-8")
             paths[name] = path
         return SimpleNamespace(
             **paths,
@@ -156,6 +161,7 @@ class RuntimeAuditTests(unittest.TestCase):
         mutations = {
             "unqualified ARN": lambda d: d["function"]["Configuration"].update(FunctionArn=f"arn:aws:lambda:us-west-2:585192672263:function:{AUDIT.NAME}"),
             "latest version": lambda d: d["function"]["Configuration"].update(Version="$LATEST"),
+            "later version": lambda d: d["function"]["Configuration"].update(Version="2", FunctionArn=f"arn:aws:lambda:us-west-2:585192672263:function:{AUDIT.NAME}:2"),
             "code": lambda d: d["function"]["Configuration"].update(CodeSha256="wrong"),
             "revision": lambda d: d["function"]["Configuration"].update(RevisionId="wrong"),
             "environment": lambda d: d["function"]["Configuration"]["Environment"]["Variables"].update(EXPECTED_LIVE_VERSION="40"),
@@ -183,7 +189,9 @@ class RuntimeAuditTests(unittest.TestCase):
         receipt = AUDIT.audit(args)
         changed = copy.deepcopy(self.documents)
         changed["function"]["Configuration"]["RevisionId"] = "1326e209-4231-4acd-9bb4-d3cb89402db1"
-        self.assertNotEqual(receipt, AUDIT.audit(self.args(changed)))
+        self.assertEqual(AUDIT.HELPER_REVISION_ID, receipt["revisionId"])
+        with self.assertRaises(RuntimeError):
+            AUDIT.audit(self.args(changed))
 
     def test_plan_receipt_mutations_fail_closed(self):
         mutations = {
@@ -214,6 +222,7 @@ class RuntimeAuditTests(unittest.TestCase):
             "governance SHA": lambda r: r.update(governanceSha="b" * 40),
             "deployment SHA": lambda r: r.update(deploymentSha="b" * 40),
             "governance receipt hash": lambda r: r.update(governanceReceiptSha256="bad"),
+            "historical receipt hash": lambda r: r.update(historicalDeploymentReceiptSha256="bad"),
             "plan receipt hash": lambda r: r.update(planReceiptSha256="bad"),
             "qualified ARN": lambda r: r.update(qualifiedArn=r["qualifiedArn"].rsplit(":", 1)[0]),
             "version": lambda r: r.update(version="$LATEST"),
@@ -241,6 +250,7 @@ class RuntimeAuditTests(unittest.TestCase):
             "wrong deployment": lambda d: d["governance_receipt"].update(deploymentSha="b" * 40),
             "wrong controls": lambda d: d["governance_receipt"]["operatorContract"].update(awsMaxAttempts=2),
             "wrong source": lambda d: d["governance_receipt"]["sourceSha256"].update(**{AUDIT.GOVERNANCE.CONTROL_PATHS[0]: "0" * 64}),
+            "wrong historical receipt": lambda d: d["historical_deployment_receipt"].update(version="2"),
         }
         for label, mutation in mutations.items():
             documents = copy.deepcopy(self.documents)

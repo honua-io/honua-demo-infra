@@ -15,6 +15,7 @@ readonly ROLE_NAME="${HELPER_NAME}-role"
 readonly POLICY_NAME="credential-safe-candidate-preflight-v1"
 readonly IMAGE_DIGEST="sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 readonly CONFIG_DIGEST="sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f"
+readonly HISTORICAL_DEPLOYMENT_RECEIPT_SHA256="20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29"
 
 [[ "$GOVERNANCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 test "$DEPLOYMENT_SHA" = "3a00dfd36c298def8f8f49757dd56595d29097cb"
@@ -25,6 +26,7 @@ readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 test "$(git rev-parse HEAD)" = "$GOVERNANCE_SHA"
 test -z "$(git status --porcelain)"
+echo "$HISTORICAL_DEPLOYMENT_RECEIPT_SHA256  $EVIDENCE_DIR/deployment-receipt.json" | sha256sum --check
 
 capture_helper_audit() {
   local prefix="$1"
@@ -77,6 +79,7 @@ runtime_audit() {
     --ecr-evidence "$EVIDENCE_DIR/$prefix-ecr-evidence.json" \
     --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
     --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
+    --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
     --governance-sha "$GOVERNANCE_SHA" \
     --deployment-sha "$DEPLOYMENT_SHA" \
     --receipt "$EVIDENCE_DIR/governed-deployment-receipt.json"
@@ -96,6 +99,7 @@ governance_receipt_verify() {
   python scripts/candidate-preflight-governance-receipt.py verify \
     --governance-sha "$GOVERNANCE_SHA" \
     --deployment-sha "$DEPLOYMENT_SHA" \
+    --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
     --receipt "$EVIDENCE_DIR/governance-receipt.json"
 }
 
@@ -104,12 +108,14 @@ governance_receipt_verify() {
 python scripts/candidate-preflight-governance-receipt.py create \
   --governance-sha "$GOVERNANCE_SHA" \
   --deployment-sha "$DEPLOYMENT_SHA" \
+  --historical-deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
   --receipt "$EVIDENCE_DIR/governance-receipt.json"
 governance_receipt_verify
 plan_receipt_verify
 readonly QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn)"
 readonly HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
-test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:$HELPER_NAME:$HELPER_VERSION"
+test "$HELPER_VERSION" = "1"
+test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:$HELPER_NAME:1"
 
 capture_helper_audit postapply
 capture_ecr_audit postapply

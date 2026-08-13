@@ -38,9 +38,10 @@ elif command == "git" and args[:2] == ["rev-parse", "HEAD"]:
     print(os.environ["MOCK_MERGED_SHA"])
 elif command == "terraform" and "output" in args:
     if args[-1] == "candidate_preflight_qualified_arn":
-        print("arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1")
+        version = os.environ.get("MOCK_HELPER_VERSION", "1")
+        print(f"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:{version}")
     elif args[-1] == "candidate_preflight_version":
-        print("1")
+        print(os.environ.get("MOCK_HELPER_VERSION", "1"))
 elif command == "terraform" and "show" in args:
     print("{}")
 elif command == "python" and "assert-candidate-preflight-ecr.py" in line and "config-digest" in line:
@@ -69,7 +70,7 @@ export MOCK_MERGED_SHA="$MERGED_SHA"
 reset_case() {
   : > "$MOCK_LOG"
   rm -f "$MOCK_COUNT"
-  unset MOCK_FAIL_MATCH MOCK_FAIL_AT
+  unset MOCK_FAIL_MATCH MOCK_FAIL_AT MOCK_HELPER_VERSION
 }
 
 run_script() {
@@ -125,6 +126,7 @@ done
 reset_case
 run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/invoke-success"
 grep -Fq "aws lambda invoke " "$MOCK_LOG"
+test "$(grep -Fc "aws lambda invoke " "$MOCK_LOG")" -eq 1
 test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 test "$(grep -Fc "aws iam list-attached-role-policies --no-paginate " "$MOCK_LOG")" -eq 3
@@ -134,6 +136,14 @@ test "$(grep -Fc "python scripts/candidate-preflight-governance-receipt.py verif
 reset_case
 if bash "$ROOT/scripts/candidate-preflight-invoke.sh" "$MERGED_SHA" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$TEMP_ROOT/wrong-deployment"; then
   echo "expected wrong deployment binding failure" >&2
+  exit 1
+fi
+assert_no_invoke
+
+reset_case
+export MOCK_HELPER_VERSION=2
+if run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/later-helper"; then
+  echo "expected helper version 2 failure" >&2
   exit 1
 fi
 assert_no_invoke
@@ -187,6 +197,7 @@ for fixture in "${postinvoke_failures[@]}"; do
     exit 1
   fi
   grep -Fq "aws lambda invoke " "$MOCK_LOG"
+  test "$(grep -Fc "aws lambda invoke " "$MOCK_LOG")" -eq 1
   test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
   test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 done

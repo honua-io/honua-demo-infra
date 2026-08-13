@@ -41,7 +41,7 @@ DEPLOYMENT_SHA = "3a00dfd36c298def8f8f49757dd56595d29097cb"
 GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 DEPLOYMENT_RECEIPT_KEYS = {
     "schema", "governanceSha", "deploymentSha", "governanceReceiptSha256",
-    "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version",
+    "historicalDeploymentReceiptSha256", "planReceiptSha256", "ecrEvidenceSha256", "qualifiedArn", "version",
     "revisionId", "codeSha256", "roleArn", "policyName", "secretArn",
 }
 
@@ -68,6 +68,7 @@ def assert_invocation(metadata: dict, payload: dict, expected_version: str) -> N
         "canonical classification manifest drifted",
     )
     require(VERSION_PATTERN.fullmatch(expected_version) is not None, "expected helper version is not immutable and numeric")
+    require(expected_version == "1", "expected helper version is not the exact sealed deployment")
     require(set(metadata) == {"StatusCode", "ExecutedVersion"}, "invoke metadata schema drifted or contains FunctionError")
     require(metadata["StatusCode"] == 200, "invoke transport status is not 200")
     require(metadata["ExecutedVersion"] == expected_version, "invoke executed the wrong helper version")
@@ -128,6 +129,10 @@ def build_receipt(
     require(deployment_sha == DEPLOYMENT_SHA, "deployment receipt is not bound to the immutable deployment")
     require(governance_sha != deployment_sha, "deployment and governance provenance are not distinct")
     require(SHA256_PATTERN.fullmatch(deployment.get("governanceReceiptSha256", "")) is not None, "deployment receipt governance hash is invalid")
+    require(deployment.get("historicalDeploymentReceiptSha256") == "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29", "deployment receipt historical binding drifted")
+    require(deployment.get("version") == "1", "deployment receipt helper version drifted")
+    require(deployment.get("qualifiedArn") == "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1", "deployment receipt helper ARN drifted")
+    require(deployment.get("revisionId") == "23959775-30a4-4654-a3dd-1e430915e1b1", "deployment receipt helper revision drifted")
     require(
         evidence.get("schema") == "honua-candidate-preflight-ecr-evidence-v1",
         "ECR evidence schema drifted",
@@ -142,6 +147,7 @@ def build_receipt(
         "governanceSha": governance_sha,
         "deploymentSha": deployment_sha,
         "governanceReceiptSha256": deployment["governanceReceiptSha256"],
+        "historicalDeploymentReceiptSha256": deployment["historicalDeploymentReceiptSha256"],
         "deploymentReceiptSha256": sha256(deployment_path),
         "ecrEvidenceSha256": evidence_hash,
         "invocationMetadataSha256": sha256(metadata_path),
@@ -160,6 +166,7 @@ def validate_receipt(receipt: dict) -> None:
             "governanceSha",
             "deploymentSha",
             "governanceReceiptSha256",
+            "historicalDeploymentReceiptSha256",
             "deploymentReceiptSha256",
             "ecrEvidenceSha256",
             "invocationMetadataSha256",
@@ -174,6 +181,7 @@ def validate_receipt(receipt: dict) -> None:
     require(GIT_SHA_PATTERN.fullmatch(receipt["governanceSha"]) is not None, "invocation receipt governance SHA is invalid")
     require(receipt["deploymentSha"] == DEPLOYMENT_SHA, "invocation receipt deployment SHA drifted")
     require(receipt["governanceSha"] != receipt["deploymentSha"], "invocation receipt provenance is not distinct")
+    require(receipt["historicalDeploymentReceiptSha256"] == "20082f457f4b44ed52db6bb5b634d8559c88c8d3dde0af7201099e789b222a29", "invocation receipt historical binding drifted")
     for key in (
         "governanceReceiptSha256",
         "deploymentReceiptSha256",
@@ -183,6 +191,7 @@ def validate_receipt(receipt: dict) -> None:
     ):
         require(bool(SHA256_PATTERN.fullmatch(receipt[key])), f"invocation receipt {key} is invalid")
     require(bool(VERSION_PATTERN.fullmatch(receipt["executedVersion"])), "invocation receipt version is invalid")
+    require(receipt["executedVersion"] == "1", "invocation receipt executed version drifted")
     require(receipt["candidateImageDigest"] == CLASSIFICATION["candidate"]["imageDigest"], "invocation receipt image drifted")
     require(receipt["candidateSourceCommit"] == CLASSIFICATION["candidate"]["sourceCommit"], "invocation receipt source drifted")
 
