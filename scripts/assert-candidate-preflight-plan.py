@@ -256,13 +256,13 @@ SECRET_PATTERN = re.compile(
 )
 IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 ARTIFACT = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/honua-server@{IMAGE_DIGEST}"
-HANDLER_SHA256 = "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140"
-HISTORICAL_HANDLER_SHA256 = "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb"
+HANDLER_SHA256 = "69a59299be3c49530ed04bce9a0bfa53a79d63b0b23dcffcfd9f65c9bde217a1"
+HISTORICAL_HANDLER_SHA256 = "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140"
 CLASSIFICATION_SHA256 = "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579"
-ARCHIVE_BASE64SHA256 = "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk="
-HISTORICAL_ARCHIVE_BASE64SHA256 = "TuvBWGYwUcJwz5ibvThVgeK3UkWw3dD3b7AakOfJnaA="
-HISTORICAL_ARCHIVE_BYTES = 5646
-ARCHIVE_BYTES = 5732
+ARCHIVE_BASE64SHA256 = "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU="
+HISTORICAL_ARCHIVE_BASE64SHA256 = "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk="
+HISTORICAL_ARCHIVE_BYTES = 5732
+ARCHIVE_BYTES = 5715
 
 
 def require(condition: bool, message: str) -> None:
@@ -461,7 +461,7 @@ def assert_plan(
         "aws_iam_role_policy.candidate_preflight": ["no-op"],
         "aws_lambda_function.candidate_preflight": ["update"],
     }
-    require(code_publication_plan, f"resource actions are not the exact helper-v2 code publication: {actions}")
+    require(code_publication_plan, f"resource actions are not the exact helper-v3 code publication: {actions}")
     for address, change in changes.items():
         require(not change.get("action_reason"), f"{address} has an action reason")
 
@@ -477,9 +477,9 @@ def assert_plan(
     expected_outputs = {"candidate_preflight_qualified_arn", "candidate_preflight_version"}
     require(set(outputs) == expected_outputs, "helper output set drifted")
     for name, output in outputs.items():
-        expected_value = "1" if name == "candidate_preflight_version" else f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1"
+        expected_value = "2" if name == "candidate_preflight_version" else f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:2"
         require(output.get("actions") == ["update"], f"publication output {name} is not an update")
-        require(output.get("before") == expected_value, f"publication output {name} does not start at helper v1")
+        require(output.get("before") == expected_value, f"publication output {name} does not start at helper v2")
         require(output.get("after") is None and output.get("after_unknown") is True, f"publication output {name} must be resolved only after publish")
         require(output.get("after_sensitive") is False, f"{name} must be non-sensitive")
 
@@ -553,7 +553,7 @@ def assert_plan(
     require(environment == expected_environment, "helper environment contract drifted")
     historical_environment = dict(expected_environment)
     historical_environment["SOURCE_HANDLER_SHA256"] = HISTORICAL_HANDLER_SHA256
-    require(function_before["environment"] == [{"variables": historical_environment}], "helper-v2 publication does not start from the sealed v1 environment")
+    require(function_before["environment"] == [{"variables": historical_environment}], "helper-v3 publication does not start from the sealed v2 environment")
     require(function["function_name"] == HELPER_NAME, "helper function name drifted")
     require(function["architectures"] == ["arm64"], "helper architecture drifted")
     require(function["runtime"] == "python3.13" and function["handler"] == "handler.handler", "helper runtime contract drifted")
@@ -564,21 +564,21 @@ def assert_plan(
     require(function["role"] == ROLE_ARN, "helper execution role ARN drifted")
     require(function["filename"] == "./candidate-preflight.zip", "helper archive filename drifted")
     require(function["source_code_hash"] == ARCHIVE_BASE64SHA256, f"helper archive content hash drifted: {function['source_code_hash']}")
-    require(function_before["source_code_hash"] == HISTORICAL_ARCHIVE_BASE64SHA256, "helper-v2 publication does not start from the sealed v1 source hash")
-    require(function_before["code_sha256"] == HISTORICAL_ARCHIVE_BASE64SHA256, "helper-v2 publication v1 code hash drifted")
-    require(function_before["source_code_size"] == HISTORICAL_ARCHIVE_BYTES, "helper-v2 publication v1 archive size drifted")
-    require(function_before["version"] == "1", "helper-v2 publication does not start from version 1")
-    require(function_before["qualified_arn"] == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1", "helper-v2 publication v1 qualified ARN drifted")
-    require(function_before["qualified_invoke_arn"] == f"arn:aws:apigateway:{REGION}:lambda:path/2015-03-31/functions/arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1/invocations", "helper-v2 publication v1 qualified invoke ARN drifted")
+    require(function_before["source_code_hash"] == HISTORICAL_ARCHIVE_BASE64SHA256, "helper-v3 publication does not start from the sealed v2 source hash")
+    require(function_before["code_sha256"] == HISTORICAL_ARCHIVE_BASE64SHA256, "helper-v3 publication v2 code hash drifted")
+    require(function_before["source_code_size"] == HISTORICAL_ARCHIVE_BYTES, "helper-v3 publication v2 archive size drifted")
+    require(function_before["version"] == "2", "helper-v3 publication does not start from version 2")
+    require(function_before["qualified_arn"] == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:2", "helper-v3 publication v2 qualified ARN drifted")
+    require(function_before["qualified_invoke_arn"] == f"arn:aws:apigateway:{REGION}:lambda:path/2015-03-31/functions/arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:2/invocations", "helper-v3 publication v2 qualified invoke ARN drifted")
     provider_passthrough = {
         "code_sha256": HISTORICAL_ARCHIVE_BASE64SHA256,
         "source_code_size": HISTORICAL_ARCHIVE_BYTES,
     }
     for name, value in provider_passthrough.items():
-        require(function.get(name) == value, f"helper-v2 provider passthrough field {name} drifted")
+        require(function.get(name) == value, f"helper-v3 provider passthrough field {name} drifted")
         require(
             planned_resources["aws_lambda_function.candidate_preflight"].get("values", {}).get(name) == value,
-            f"helper-v2 planned provider passthrough field {name} drifted",
+            f"helper-v3 planned provider passthrough field {name} drifted",
         )
     computed = {"last_modified", "qualified_arn", "qualified_invoke_arn", "version"}
     def unknown_leaves(value, prefix=()):
@@ -587,11 +587,11 @@ def assert_plan(
         if isinstance(value, list):
             return {leaf for index, child in enumerate(value) for leaf in unknown_leaves(child, prefix + (str(index),))}
         return {prefix} if value is True else set()
-    require(unknown_leaves(function_unknown) == {(name,) for name in computed}, f"helper-v2 computed field set drifted: {sorted(unknown_leaves(function_unknown))}")
+    require(unknown_leaves(function_unknown) == {(name,) for name in computed}, f"helper-v3 computed field set drifted: {sorted(unknown_leaves(function_unknown))}")
     for name in computed:
-        require(function.get(name) is None, f"helper-v2 computed field {name} is unexpectedly known before publish")
+        require(function.get(name) is None, f"helper-v3 computed field {name} is unexpectedly known before publish")
     for name in set(function) - computed - {"environment", "source_code_hash"}:
-        require(function_before.get(name) == function.get(name), f"helper-v2 publication changes unexpected Lambda field {name}")
+        require(function_before.get(name) == function.get(name), f"helper-v3 publication changes unexpected Lambda field {name}")
     require(not function.get("layers"), "helper unexpectedly has Lambda layers")
     require(not function.get("vpc_config"), "helper unexpectedly has VPC configuration")
     require(not function.get("file_system_config"), "helper unexpectedly has filesystem configuration")

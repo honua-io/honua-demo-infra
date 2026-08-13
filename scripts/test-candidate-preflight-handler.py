@@ -42,6 +42,8 @@ class FakeLambda:
         upgrade_required=True,
         executed_but_not_discovered=None,
         plan_error=None,
+        omit_deploy_backup_hook=False,
+        omit_observability_backup_hook=False,
     ):
         self.pending = pending
         self.alias_post_drift = alias_post_drift
@@ -56,6 +58,8 @@ class FakeLambda:
         self.upgrade_required = upgrade_required
         self.executed_but_not_discovered = executed_but_not_discovered or []
         self.plan_error = plan_error
+        self.omit_deploy_backup_hook = omit_deploy_backup_hook
+        self.omit_observability_backup_hook = omit_observability_backup_hook
         self.get_function_calls = []
         self.get_configuration_calls = []
         self.get_alias_calls = []
@@ -123,8 +127,12 @@ class FakeLambda:
             "pendingScripts": self.pending,
             "executedButNotDiscoveredScripts": self.executed_but_not_discovered,
             "planError": self.plan_error,
-            "backupHook": backup_hook,
         }
+        if not (
+            (nested and self.omit_deploy_backup_hook)
+            or (not nested and self.omit_observability_backup_hook)
+        ):
+            result["backupHook"] = backup_hook
         if nested:
             result["lifecycleStatus"] = self.nested_lifecycle
         else:
@@ -340,6 +348,20 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
         with patch.dict(os.environ, self.environment, clear=True):
             result = module.handler({"operation": "candidate-preflight-v1"}, None)
         self.assertEqual("migration-pending-set-drift", result["failure"])
+
+    def test_deploy_preflight_migration_may_omit_backup_hook(self):
+        client = FakeLambda(self.pending, omit_deploy_backup_hook=True)
+        self.assertNotIn("backupHook", client._migration(nested=True))
+        self.assertIn("backupHook", client._migration(nested=False))
+        result, *_ = self.execute(omit_deploy_backup_hook=True)
+        self.assertEqual("passed", result["status"])
+
+    def test_migration_observability_root_may_omit_backup_hook(self):
+        client = FakeLambda(self.pending, omit_observability_backup_hook=True)
+        self.assertIn("backupHook", client._migration(nested=True))
+        self.assertNotIn("backupHook", client._migration(nested=False))
+        result, *_ = self.execute(omit_observability_backup_hook=True)
+        self.assertEqual("passed", result["status"])
 
     def test_non_null_backup_hook_remains_an_exact_non_contract_object(self):
         malformed = (

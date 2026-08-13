@@ -374,9 +374,7 @@ def _validate_non_contract_migration(
         raise PreflightFailure("migration-journal-drift")
     if value.get("planError") is not None:
         raise PreflightFailure("migration-plan-error")
-    if "backupHook" not in value:
-        raise PreflightFailure("migration-classification-missing")
-    backup = value["backupHook"]
+    backup = value.get("backupHook")
     if backup is None:
         return
     if not isinstance(backup, dict):

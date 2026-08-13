@@ -41,16 +41,16 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
         function = cls.change(cls.valid, "aws_lambda_function.candidate_preflight")["change"]
         for side in ("before", "after"):
             value = function[side]
-            value["version"] = "2"
-            value["qualified_arn"] = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2"
-            value["qualified_invoke_arn"] = "arn:aws:apigateway:us-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2/invocations"
-            value["code_sha256"] = "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk="
-            value["source_code_hash"] = "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk="
-            value["source_code_size"] = 5732
-            value["environment"] = [{"variables": {"SOURCE_HANDLER_SHA256": "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140"}}]
+            value["version"] = "3"
+            value["qualified_arn"] = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3"
+            value["qualified_invoke_arn"] = "arn:aws:apigateway:us-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3/invocations"
+            value["code_sha256"] = "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU="
+            value["source_code_hash"] = "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU="
+            value["source_code_size"] = 5715
+            value["environment"] = [{"variables": {"SOURCE_HANDLER_SHA256": "69a59299be3c49530ed04bce9a0bfa53a79d63b0b23dcffcfd9f65c9bde217a1"}}]
         for name, value in {
-            "candidate_preflight_qualified_arn": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2",
-            "candidate_preflight_version": "2",
+            "candidate_preflight_qualified_arn": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3",
+            "candidate_preflight_version": "3",
         }.items():
             cls.valid["output_changes"][name]["before"] = value
             cls.valid["output_changes"][name]["after"] = value
@@ -110,7 +110,7 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
             "missing output": lambda p: p["output_changes"].pop("candidate_preflight_version"),
             "extra output": lambda p: p["output_changes"].update(other=copy.deepcopy(p["output_changes"]["candidate_preflight_version"])),
             "output action": lambda p: p["output_changes"]["candidate_preflight_version"].update(actions=["update"]),
-            "output difference": lambda p: p["output_changes"]["candidate_preflight_version"].update(after="3"),
+            "output difference": lambda p: p["output_changes"]["candidate_preflight_version"].update(after="4"),
             "provider": lambda p: p["configuration"]["provider_config"]["aws"]["expressions"]["region"].update(constant_value="us-east-1"),
             "configuration resource": lambda p: p["configuration"]["root_module"]["resources"].append({"address": "aws_db_instance.bad", "mode": "managed", "provider_config_key": "aws"}),
             "extra resource expression": lambda p: p["configuration"]["root_module"]["resources"][0]["expressions"].update(hostile={"constant_value": True}),
