@@ -110,7 +110,7 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
             "missing output": lambda p: p["output_changes"].pop("candidate_preflight_version"),
             "extra output": lambda p: p["output_changes"].update(other=copy.deepcopy(p["output_changes"]["candidate_preflight_version"])),
             "output action": lambda p: p["output_changes"]["candidate_preflight_version"].update(actions=["update"]),
-            "output difference": lambda p: p["output_changes"]["candidate_preflight_version"].update(after="3"),
+            "output difference": lambda p: p["output_changes"]["candidate_preflight_version"].update(after="4"),
             "provider": lambda p: p["configuration"]["provider_config"]["aws"]["expressions"]["region"].update(constant_value="us-east-1"),
             "configuration resource": lambda p: p["configuration"]["root_module"]["resources"].append({"address": "aws_db_instance.bad", "mode": "managed", "provider_config_key": "aws"}),
             "extra resource expression": lambda p: p["configuration"]["root_module"]["resources"][0]["expressions"].update(hostile={"constant_value": True}),

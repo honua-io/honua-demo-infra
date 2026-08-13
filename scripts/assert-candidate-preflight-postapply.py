@@ -166,7 +166,7 @@ def assert_published_v3(resources: dict[str, dict]) -> None:
     require(function.get("source_code_hash") == "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU=", "post-apply Lambda source hash drifted")
     require(function.get("source_code_size") == 5715, "post-apply Lambda archive size drifted")
     variables = function.get("environment", [{}])[0].get("variables", {})
-    require(variables.get("SOURCE_HANDLER_SHA256") == "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140", "post-apply Lambda handler hash pin drifted")
+    require(variables.get("SOURCE_HANDLER_SHA256") == "69a59299be3c49530ed04bce9a0bfa53a79d63b0b23dcffcfd9f65c9bde217a1", "post-apply Lambda handler hash pin drifted")
 
 
 def parse_policy(value: object, label: str) -> dict:
