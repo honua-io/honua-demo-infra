@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -167,6 +168,26 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('apply "$EVIDENCE_DIR/candidate-preflight.tfplan"', plan_apply)
         self.assertIn("Controlled aggregation begins only at invocation", invoke)
         self.assertIn("capture_helper_audit postinvoke", invoke)
+
+    def test_all_shell_procedures_are_declared_and_stored_lf_only(self):
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("*.sh text eol=lf", attributes.splitlines())
+        shell_paths = sorted(ROOT.rglob("*.sh"))
+        self.assertTrue(shell_paths)
+        relative_paths = [path.relative_to(ROOT).as_posix() for path in shell_paths]
+        resolved_attributes = subprocess.check_output(
+            ["git", "check-attr", "text", "eol", "--", *relative_paths],
+            cwd=ROOT,
+            text=True,
+        )
+        for path in shell_paths:
+            relative = path.relative_to(ROOT).as_posix()
+            with self.subTest(path=relative):
+                self.assertIn(f"{relative}: text: set", resolved_attributes)
+                self.assertIn(f"{relative}: eol: lf", resolved_attributes)
+                content = path.read_bytes()
+                self.assertNotIn(b"\r", content)
+                self.assertTrue(content.startswith(b"#!/usr/bin/env bash\n"))
 
 
 if __name__ == "__main__":
