@@ -17,7 +17,7 @@ data "aws_secretsmanager_secret" "admin_password" {
       error_message = "metadata lookup did not return the exact demo admin-password secret identity."
     }
     postcondition {
-      condition     = self.description == "Admin API password for Honua." && self.tags == local.common_tags
+      condition     = self.description == "Admin API password for Honua." && self.tags == tomap(local.common_tags)
       error_message = "metadata lookup returned unexpected description or tags."
     }
   }

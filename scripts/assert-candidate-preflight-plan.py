@@ -113,7 +113,7 @@ def assert_production_source(configuration_root: Path = DEFAULT_CONFIGURATION_RO
         require(forbidden not in versions + main, f"production escape hatch present: {forbidden}")
     require('data "aws_secretsmanager_secret" "admin_password"' in main, "metadata-only secret lookup missing")
     require('name = "honua-demo-demo/admin-password"' in main, "exact secret name drifted")
-    require('self.tags == local.common_tags' in main, "exact secret tag guard missing")
+    require('self.tags == tomap(local.common_tags)' in main, "exact type-normalized secret tag guard missing")
     require("terraform.workspace == \"default\"" in main, "default-workspace precondition missing")
     require("module.honua" not in main, "isolated root contains a module.honua dependency")
     require(not re.search(r"admin-password-[A-Za-z0-9]{6}(?:\"|$)", main), "secret ARN suffix was hard-coded")
