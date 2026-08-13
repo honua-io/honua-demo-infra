@@ -26,11 +26,26 @@ class FakeConfig:
 
 
 class FakeLambda:
-    def __init__(self, pending, *, alias_post_drift=False, contract=False, mode=None):
+    def __init__(
+        self,
+        pending,
+        *,
+        alias_post_drift=False,
+        contract=False,
+        mode=None,
+        nested_lifecycle="skipped",
+        observability_status="skipped",
+        observability_ready=True,
+        observability_failed=False,
+    ):
         self.pending = pending
         self.alias_post_drift = alias_post_drift
         self.contract = contract
         self.mode = mode
+        self.nested_lifecycle = nested_lifecycle
+        self.observability_status = observability_status
+        self.observability_ready = observability_ready
+        self.observability_failed = observability_failed
         self.get_function_calls = []
         self.get_configuration_calls = []
         self.get_alias_calls = []
@@ -82,12 +97,9 @@ class FakeLambda:
             "RevisionId": revision,
         }
 
-    def _migration(self):
+    def _migration(self, *, nested=False):
         contract_scripts = [self.pending[0]] if self.contract else []
-        return {
-            "status": "skipped",
-            "isReady": True,
-            "isFailed": False,
+        result = {
             "planAvailable": True,
             "upgradeRequired": True,
             "pendingScripts": self.pending,
@@ -100,6 +112,17 @@ class FakeLambda:
                 "pendingContractScripts": contract_scripts,
             },
         }
+        if nested:
+            result["lifecycleStatus"] = self.nested_lifecycle
+        else:
+            result.update(
+                {
+                    "status": self.observability_status,
+                    "isReady": self.observability_ready,
+                    "isFailed": self.observability_failed,
+                }
+            )
+        return result
 
     def invoke(self, **kwargs):
         event = json.loads(kwargs["Payload"].decode("utf-8"))
@@ -112,7 +135,7 @@ class FakeLambda:
         elif path == "/healthz/ready":
             body = "Ready"
         elif path == "/api/v1/admin/deploy/preflight":
-            migration = self._migration()
+            migration = self._migration(nested=True)
             body = json.dumps(
                 {
                     "status": "blocked",
@@ -273,6 +296,21 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
     def test_contract_phase_branch_is_rejected(self):
         result, *_ = self.execute(contract=True)
         self.assertEqual("contract-phase-rejected", result["failure"])
+
+    def test_deploy_nested_migration_lifecycle_must_be_skipped(self):
+        result, *_ = self.execute(nested_lifecycle="succeeded")
+        self.assertEqual("migration-lifecycle-drift", result["failure"])
+
+    def test_observability_lifecycle_must_be_skipped_ready_and_not_failed(self):
+        cases = (
+            ({"observability_status": "succeeded"}, "migration-lifecycle-drift"),
+            ({"observability_ready": False}, "migration-readiness-drift"),
+            ({"observability_failed": True}, "migration-failure-state-drift"),
+        )
+        for options, code in cases:
+            with self.subTest(options=options):
+                result, *_ = self.execute(**options)
+                self.assertEqual(code, result["failure"])
 
     def test_transport_and_payload_failures_are_sanitized(self):
         expected = {

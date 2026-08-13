@@ -78,6 +78,10 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('LogType="None"', handler)
         self.assertIn('Qualifier=IMMUTABLE["candidateVersion"]', handler)
         self.assertIn('headers["X-API-Key"] = admin_password', handler)
+        self.assertIn('lifecycle_field="lifecycleStatus"', handler)
+        self.assertIn('lifecycle_field="status"', handler)
+        self.assertIn('value.get("isReady") is not True', handler)
+        self.assertIn('value.get("isFailed") is not False', handler)
         self.assertNotRegex(handler, r"\bprint\s*\(")
         for path in (
             "/healthz/live",

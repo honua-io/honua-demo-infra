@@ -345,7 +345,19 @@ def _json_body(body: str) -> dict[str, Any]:
     return value
 
 
-def _validate_non_contract_migration(value: dict[str, Any], pending: list[str]) -> None:
+def _validate_non_contract_migration(
+    value: dict[str, Any],
+    pending: list[str],
+    *,
+    lifecycle_field: str,
+) -> None:
+    if value.get(lifecycle_field) != "skipped":
+        raise PreflightFailure("migration-lifecycle-drift")
+    if lifecycle_field == "status":
+        if value.get("isReady") is not True:
+            raise PreflightFailure("migration-readiness-drift")
+        if value.get("isFailed") is not False:
+            raise PreflightFailure("migration-failure-state-drift")
     if value.get("planAvailable") is not True:
         raise PreflightFailure("migration-plan-unavailable")
     if value.get("upgradeRequired") is not True:
@@ -379,7 +391,11 @@ def _validate_preflight(value: dict[str, Any], pending: list[str]) -> None:
     migration = value.get("migration")
     if not isinstance(migration, dict):
         raise PreflightFailure("migration-diagnostics-missing")
-    _validate_non_contract_migration(migration, pending)
+    _validate_non_contract_migration(
+        migration,
+        pending,
+        lifecycle_field="lifecycleStatus",
+    )
 
     platform = value.get("platformRelease")
     serving = platform.get("serving") if isinstance(platform, dict) else None
@@ -410,7 +426,9 @@ def _run() -> dict[str, Any]:
         raise PreflightFailure("readiness-body-invalid")
     _validate_preflight(_json_body(responses["deploy-preflight"]), pending)
     _validate_non_contract_migration(
-        _json_body(responses["migration-observability"]), pending
+        _json_body(responses["migration-observability"]),
+        pending,
+        lifecycle_field="status",
     )
 
     alias_after = _alias_fingerprint(lambda_client)

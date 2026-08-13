@@ -39,7 +39,9 @@ Every transport response must be successful. Liveness must be `Healthy`,
 readiness must be `Ready`, both admin bodies must be valid JSON, and the runtime
 pending set must exactly match migrations 092 through 105 in
 `classification.v1.json`. Every classified script is `Expand`; either runtime
-payload reporting a contract branch fails closed.
+payload reporting a contract branch fails closed. Migration observability must
+report `status=skipped`, `isReady=true`, and `isFailed=false`; the deploy
+diagnostic must independently report `migration.lifecycleStatus=skipped`.
 
 This probe does not move `live`, does not run migrations, does not seed data,
 and does not produce a promotion receipt. A passing response is preflight
