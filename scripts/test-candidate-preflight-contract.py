@@ -9,11 +9,13 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IAC = ROOT / "stacks" / "aws" / "candidate-preflight.tf"
+IAC = ROOT / "stacks" / "aws-candidate-preflight" / "main.tf"
+IAC_VERSIONS = ROOT / "stacks" / "aws-candidate-preflight" / "versions.tf"
 HANDLER = ROOT / "stacks" / "aws" / "candidate-preflight" / "handler.py"
 MANIFEST = ROOT / "stacks" / "aws" / "candidate-preflight" / "classification.v1.json"
 RUNBOOK = ROOT / "runbook" / "candidate-preflight-v1.md"
 MAIN = ROOT / "stacks" / "aws" / "main.tf"
+PRIMARY_OUTPUTS = ROOT / "stacks" / "aws" / "outputs.tf"
 INTERFACE = ROOT / "stacks" / "aws" / "validation" / "honua-module-interface"
 
 
@@ -26,15 +28,30 @@ class CandidatePreflightContractTests(unittest.TestCase):
         main = MAIN.read_text(encoding="utf-8")
         contract = json.loads((INTERFACE / "interface-contract.json").read_text(encoding="utf-8"))
         outputs = (INTERFACE / "outputs.tf").read_text(encoding="utf-8")
+        primary_outputs = PRIMARY_OUTPUTS.read_text(encoding="utf-8")
         self.assertIn(f"ref={self.MODULE_COMMIT}", main)
         self.assertIn(f"ref={self.MODULE_COMMIT}", contract["source"])
         self.assertIn('output "admin_password_secret_arn"', outputs)
+        self.assertRegex(
+            primary_outputs,
+            r'output\s+"admin_password_secret_arn"\s*\{[^}]*value\s*=\s*module\.honua\.admin_password_secret_arn',
+        )
+
+    def test_helper_root_is_state_isolated_and_consumes_authoritative_outputs(self):
+        iac = IAC.read_text(encoding="utf-8")
+        versions = IAC_VERSIONS.read_text(encoding="utf-8")
+        self.assertIn('data "terraform_remote_state" "primary"', iac)
+        self.assertIn("data.terraform_remote_state.primary.outputs.admin_password_secret_arn", iac)
+        self.assertIn("data.terraform_remote_state.primary.outputs.lambda_function_arn", iac)
+        self.assertIn("data.terraform_remote_state.primary.outputs.lambda_function_name", iac)
+        self.assertNotIn("module.honua", iac)
+        self.assertIn('key          = "demo/aws-demo/candidate-preflight.tfstate"', versions)
 
     def test_iam_is_qualified_only_and_has_no_mutation_or_network_permissions(self):
         iac = IAC.read_text(encoding="utf-8")
-        self.assertIn("module.honua.admin_password_secret_arn", iac)
-        self.assertIn('Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
-        self.assertIn('Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
+        self.assertIn("Resource = [local.admin_password_secret_arn]", iac)
+        self.assertIn('Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
+        self.assertIn('Resource = ["${local.app_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
         self.assertIn('Resource = ["${aws_cloudwatch_log_group.candidate_preflight.arn}:*"]', iac)
         self.assertNotIn("vpc_config", iac)
         self.assertNotIn("aws_security_group", iac)
@@ -99,6 +116,8 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("does not move `live`", runbook)
         self.assertIn("does not run migrations", runbook)
         self.assertIn("Do not invoke", runbook)
+        self.assertIn("state-only", runbook)
+        self.assertIn("assert-candidate-preflight-plan.py", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
 
 

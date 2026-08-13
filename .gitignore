@@ -9,4 +9,4 @@ terraform.tfvars
 stacks/aws/postgis-bootstrap/build/
 stacks/aws/postgis-bootstrap/bootstrap.zip
 # Credential-safe candidate-preflight Lambda package.
-stacks/aws/candidate-preflight.zip
+stacks/aws-candidate-preflight/candidate-preflight.zip

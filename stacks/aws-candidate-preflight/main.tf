@@ -1,16 +1,33 @@
 ###############################################################################
-# Credential-safe candidate preflight.
+# Credential-safe candidate preflight, isolated from the demo application root.
 #
-# This synchronous, operator-invoked Lambda probes one immutable Honua Lambda
-# version through four fixed API Gateway v2 GET events. It cannot update or
-# publish the application, move an alias, reach the database, run migrations,
-# invoke seed/bootstrap helpers, or attach to the VPC. Terraform deliberately
-# creates no aws_lambda_invocation resource for this function.
+# This root reads three persisted, typed outputs from the primary root. It has
+# no module call and cannot place the application Lambda, alias, environment,
+# RDS, secret versions, seed/bootstrap helpers, or CloudFront in its plan.
 ###############################################################################
 
+data "terraform_remote_state" "primary" {
+  backend = var.primary_state_backend
+  config  = var.primary_state_config
+}
+
 locals {
-  candidate_preflight_dir           = "${path.module}/candidate-preflight"
-  candidate_preflight_function_name = "${var.name_prefix}-${var.environment}-candidate-preflight"
+  common_tags = {
+    Project     = "honua-server"
+    Environment = "demo"
+    ManagedBy   = "terraform"
+    Purpose     = "public-demo"
+  }
+
+  # These values are state handoffs, not copied or reconstructed ARNs. In the
+  # primary root, admin_password_secret_arn is exactly the pinned honua-iac
+  # module output. The random Secrets Manager suffix is never encoded here.
+  admin_password_secret_arn = data.terraform_remote_state.primary.outputs.admin_password_secret_arn
+  app_function_arn          = data.terraform_remote_state.primary.outputs.lambda_function_arn
+  app_function_name         = data.terraform_remote_state.primary.outputs.lambda_function_name
+
+  candidate_preflight_dir           = "${path.module}/../aws/candidate-preflight"
+  candidate_preflight_function_name = "honua-demo-demo-candidate-preflight"
   candidate_preflight_log_group     = "/aws/lambda/${local.candidate_preflight_function_name}"
 
   candidate_preflight_app_function_name     = "honua-demo-demo-honua"
@@ -47,7 +64,7 @@ resource "aws_cloudwatch_log_group" "candidate_preflight" {
 }
 
 resource "aws_iam_role" "candidate_preflight" {
-  name_prefix        = "${var.name_prefix}-${var.environment}-candidate-preflight-"
+  name_prefix        = "honua-demo-demo-candidate-preflight-"
   assume_role_policy = data.aws_iam_policy_document.candidate_preflight_assume.json
   tags               = local.common_tags
 }
@@ -63,7 +80,7 @@ resource "aws_iam_role_policy" "candidate_preflight" {
         Sid      = "ReadExactAdminPassword"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [module.honua.admin_password_secret_arn]
+        Resource = [local.admin_password_secret_arn]
       },
       {
         Sid    = "ReadExactCandidate"
@@ -72,19 +89,19 @@ resource "aws_iam_role_policy" "candidate_preflight" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration",
         ]
-        Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_candidate_version}"]
+        Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]
       },
       {
         Sid      = "ReadExactLiveAlias"
         Effect   = "Allow"
         Action   = ["lambda:GetAlias"]
-        Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_live_alias_name}"]
+        Resource = ["${local.app_function_arn}:${local.candidate_preflight_live_alias_name}"]
       },
       {
         Sid      = "InvokeExactCandidate"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_candidate_version}"]
+        Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]
       },
       {
         Sid    = "WriteExactLogGroup"
@@ -117,7 +134,7 @@ resource "aws_lambda_function" "candidate_preflight" {
 
   environment {
     variables = {
-      ADMIN_PASSWORD_SECRET_ARN      = module.honua.admin_password_secret_arn
+      ADMIN_PASSWORD_SECRET_ARN      = local.admin_password_secret_arn
       EXPECTED_APP_FUNCTION_NAME     = local.candidate_preflight_app_function_name
       EXPECTED_ARCHITECTURE          = "arm64"
       EXPECTED_ARTIFACT_REFERENCE    = local.candidate_preflight_artifact_reference
@@ -135,8 +152,16 @@ resource "aws_lambda_function" "candidate_preflight" {
 
   lifecycle {
     precondition {
-      condition     = module.honua.lambda_function_name == local.candidate_preflight_app_function_name
+      condition     = local.app_function_name == local.candidate_preflight_app_function_name
       error_message = "candidate-preflight-v1 is pinned to the exact demo Honua function name."
+    }
+    precondition {
+      condition     = can(regex("^arn:aws:secretsmanager:us-west-2:[0-9]{12}:secret:honua-demo-demo/admin-password-[A-Za-z0-9]+$", local.admin_password_secret_arn))
+      error_message = "the authoritative module output is not the exact demo admin-password secret ARN."
+    }
+    precondition {
+      condition     = endswith(local.app_function_arn, ":function:${local.candidate_preflight_app_function_name}")
+      error_message = "the authoritative primary-state output is not the exact demo Honua function ARN."
     }
   }
 

@@ -38,6 +38,11 @@ output "lambda_function_arn" {
   value       = module.honua.lambda_function_arn
 }
 
+output "admin_password_secret_arn" {
+  description = "Authoritative honua-iac admin-password secret ARN for isolated operational helpers; contains no secret value."
+  value       = module.honua.admin_password_secret_arn
+}
+
 output "lambda_alias_name" {
   description = "Stable Lambda alias used by API Gateway."
   value       = module.honua.lambda_alias_name
