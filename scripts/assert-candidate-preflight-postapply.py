@@ -17,12 +17,12 @@ PREAPPLY_ASSERTION = ROOT / "scripts" / "assert-candidate-preflight-plan.py"
 
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
-SOURCE_SHA256 = {
-    "main.tf": "db1cdd94fbe041dd0fe3cc8d2b6df16f0c3b497218313781786bff11f2d79ea6",
-    "versions.tf": "6c57dd304d62513edc0efd9ce062cae271e1a98e9ba2f9be74166013e76148e1",
-    ".terraform.lock.hcl": "5920ba1f04e65f71619fba3cec26463d0d924c88bf49671f40bc27871f6be380",
-    "handler.py": "87e9210aba2976ba2a8dbdf9dff61d64576c6fb3111fc83584c7ad156c1dca25",
-    "classification.v1.json": "bfce514b11bc245ce99f72870578acbd3753aacd94c03db0fb5581a77aab90a0",
+SOURCE_LF_SHA256 = {
+    "main.tf": "a663663af53704033e28f72968c84ad142b30b7b1bae79c6b0602644f647adfb",
+    "versions.tf": "b7443e50e884d7ed228bb7d29373b18c1b8c1a5a4cb5575e8b5a550a8baa60f6",
+    ".terraform.lock.hcl": "4f9da38851b151b7100f9403c30048327f8674136132a957b7061535bc4efe41",
+    "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",
+    "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
 }
 EXPECTED_PROVIDER_CONFIG = {
     "archive": {
@@ -82,6 +82,10 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def lf_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def load_preapply_assertion():
     spec = importlib.util.spec_from_file_location("candidate_preapply_assertion", PREAPPLY_ASSERTION)
     require(spec is not None and spec.loader is not None, "pre-apply assertion module is unavailable")
@@ -100,9 +104,9 @@ def assert_exact_source(configuration_root: Path) -> None:
         "handler.py": source_root / "handler.py",
         "classification.v1.json": source_root / "classification.v1.json",
     }
-    require(set(paths) == set(SOURCE_SHA256), "post-apply source allowlist drifted")
+    require(set(paths) == set(SOURCE_LF_SHA256), "post-apply source allowlist drifted")
     for name, path in paths.items():
-        require(path.is_file() and sha256(path) == SOURCE_SHA256[name], f"exact post-apply source drifted: {name}")
+        require(path.is_file() and lf_sha256(path) == SOURCE_LF_SHA256[name], f"exact post-apply source drifted: {name}")
     lock = paths[".terraform.lock.hcl"].read_text(encoding="utf-8")
     require(
         'provider "registry.terraform.io/hashicorp/aws" {\n  version     = "6.59.0"' in lock,

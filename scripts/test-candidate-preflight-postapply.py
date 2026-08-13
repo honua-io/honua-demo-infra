@@ -137,6 +137,25 @@ class CandidatePreflightPostapplyTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     POSTAPPLY.assert_postapply(self.valid, stacks / "aws-candidate-preflight")
 
+    def test_exact_source_identity_is_line_ending_stable(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="candidate-postapply-line-endings-") as temporary:
+            stacks = Path(temporary) / "stacks"
+            shutil.copytree(STACK, stacks / "aws-candidate-preflight")
+            shutil.copytree(SOURCE, stacks / "aws" / "candidate-preflight")
+            paths = (
+                stacks / "aws-candidate-preflight" / "main.tf",
+                stacks / "aws-candidate-preflight" / "versions.tf",
+                stacks / "aws-candidate-preflight" / ".terraform.lock.hcl",
+                stacks / "aws" / "candidate-preflight" / "handler.py",
+                stacks / "aws" / "candidate-preflight" / "classification.v1.json",
+            )
+            for path in paths:
+                path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
+            POSTAPPLY.assert_postapply(self.valid, stacks / "aws-candidate-preflight")
+            for path in paths:
+                path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+            POSTAPPLY.assert_postapply(self.valid, stacks / "aws-candidate-preflight")
+
     def test_runbook_preserves_apply_actionless_boundary(self) -> None:
         runbook = RUNBOOK.read_text(encoding="utf-8")
         for required in (
