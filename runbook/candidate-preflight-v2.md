@@ -1,0 +1,45 @@
+# Candidate preflight helper v2 invocation
+
+This procedure authorizes exactly one synchronous attempt against immutable
+helper `arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2`.
+It does not change or reuse the historical helper `:1` plan, apply, governance,
+or invocation paths. Their local evidence directories and receipts remain
+sealed and immutable.
+
+Helper `:2` is pinned to revision `073109fb-d4c7-470e-8f4c-9a4a334a6218`,
+code SHA-256 `tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk=`, and 5732 bytes. Its
+deployment is bound to commit `5b5a67b75e8db85cf1669e4114be4c659139e191`,
+sealed apply-evidence manifest SHA-256
+`1209eea62baba49cee4c198040ed59f0c4a69e7ea081da41a5efac255d18fd5a`,
+isolated-state lineage `7e7947a0-303e-b5f3-6e03-6fa7fb4ef6a2`, and serial 3.
+
+The operator never reads an unqualified helper or an ambiguous Terraform
+current output. Before the invocation it proves helper `:2`, candidate `:40`,
+live alias `:39` with no routing, exact ECR provenance, exact IAM, the clean
+governance commit, and the sealed apply manifest. It exports
+`AWS_MAX_ATTEMPTS=1`, creates a terminal attempt marker before the AWS call,
+uses `log-type=None`, and contains one invoke command. Any transport or semantic
+failure is terminal; all feasible helper, app, alias, ECR, governance, runtime,
+and result post-audits are still attempted.
+
+A successful payload must report exactly migrations 092 through 105, all as
+`Expand`, with no `Contract` branch, exact ordered pending-set digest
+`e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7`,
+and the exact nine checks. It is preflight evidence only: it does not migrate,
+seed, promote, or move the live alias.
+
+After independent review, merge, and separate release-owner authorization, use
+a clean checkout at the exact merge SHA from Git for Windows Bash:
+
+```bash
+GOVERNANCE_SHA="$(git rev-parse HEAD)"
+APPLY_EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-helper-v2-5b5a67b75e8db85cf1669e4114be4c659139e191-plan"
+EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-v2-invocation-$GOVERNANCE_SHA"
+test ! -e "$EVIDENCE_DIR"
+scripts/candidate-preflight-v2-invoke.sh "$GOVERNANCE_SHA" "$EVIDENCE_DIR" "$APPLY_EVIDENCE_DIR"
+```
+
+Never retry this path or choose a new evidence directory after an attempt. A
+failure requires a new diagnosis, reviewed governance transition, and explicit
+authorization. This procedure has no Terraform plan/apply, secret output,
+database, migration, seed, promotion, or alias-mutation command.
