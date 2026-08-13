@@ -98,6 +98,31 @@ class RuntimeAuditTests(unittest.TestCase):
                 },
                 "sourceSha256": AUDIT.SOURCE_HASHES,
             },
+            "ecr_evidence": {
+                "schema": AUDIT.ECR_EVIDENCE_SCHEMA,
+                "registryId": AUDIT.ACCOUNT,
+                "region": AUDIT.REGION,
+                "repositoryName": "honua-server",
+                "imageDigest": AUDIT.IMAGE_DIGEST,
+                "manifestMediaType": "application/vnd.oci.image.manifest.v1+json",
+                "manifestSha256": AUDIT.IMAGE_DIGEST,
+                "config": {
+                    "digest": "sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f",
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "size": 6052,
+                    "sha256": "sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f",
+                    "architecture": "arm64",
+                    "os": "linux",
+                    "entrypoint": ["/var/task/Honua.Server"],
+                    "cmd": None,
+                    "workingDir": "/var/task",
+                    "nativeAot": "native-aot",
+                    "runtimeEntrypoint": "/var/task/Honua.Server",
+                    "ociRevision": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+                    "source": "https://github.com/honua-io/honua-server",
+                    "honuaGitSha": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+                },
+            },
         }
 
     def tearDown(self):
@@ -180,12 +205,28 @@ class RuntimeAuditTests(unittest.TestCase):
             "role": lambda r: r.update(roleArn="arn:aws:iam::585192672263:role/other"),
             "policy": lambda r: r.update(policyName="other"),
             "secret": lambda r: r.update(secretArn="arn:aws:secretsmanager:us-west-2:585192672263:secret:other-Ab12Cd"),
+            "ECR evidence hash": lambda r: r.update(ecrEvidenceSha256="bad"),
         }
         for label, mutation in mutations.items():
             changed = copy.deepcopy(receipt)
             mutation(changed)
             with self.subTest(label=label), self.assertRaises(RuntimeError):
                 AUDIT.validate_deployment_receipt(changed, "a" * 40)
+
+    def test_ecr_evidence_mutations_fail_closed(self):
+        mutations = {
+            "missing proof": lambda d: d.pop("ecr_evidence"),
+            "wrong digest": lambda d: d["ecr_evidence"].update(imageDigest="sha256:" + "0" * 64),
+            "wrong architecture": lambda d: d["ecr_evidence"]["config"].update(architecture="amd64"),
+            "wrong native AOT": lambda d: d["ecr_evidence"]["config"].update(nativeAot="framework-dependent"),
+            "wrong OCI revision": lambda d: d["ecr_evidence"]["config"].update(ociRevision="0" * 40),
+            "wrong HONUA_GIT_SHA": lambda d: d["ecr_evidence"]["config"].update(honuaGitSha="0" * 40),
+        }
+        for label, mutation in mutations.items():
+            documents = copy.deepcopy(self.documents)
+            mutation(documents)
+            with self.subTest(label=label), self.assertRaises((RuntimeError, TypeError, AttributeError)):
+                AUDIT.audit(self.args(documents))
 
 
 if __name__ == "__main__":

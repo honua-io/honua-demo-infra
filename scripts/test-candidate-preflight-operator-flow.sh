@@ -42,9 +42,13 @@ elif command == "terraform" and "output" in args:
         print("1")
 elif command == "terraform" and "show" in args:
     print("{}")
+elif command == "python" and "assert-candidate-preflight-ecr.py" in line and "config-digest" in line:
+    print("sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f")
+elif command == "aws" and args[:2] == ["ecr", "get-download-url-for-layer"]:
+    print("https://example.invalid/exact-config")
 elif command == "sha256sum" and (not args or args[0] != "--check"):
     for path in args:
-        print("52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554  " + path)
+        print("4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0  " + path)
 elif command == "aws" and args[:2] == ["lambda", "invoke"]:
     print('{"StatusCode":200,"ExecutedVersion":"1"}')
 PY
@@ -52,6 +56,7 @@ chmod +x "$MOCK_BIN/dispatcher"
 for command in git terraform python sha256sum cmp aws; do
   cp "$MOCK_BIN/dispatcher" "$MOCK_BIN/$command"
 done
+cp "$MOCK_BIN/dispatcher" "$MOCK_BIN/curl"
 
 export PATH="$MOCK_BIN:$PATH"
 export MOCK_LOG MOCK_COUNT
@@ -114,15 +119,19 @@ reset_case
 run_script "$ROOT/scripts/candidate-preflight-invoke.sh" "$TEMP_ROOT/invoke-success"
 grep -Fq "aws lambda invoke " "$MOCK_LOG"
 test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
+test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 
 preinvoke_failures=(
   "python scripts/candidate-preflight-plan-receipt.py verify|1"
   "terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn|1"
   "aws lambda get-function --|1"
+  "aws ecr batch-get-image|1"
+  "python scripts/assert-candidate-preflight-ecr.py|1"
   "python scripts/assert-candidate-preflight-runtime.py create|1"
   "sha256sum --check|1"
   "python scripts/candidate-preflight-plan-receipt.py verify|2"
   "aws lambda get-function --|2"
+  "aws ecr batch-get-image|2"
   "python scripts/assert-candidate-preflight-runtime.py verify|1"
 )
 for fixture in "${preinvoke_failures[@]}"; do
@@ -140,6 +149,7 @@ postinvoke_failures=(
   "aws lambda invoke|1"
   "python scripts/assert-candidate-preflight-invocation.py|1"
   "aws lambda get-function --|3"
+  "aws ecr batch-get-image|3"
   "python scripts/assert-candidate-preflight-runtime.py verify|2"
 )
 for fixture in "${postinvoke_failures[@]}"; do
@@ -152,6 +162,7 @@ for fixture in "${postinvoke_failures[@]}"; do
   fi
   grep -Fq "aws lambda invoke " "$MOCK_LOG"
   test "$(grep -Fc "aws lambda get-function --" "$MOCK_LOG")" -eq 3
+  test "$(grep -Fc "aws ecr batch-get-image " "$MOCK_LOG")" -eq 3
 done
 
 echo "candidate-preflight operator control flow: PASS"

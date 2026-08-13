@@ -12,6 +12,8 @@ readonly ARCHIVE="stacks/aws-candidate-preflight/candidate-preflight.zip"
 readonly HELPER_NAME="honua-demo-demo-candidate-preflight"
 readonly ROLE_NAME="${HELPER_NAME}-role"
 readonly POLICY_NAME="credential-safe-candidate-preflight-v1"
+readonly IMAGE_DIGEST="sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
+readonly CONFIG_DIGEST="sha256:c57f3a4ad93a67b9d25c8c56b8f24a144191d2ce94be5de37e10f99ff774f63f"
 
 [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
 readonly REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -27,6 +29,34 @@ capture_helper_audit() {
   aws iam list-role-policies --role-name "$ROLE_NAME" > "$EVIDENCE_DIR/$prefix-inline-policies.json" || return
 }
 
+capture_ecr_audit() {
+  local prefix="$1"
+  aws ecr batch-get-image \
+    --repository-name honua-server \
+    --image-ids "imageDigest=$IMAGE_DIGEST" \
+    --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+    --region us-west-2 \
+    --query '{images: images[].{registryId:registryId,repositoryName:repositoryName,imageId:{imageDigest:imageId.imageDigest},imageManifest:imageManifest,imageManifestMediaType:imageManifestMediaType},failures:failures}' \
+    > "$EVIDENCE_DIR/$prefix-ecr-image.json" || return
+  local config_digest
+  config_digest="$(python scripts/assert-candidate-preflight-ecr.py config-digest \
+    --image "$EVIDENCE_DIR/$prefix-ecr-image.json")" || return
+  test "$config_digest" = "$CONFIG_DIGEST" || return
+  local config_url
+  config_url="$(aws ecr get-download-url-for-layer \
+    --repository-name honua-server \
+    --layer-digest "$config_digest" \
+    --region us-west-2 \
+    --query downloadUrl \
+    --output text)" || return
+  [[ "$config_url" == https://* ]] || return
+  curl --fail --silent --show-error "$config_url" > "$EVIDENCE_DIR/$prefix-ecr-config.json" || return
+  python scripts/assert-candidate-preflight-ecr.py assert \
+    --image "$EVIDENCE_DIR/$prefix-ecr-image.json" \
+    --config "$EVIDENCE_DIR/$prefix-ecr-config.json" \
+    --evidence "$EVIDENCE_DIR/$prefix-ecr-evidence.json"
+}
+
 runtime_audit() {
   local mode="$1"
   local prefix="$2"
@@ -37,6 +67,7 @@ runtime_audit() {
     --role-policy "$EVIDENCE_DIR/$prefix-role-policy.json" \
     --attached-policies "$EVIDENCE_DIR/$prefix-attached-policies.json" \
     --inline-policies "$EVIDENCE_DIR/$prefix-inline-policies.json" \
+    --ecr-evidence "$EVIDENCE_DIR/$prefix-ecr-evidence.json" \
     --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
     --merged-sha "$MERGED_SHA" \
     --receipt "$EVIDENCE_DIR/deployment-receipt.json"
@@ -59,12 +90,14 @@ readonly HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight outpu
 test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:$HELPER_NAME:$HELPER_VERSION"
 
 capture_helper_audit postapply
+capture_ecr_audit postapply
 runtime_audit create postapply
 sha256sum "$EVIDENCE_DIR/deployment-receipt.json" > "$EVIDENCE_DIR/deployment-receipt.sha256"
 
 sha256sum --check "$EVIDENCE_DIR/deployment-receipt.sha256"
 plan_receipt_verify
 capture_helper_audit preinvoke
+capture_ecr_audit preinvoke
 runtime_audit verify preinvoke
 
 # Controlled aggregation begins only at invocation. Invocation and semantic
@@ -81,21 +114,38 @@ if ! aws lambda invoke \
   > "$EVIDENCE_DIR/invocation-metadata.json"; then
   invocation_status=1
 fi
-if ! python scripts/assert-candidate-preflight-invocation.py \
+if ! python scripts/assert-candidate-preflight-invocation.py create \
   --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
   --payload "$EVIDENCE_DIR/invocation-payload.json" \
-  --expected-version "$HELPER_VERSION"; then
+  --expected-version "$HELPER_VERSION" \
+  --deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --ecr-evidence "$EVIDENCE_DIR/preinvoke-ecr-evidence.json" \
+  --receipt "$EVIDENCE_DIR/invocation-receipt.json"; then
   invocation_status=1
 fi
 if ! capture_helper_audit postinvoke; then
   invocation_status=1
 fi
+if ! capture_ecr_audit postinvoke; then
+  invocation_status=1
+fi
 if ! runtime_audit verify postinvoke; then
+  invocation_status=1
+fi
+if ! python scripts/assert-candidate-preflight-invocation.py verify \
+  --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
+  --payload "$EVIDENCE_DIR/invocation-payload.json" \
+  --expected-version "$HELPER_VERSION" \
+  --deployment-receipt "$EVIDENCE_DIR/deployment-receipt.json" \
+  --ecr-evidence "$EVIDENCE_DIR/postinvoke-ecr-evidence.json" \
+  --receipt "$EVIDENCE_DIR/invocation-receipt.json"; then
   invocation_status=1
 fi
 if ! sha256sum \
   "$EVIDENCE_DIR/invocation-metadata.json" \
   "$EVIDENCE_DIR/invocation-payload.json" \
+  "$EVIDENCE_DIR/invocation-receipt.json" \
+  "$EVIDENCE_DIR/postinvoke-ecr-evidence.json" \
   > "$EVIDENCE_DIR/invocation-artifacts.sha256"; then
   invocation_status=1
 fi

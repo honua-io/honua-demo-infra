@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -111,8 +112,10 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('lifecycle_field="status"', handler)
         self.assertIn('value.get("isReady") is not True', handler)
         self.assertIn('value.get("isFailed") is not False', handler)
-        self.assertIn('variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]', handler)
-        self.assertIn('"sourceCommit": variables["HONUA_GIT_SHA"]', handler)
+        self.assertNotIn('variables.get("HONUA_GIT_SHA")', handler)
+        self.assertIn('"sourceCommit": manifest_candidate["sourceCommit"]', handler)
+        self.assertIn('"provenance": "classification-manifest+resolved-image"', handler)
+        self.assertIn('code.get("ResolvedImageUri") != IMMUTABLE["artifactReference"]', handler)
         self.assertNotRegex(handler, r"\bprint\s*\(")
         for path in (
             "/healthz/live",
@@ -121,6 +124,18 @@ class CandidatePreflightContractTests(unittest.TestCase):
             "/api/v1/admin/observability/migrations",
         ):
             self.assertIn(path, handler)
+
+    def test_operator_ecr_provenance_does_not_widen_helper_iam(self):
+        iac = IAC.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
+        self.assertNotIn('"ecr:', iac)
+        self.assertIn("aws ecr batch-get-image", invoke)
+        self.assertIn("aws ecr get-download-url-for-layer", invoke)
+        self.assertIn("assert-candidate-preflight-ecr.py", invoke)
+        self.assertIn(
+            "ecrEvidenceSha256",
+            (ROOT / "scripts" / "assert-candidate-preflight-runtime.py").read_text(encoding="utf-8"),
+        )
 
     def test_runbook_keeps_execution_manual_and_non_mutating(self):
         runbook = RUNBOOK.read_text(encoding="utf-8")
@@ -153,6 +168,26 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('apply "$EVIDENCE_DIR/candidate-preflight.tfplan"', plan_apply)
         self.assertIn("Controlled aggregation begins only at invocation", invoke)
         self.assertIn("capture_helper_audit postinvoke", invoke)
+
+    def test_all_shell_procedures_are_declared_and_stored_lf_only(self):
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("*.sh text eol=lf", attributes.splitlines())
+        shell_paths = sorted(ROOT.rglob("*.sh"))
+        self.assertTrue(shell_paths)
+        relative_paths = [path.relative_to(ROOT).as_posix() for path in shell_paths]
+        resolved_attributes = subprocess.check_output(
+            ["git", "check-attr", "text", "eol", "--", *relative_paths],
+            cwd=ROOT,
+            text=True,
+        )
+        for path in shell_paths:
+            relative = path.relative_to(ROOT).as_posix()
+            with self.subTest(path=relative):
+                self.assertIn(f"{relative}: text: set", resolved_attributes)
+                self.assertIn(f"{relative}: eol: lf", resolved_attributes)
+                content = path.read_bytes()
+                self.assertNotIn(b"\r", content)
+                self.assertTrue(content.startswith(b"#!/usr/bin/env bash\n"))
 
 
 if __name__ == "__main__":

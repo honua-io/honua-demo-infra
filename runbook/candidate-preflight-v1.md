@@ -23,6 +23,16 @@ exact qualified candidate and `live` alias metadata, invokes only candidate
 group, database, SSM, Step Functions, bootstrap, seed, unqualified Lambda,
 publish, update, or alias-mutation permissions.
 
+Candidate source provenance does not depend on an application deployment
+environment variable. The helper binds the exact `ResolvedImageUri` and exact
+Control Plane ArtifactReference digest to the reviewed classification
+manifest's exact `sourceCommit`, `imageDigest`, and `artifactReference`.
+Operator-side ECR inspection then independently proves that exact manifest and
+config digest are `linux/arm64` native AOT with entrypoint
+`/var/task/Honua.Server`; both the OCI revision label and the image config's
+`HONUA_GIT_SHA` equal the reviewed source commit. ECR permissions are not added
+to the helper role.
+
 The password stays in Lambda memory. It is placed only into the two internal
 admin request events as `X-API-Key`. The handler never logs or returns its input,
 the generated events, headers, secret, raw candidate bodies, or AWS exception
@@ -98,6 +108,14 @@ Stop if any candidate version, revision, package, architecture, skip-migration
 mode, ArtifactReference, image digest, source label, alias version, alias
 revision, or alias routing value differs from the pins above.
 
+The executable invocation procedure captures the raw ECR manifest and config
+metadata after apply, immediately before invocation, and after invocation. Its
+normalizer rejects the wrong or missing digest, config descriptor, platform,
+native-AOT label, entrypoint, OCI revision, source repository, or
+`HONUA_GIT_SHA`. The normalized evidence SHA-256 is included in the deployment
+receipt and the invocation receipt; all three observations must be identical.
+The raw presigned download URL is never persisted.
+
 Do not invoke this wrapper until the infrastructure PR has independent review
 and the release owner explicitly authorizes the exact candidate check. Do not
 use the wrapper after any pin changes; update and re-review the manifest and
@@ -127,7 +145,9 @@ post-invocation runtime/IAM audit, and the procedure then exits nonzero.
 The invocation assertion requires transport `StatusCode=200`, no
 `FunctionError`, `ExecutedVersion` equal to the exact published helper version,
 the exact result schema and operation, `status=passed`, exact candidate and
-alias pins, `migration.phase=Expand`, `pendingScriptCount=14`, the exact pending
+alias pins, manifest-plus-resolved-image provenance, and an invocation receipt
+bound to the exact deployment receipt and ECR evidence. It also requires
+`migration.phase=Expand`, `pendingScriptCount=14`, the exact pending
 script digest, and the exact ordered check set. Any mismatch is a hard stop.
 Never continue to migration, seed, alias movement, or promotion from this
 wrapper alone.

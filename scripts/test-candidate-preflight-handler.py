@@ -64,7 +64,6 @@ class FakeLambda:
             "Environment": {
                 "Variables": {
                     "HONUA_SKIP_MIGRATIONS": "true",
-                    "HONUA_GIT_SHA": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
                     "ControlPlane__DeployTargets__0__ArtifactReference": (
                         "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@"
                         "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
@@ -247,6 +246,12 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
         result, lambda_client, secrets_client, _, output = self.execute()
         self.assertEqual("passed", result["status"])
         self.assertEqual("7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad", result["candidate"]["sourceCommit"])
+        self.assertEqual("classification-manifest+resolved-image", result["candidate"]["provenance"])
+        self.assertEqual(
+            "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@"
+            "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861",
+            result["candidate"]["artifactReference"],
+        )
         self.assertEqual(14, result["migration"]["pendingScriptCount"])
         self.assertNotIn(SECRET, json.dumps(result) + output)
         self.assertEqual(1, len(secrets_client.calls))
@@ -298,6 +303,51 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
     def test_contract_phase_branch_is_rejected(self):
         result, *_ = self.execute(contract=True)
         self.assertEqual("contract-phase-rejected", result["failure"])
+
+    def test_manifest_source_digest_and_reference_drift_fail_closed(self):
+        module = load_handler(FakeLambda(self.pending), FakeSecrets(), [])
+        for key, value in (
+            ("sourceCommit", "0" * 40),
+            ("imageDigest", "sha256:" + "0" * 64),
+            ("artifactReference", "invalid"),
+        ):
+            original = module.IMMUTABLE[key]
+            module.IMMUTABLE[key] = value
+            try:
+                with self.subTest(key=key), self.assertRaises(module.PreflightFailure) as failure:
+                    module._load_classification_manifest()
+                self.assertEqual("classification-candidate-drift", failure.exception.code)
+            finally:
+                module.IMMUTABLE[key] = original
+
+    def test_candidate_artifact_and_resolved_digest_drift_fail_closed(self):
+        module = load_handler(FakeLambda(self.pending), FakeSecrets(), [])
+        manifest_candidate = json.loads(MANIFEST.read_text(encoding="utf-8"))["candidate"]
+
+        class ArtifactDrift(FakeLambda):
+            @staticmethod
+            def configuration():
+                value = FakeLambda.configuration()
+                value["Environment"]["Variables"][
+                    "ControlPlane__DeployTargets__0__ArtifactReference"
+                ] = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:" + "0" * 64
+                return value
+
+        class ResolvedDrift(FakeLambda):
+            def get_function(self, **kwargs):
+                value = super().get_function(**kwargs)
+                value["Code"]["ResolvedImageUri"] = (
+                    "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:" + "0" * 64
+                )
+                return value
+
+        for client, code in (
+            (ArtifactDrift(self.pending), "candidate-artifact-reference-drift"),
+            (ResolvedDrift(self.pending), "candidate-resolved-image-drift"),
+        ):
+            with self.subTest(code=code), self.assertRaises(module.PreflightFailure) as failure:
+                module._candidate_fingerprint(client, manifest_candidate)
+            self.assertEqual(code, failure.exception.code)
 
     def test_deploy_nested_migration_lifecycle_must_be_skipped(self):
         result, *_ = self.execute(nested_lifecycle="succeeded")

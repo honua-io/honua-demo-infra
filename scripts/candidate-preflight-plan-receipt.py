@@ -13,10 +13,10 @@ import subprocess
 
 SCHEMA = "honua-candidate-preflight-plan-receipt-v1"
 SOURCE_HASHES = {
-    "handler.py": "cb7f4589f32a884c72552eb5e2227378f9cae810f4c9eb56a653be1139bb7415",
+    "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",
     "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
 }
-ARCHIVE_SHA256 = "52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554"
+ARCHIVE_SHA256 = "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
