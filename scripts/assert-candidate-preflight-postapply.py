@@ -18,10 +18,10 @@ PREAPPLY_ASSERTION = ROOT / "scripts" / "assert-candidate-preflight-plan.py"
 TERRAFORM_VERSION = "1.15.8"
 PLAN_FORMAT_VERSION = "1.2"
 SOURCE_LF_SHA256 = {
-    "main.tf": "9c4784170f935a6a423b8fe67137c1845f3cc8c97a92317d1fcecf10bd08035b",
+    "main.tf": "bb7fee2f20f6fe573eae235e8c043a432c9e05e6df5bde37bf465ddd1ed6f00d",
     "versions.tf": "b7443e50e884d7ed228bb7d29373b18c1b8c1a5a4cb5575e8b5a550a8baa60f6",
     ".terraform.lock.hcl": "4f9da38851b151b7100f9403c30048327f8674136132a957b7061535bc4efe41",
-    "handler.py": "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140",
+    "handler.py": "69a59299be3c49530ed04bce9a0bfa53a79d63b0b23dcffcfd9f65c9bde217a1",
     "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
 }
 EXPECTED_RESOURCE_CHANGES = {
@@ -154,17 +154,17 @@ def assert_outputs(plan: dict) -> None:
         require(change.get("before") == change.get("after"), f"post-apply output {name} differs")
         require(change.get("after_unknown") is False, f"post-apply output {name} is unknown")
         require(change.get("before_sensitive") is False and change.get("after_sensitive") is False, f"post-apply output {name} sensitivity drifted")
-    require(outputs["candidate_preflight_version"]["after"] == "2", "post-apply helper version is not immutable version 2")
-    require(outputs["candidate_preflight_qualified_arn"]["after"] == "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2", "post-apply helper ARN is not qualified version 2")
+    require(outputs["candidate_preflight_version"]["after"] == "3", "post-apply helper version is not immutable version 3")
+    require(outputs["candidate_preflight_qualified_arn"]["after"] == "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3", "post-apply helper ARN is not qualified version 3")
 
 
-def assert_published_v2(resources: dict[str, dict]) -> None:
+def assert_published_v3(resources: dict[str, dict]) -> None:
     function = resources["aws_lambda_function.candidate_preflight"]["change"]["after"]
-    require(function.get("version") == "2", "post-apply Lambda state is not helper version 2")
-    require(function.get("qualified_arn") == "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:2", "post-apply Lambda qualified ARN drifted")
-    require(function.get("code_sha256") == "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk=", "post-apply Lambda code hash drifted")
-    require(function.get("source_code_hash") == "tHFeoSVqm/E5CIsnZNRdKFntc00GP7Sg/lMrtoph4pk=", "post-apply Lambda source hash drifted")
-    require(function.get("source_code_size") == 5732, "post-apply Lambda archive size drifted")
+    require(function.get("version") == "3", "post-apply Lambda state is not helper version 3")
+    require(function.get("qualified_arn") == "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3", "post-apply Lambda qualified ARN drifted")
+    require(function.get("code_sha256") == "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU=", "post-apply Lambda code hash drifted")
+    require(function.get("source_code_hash") == "kp5S3LTvL8L2csu0yvP9zKwUv+0RP0Q++lgnTobCYgU=", "post-apply Lambda source hash drifted")
+    require(function.get("source_code_size") == 5715, "post-apply Lambda archive size drifted")
     variables = function.get("environment", [{}])[0].get("variables", {})
     require(variables.get("SOURCE_HANDLER_SHA256") == "589d341be3d489d5a7abbce5dd816254121ae4c5ef327a35555ae0a9efe27140", "post-apply Lambda handler hash pin drifted")
 
@@ -273,7 +273,7 @@ def assert_postapply(plan: dict, configuration_root: Path = DEFAULT_CONFIGURATIO
     for address, item in resources.items():
         assert_noop_change(item, address)
     assert_outputs(plan)
-    assert_published_v2(resources)
+    assert_published_v3(resources)
     assert_drift(plan, resources)
 
 
