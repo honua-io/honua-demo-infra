@@ -69,7 +69,6 @@ EXPECTED_RESOURCE_EXPRESSIONS = {
                 "local.candidate_preflight_app_function_arn",
                 "local.candidate_preflight_candidate_version",
                 "local.candidate_preflight_app_function_arn",
-                "local.candidate_preflight_live_alias_name",
                 "local.candidate_preflight_app_function_arn",
                 "local.candidate_preflight_candidate_version",
                 "local.candidate_preflight_log_group_arn",
@@ -314,45 +313,59 @@ def assert_production_source(configuration_root: Path = DEFAULT_CONFIGURATION_RO
     require(re.search(rf'candidate_preflight_handler_sha256\s*=\s*"{HANDLER_SHA256}"', main) is not None, "handler source hash drifted")
     require(re.search(rf'candidate_preflight_classification_sha256\s*=\s*"{CLASSIFICATION_SHA256}"', main) is not None, "classification source hash drifted")
     require(re.search(rf'candidate_preflight_archive_base64sha256\s*=\s*"{re.escape(ARCHIVE_BASE64SHA256)}"', main) is not None, "archive hash drifted")
+    live_statement = re.search(r'Sid\s+=\s+"ReadExactLiveAlias"(?P<body>.*?)\n\s+\},', main, re.DOTALL)
+    require(live_statement is not None, "GetAlias IAM statement is missing")
+    live_body = live_statement.group("body")
+    require('Action   = ["lambda:GetAlias"]' in live_body, "GetAlias IAM action drifted")
+    require('Resource = [local.candidate_preflight_app_function_arn]' in live_body, "GetAlias must use the exact unqualified app function ARN")
+    require("candidate_preflight_live_alias_name" not in live_body, "GetAlias must not use an alias ARN")
+    require("candidate_preflight_candidate_version" not in live_body, "GetAlias must not use a version ARN")
+    require('Resource = ["*"]' not in live_body, "GetAlias must not use a wildcard resource")
+
+
+def expected_policy(secret_arn: str, live_resource: str = FUNCTION_ARN) -> dict:
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "ReadExactAdminPassword",
+                "Effect": "Allow",
+                "Action": ["secretsmanager:GetSecretValue"],
+                "Resource": [secret_arn],
+            },
+            {
+                "Sid": "ReadExactCandidate",
+                "Effect": "Allow",
+                "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration"],
+                "Resource": [f"{FUNCTION_ARN}:40"],
+            },
+            {
+                "Sid": "ReadExactLiveAlias",
+                "Effect": "Allow",
+                "Action": ["lambda:GetAlias"],
+                "Resource": [live_resource],
+            },
+            {
+                "Sid": "InvokeExactCandidate",
+                "Effect": "Allow",
+                "Action": ["lambda:InvokeFunction"],
+                "Resource": [f"{FUNCTION_ARN}:40"],
+            },
+            {
+                "Sid": "WriteExactLogGroup",
+                "Effect": "Allow",
+                "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+                "Resource": [f"{LOG_GROUP_ARN}:*"],
+            },
+        ],
+    }
 
 
 def assert_policy(policy_text: str, secret_arn: str) -> None:
     policy = json.loads(policy_text)
     require(set(policy) == {"Version", "Statement"}, "IAM policy top-level fields drifted")
     require(policy["Version"] == "2012-10-17", "IAM policy version drifted")
-    expected = [
-        {
-            "Sid": "ReadExactAdminPassword",
-            "Effect": "Allow",
-            "Action": ["secretsmanager:GetSecretValue"],
-            "Resource": [secret_arn],
-        },
-        {
-            "Sid": "ReadExactCandidate",
-            "Effect": "Allow",
-            "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration"],
-            "Resource": [f"{FUNCTION_ARN}:40"],
-        },
-        {
-            "Sid": "ReadExactLiveAlias",
-            "Effect": "Allow",
-            "Action": ["lambda:GetAlias"],
-            "Resource": [f"{FUNCTION_ARN}:live"],
-        },
-        {
-            "Sid": "InvokeExactCandidate",
-            "Effect": "Allow",
-            "Action": ["lambda:InvokeFunction"],
-            "Resource": [f"{FUNCTION_ARN}:40"],
-        },
-        {
-            "Sid": "WriteExactLogGroup",
-            "Effect": "Allow",
-            "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
-            "Resource": [f"{LOG_GROUP_ARN}:*"],
-        },
-    ]
-    require(policy["Statement"] == expected, "IAM policy is not the exact least-privilege document")
+    require(policy == expected_policy(secret_arn), "IAM policy is not the exact least-privilege document")
 
 
 def assert_configuration(
@@ -437,23 +450,50 @@ def assert_plan(
 
     changes = {change["address"]: change for change in plan.get("resource_changes", [])}
     require(set(changes) == EXPECTED_MANAGED, "resource-change set is not exactly the four helper resources")
+    actions = {address: change["change"]["actions"] for address, change in changes.items()}
+    create_plan = all(value == ["create"] for value in actions.values())
+    repair_plan = actions == {
+        "aws_cloudwatch_log_group.candidate_preflight": ["no-op"],
+        "aws_iam_role.candidate_preflight": ["no-op"],
+        "aws_iam_role_policy.candidate_preflight": ["update"],
+        "aws_lambda_function.candidate_preflight": ["no-op"],
+    }
+    require(create_plan or repair_plan, f"resource actions are neither exact creation nor exact IAM repair: {actions}")
     for address, change in changes.items():
-        require(change["change"]["actions"] == ["create"], f"{address} must be create-only")
         require(not change.get("action_reason"), f"{address} has an action reason")
+
+    if repair_plan:
+        for address, item in changes.items():
+            change = item["change"]
+            require(not change.get("after_unknown"), f"repair plan leaves {address} unknown")
+            require(not change.get("replace_paths"), f"repair plan replaces {address}")
+            require(change.get("before_sensitive") == change.get("after_sensitive"), f"repair plan changes {address} sensitivity")
+            if address != "aws_iam_role_policy.candidate_preflight":
+                require(change.get("before") == change.get("after"), f"repair plan changes {address}")
 
     outputs = plan.get("output_changes", {})
     expected_outputs = {"candidate_preflight_qualified_arn", "candidate_preflight_version"}
     require(set(outputs) == expected_outputs, "helper output set drifted")
     for name, output in outputs.items():
-        require(output.get("actions") == ["create"], f"{name} must be create-only")
-        require(output.get("after") is None, f"{name} must be unknown before apply")
-        require(output.get("after_unknown") is True, f"{name} must be resolved only after publication")
+        if create_plan:
+            require(output.get("actions") == ["create"], f"{name} must be create-only")
+            require(output.get("after") is None, f"{name} must be unknown before apply")
+            require(output.get("after_unknown") is True, f"{name} must be resolved only after publication")
+        else:
+            expected_value = "1" if name == "candidate_preflight_version" else f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1"
+            require(output.get("actions") == ["no-op"], f"repair output {name} is actionable")
+            require(output.get("before") == expected_value and output.get("after") == expected_value, f"repair output {name} drifted")
+            require(output.get("after_unknown") is False, f"repair output {name} is unknown")
         require(output.get("after_sensitive") is False, f"{name} must be non-sensitive")
 
     planned_outputs = plan.get("planned_values", {}).get("outputs", {})
     require(set(planned_outputs) == expected_outputs, "planned output set contains an unexpected or unqualified output")
     for name, output in planned_outputs.items():
-        require("value" not in output, f"{name} unexpectedly has an unqualified or pre-publication value")
+        if create_plan:
+            require("value" not in output, f"{name} unexpectedly has an unqualified or pre-publication value")
+        else:
+            expected_value = "1" if name == "candidate_preflight_version" else f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{HELPER_NAME}:1"
+            require(output.get("value") == expected_value, f"repair planned output {name} drifted")
         require(output.get("sensitive") is False, f"{name} is sensitive")
 
     def find_forbidden_secret_fields(value) -> bool:
@@ -536,6 +576,14 @@ def assert_plan(
     require(role_policy["name"] == "credential-safe-candidate-preflight-v1", "inline policy name drifted")
     require(role_policy["role"] == ROLE_NAME, "inline policy is not bound to the exact reviewed role")
     assert_policy(role_policy["policy"], secret_arn)
+    if repair_plan:
+        before_policy = changes["aws_iam_role_policy.candidate_preflight"]["change"]["before"]
+        require(set(before_policy) == set(role_policy), "IAM repair changes fields beyond policy")
+        require(before_policy["name"] == role_policy["name"] and before_policy["role"] == role_policy["role"], "IAM repair changes policy identity")
+        require(
+            json.loads(before_policy["policy"]) == expected_policy(secret_arn, f"{FUNCTION_ARN}:live"),
+            "IAM repair does not start from the sealed alias-ARN policy",
+        )
 
 
 def main() -> None:

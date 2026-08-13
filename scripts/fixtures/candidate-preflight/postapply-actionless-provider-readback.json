@@ -114,7 +114,6 @@
                 "local.candidate_preflight_app_function_arn",
                 "local.candidate_preflight_candidate_version",
                 "local.candidate_preflight_app_function_arn",
-                "local.candidate_preflight_live_alias_name",
                 "local.candidate_preflight_app_function_arn",
                 "local.candidate_preflight_candidate_version",
                 "local.candidate_preflight_log_group_arn"
@@ -357,7 +356,7 @@
           "inline_policy": [
             {
               "name": "credential-safe-candidate-preflight-v1",
-              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
+              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
             }
           ]
         },
@@ -366,7 +365,7 @@
           "inline_policy": [
             {
               "name": "credential-safe-candidate-preflight-v1",
-              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
+              "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"
             }
           ]
         },
@@ -392,12 +391,12 @@
         "before": {
           "name": "credential-safe-candidate-preflight-v1",
           "role": "honua-demo-demo-candidate-preflight-role",
-          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
         },
         "after": {
           "name": "credential-safe-candidate-preflight-v1",
           "role": "honua-demo-demo-candidate-preflight-role",
-          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
         },
         "after_unknown": {},
         "before_sensitive": {},
@@ -466,7 +465,7 @@
           "inline_policy": [
             {
               "name": "credential-safe-candidate-preflight-v1",
-              "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
+              "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"
             }
           ]
         },

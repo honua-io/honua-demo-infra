@@ -131,7 +131,7 @@ def expected_policy(secret_arn: str) -> dict:
         "Statement": [
             {"Sid": "ReadExactAdminPassword", "Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"], "Resource": [secret_arn]},
             {"Sid": "ReadExactCandidate", "Effect": "Allow", "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration"], "Resource": [f"{app}:40"]},
-            {"Sid": "ReadExactLiveAlias", "Effect": "Allow", "Action": ["lambda:GetAlias"], "Resource": [f"{app}:live"]},
+            {"Sid": "ReadExactLiveAlias", "Effect": "Allow", "Action": ["lambda:GetAlias"], "Resource": [app]},
             {"Sid": "InvokeExactCandidate", "Effect": "Allow", "Action": ["lambda:InvokeFunction"], "Resource": [f"{app}:40"]},
             {"Sid": "WriteExactLogGroup", "Effect": "Allow", "Action": ["logs:CreateLogStream", "logs:PutLogEvents"], "Resource": [log]},
         ],

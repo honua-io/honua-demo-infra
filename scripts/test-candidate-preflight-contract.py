@@ -49,7 +49,7 @@ class CandidatePreflightContractTests(unittest.TestCase):
         iac = IAC.read_text(encoding="utf-8")
         self.assertIn("Resource = [local.admin_password_secret_arn]", iac)
         self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
-        self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
+        self.assertIn('Resource = [local.candidate_preflight_app_function_arn]', iac)
         self.assertIn('Resource = ["${local.candidate_preflight_log_group_arn}:*"]', iac)
         self.assertNotIn("vpc_config", iac)
         self.assertNotIn("aws_security_group", iac)
@@ -69,6 +69,13 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIsNotNone(invoke)
         self.assertIn('"lambda:InvokeFunction"', invoke.group("body"))
         self.assertIn(":${local.candidate_preflight_candidate_version}", invoke.group("body"))
+
+        get_alias = re.search(r'Sid\s+=\s+"ReadExactLiveAlias"(?P<body>.*?)\n\s+\},', iac, re.DOTALL)
+        self.assertIsNotNone(get_alias)
+        self.assertIn('Action   = ["lambda:GetAlias"]', get_alias.group("body"))
+        self.assertIn('Resource = [local.candidate_preflight_app_function_arn]', get_alias.group("body"))
+        self.assertNotIn("candidate_preflight_live_alias_name", get_alias.group("body"))
+        self.assertNotIn("candidate_preflight_candidate_version", get_alias.group("body"))
 
     def test_lambda_is_python_313_synchronous_bounded_and_sg_free(self):
         iac = IAC.read_text(encoding="utf-8")

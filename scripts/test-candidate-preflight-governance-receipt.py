@@ -117,9 +117,14 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                 else:
                     path.write_text(relative + "\n", encoding="utf-8")
             for relative in RECEIPT.DEPLOYMENT_PATHS:
-                path = root / relative / "fixture.txt"
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("immutable deployment\n", encoding="utf-8")
+                path = root / relative
+                if path.suffix:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("immutable deployment\n", encoding="utf-8")
+                else:
+                    fixture = path / "fixture.txt"
+                    fixture.parent.mkdir(parents=True, exist_ok=True)
+                    fixture.write_text("immutable deployment\n", encoding="utf-8")
             git("add", ".")
             git("commit", "-q", "-m", "deployment")
             deployment = git("rev-parse", "HEAD")
@@ -134,12 +139,14 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
             originals = (
                 RECEIPT.ROOT,
                 RECEIPT.DEPLOYMENT_SHA,
+                RECEIPT.REPAIRED_MAIN_LF_SHA256,
                 RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT,
                 RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256,
             )
             try:
                 RECEIPT.ROOT = root
                 RECEIPT.DEPLOYMENT_SHA = deployment
+                RECEIPT.REPAIRED_MAIN_LF_SHA256 = RECEIPT.lf_sha256(root / "stacks/aws-candidate-preflight/main.tf")
                 RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT = historical_document
                 RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256 = RECEIPT.lf_sha256(historical)
                 receipt = RECEIPT.build_receipt(governance, deployment, historical)
@@ -165,7 +172,7 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                     RECEIPT.build_receipt(governance, unrelated, historical)
                 RECEIPT.DEPLOYMENT_SHA = deployment
 
-                deployment_file = root / RECEIPT.DEPLOYMENT_PATHS[0] / "fixture.txt"
+                deployment_file = root / RECEIPT.DEPLOYMENT_PATHS[0]
                 deployment_file.write_text("drifted deployment\n", encoding="utf-8")
                 git("add", ".")
                 git("commit", "-q", "-m", "deployment drift")
@@ -194,6 +201,7 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                 (
                     RECEIPT.ROOT,
                     RECEIPT.DEPLOYMENT_SHA,
+                    RECEIPT.REPAIRED_MAIN_LF_SHA256,
                     RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT,
                     RECEIPT.HISTORICAL_DEPLOYMENT_RECEIPT_SHA256,
                 ) = originals

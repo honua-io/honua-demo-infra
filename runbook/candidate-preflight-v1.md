@@ -23,6 +23,13 @@ exact qualified candidate and `live` alias metadata, invokes only candidate
 group, database, SSM, Step Functions, bootstrap, seed, unqualified Lambda,
 publish, update, or alias-mutation permissions.
 
+`lambda:GetAlias` is scoped to the exact unqualified application function ARN,
+not the `:live` alias ARN. AWS Lambda's service-authorization table assigns
+`GetAlias` to the `function*` resource type even though the API reads the fixed
+alias name supplied separately by the handler. Candidate metadata reads and
+invocation remain separately scoped to exact version `:40`; the policy has no
+wildcard, other function, or version resource for `GetAlias`.
+
 Candidate source provenance does not depend on an application deployment
 environment variable. The helper binds the exact `ResolvedImageUri` and exact
 Control Plane ArtifactReference digest to the reviewed classification
@@ -56,6 +63,32 @@ diagnostic must independently report `migration.lifecycleStatus=skipped`.
 This probe does not move `live`, does not run migrations, does not seed data,
 and does not produce a promotion receipt. A passing response is preflight
 evidence only.
+
+## Sealed failed invocation and IAM repair
+
+The single invocation authorized from governance commit
+`c25bdcd6b7ca183f13f1689f9955296dda41ceee` is terminal and must not be retried
+or overwritten. Its local-only bundle is
+`candidate-preflight-invocation-c25bdcd6b7ca183f13f1689f9955296dda41ceee`.
+The sanitized transport metadata SHA-256 is
+`d892e777f622457583f6c9478b501e3f481b92ff434d4306453bf2a0b146557b`;
+the sanitized payload SHA-256 is
+`23baa9d856e20eb4202510c48d5a1a75e39c17b9e4beb787a0a21bf2b66d434b`.
+It reports only `status=failed` and `failure=live-alias-read-failed`, with no
+secret or AWS exception text. The sealed post-invocation IAM document used the
+`:live` alias ARN for `ReadExactLiveAlias`; AWS's service-authorization contract
+requires the unqualified function resource for `GetAlias`. Together these
+establish the exact policy-resource mismatch without exposing credentials.
+
+Repair planning must use `-refresh=false` and pass the exact plan assertion. An
+existing deployment may produce only `0 added, 1 changed, 0 destroyed`: the
+standalone inline policy changes from the exact sealed alias-ARN document to the
+exact unqualified-function document. The log group, role, helper Lambda, helper
+version `1`, candidate `:40` read/invoke statements, outputs, archive, handler,
+classification, and every other policy statement must be no-op. Apply and a new
+single invocation each require separate release-owner authorization, clean
+merged-SHA evidence directories, and fresh receipts. The sealed failed bundle
+does not authorize either operation.
 
 ## Terraform and source boundary
 
@@ -138,11 +171,12 @@ deployment receipt before any separately authorized invocation:
 
 The immutable deployment plan receipt remains unchanged and bound to deployment
 commit `3a00dfd36c298def8f8f49757dd56595d29097cb`. Invocation governance runs from a
-different clean, exact merged governance commit. A governance receipt binds that
-commit, the unchanged deployment Terraform/helper source, the operator and
-assertion source hashes, qualified-only payload, disabled tail logging, one AWS
-attempt, and terminal IAM pagination. Arbitrary or equal governance/deployment
-SHA pairs fail closed; never rewrite the historical plan receipt.
+different clean, exact merged governance commit. A governance receipt binds
+that commit, the unchanged archive-producing source, the exact repaired
+candidate-preflight Terraform source, the operator and assertion source hashes,
+qualified-only payload, disabled tail logging, one AWS attempt, and terminal
+IAM pagination. Arbitrary or equal governance/deployment SHA pairs fail closed;
+never rewrite the historical plan receipt.
 The governed v2 deployment receipt is written to a new file and never
 overwrites the sealed historical v1 deployment receipt.
 
