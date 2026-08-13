@@ -8,3 +8,5 @@ terraform.tfvars
 # Apply-time build artifacts for the PostGIS bootstrap Lambda.
 stacks/aws/postgis-bootstrap/build/
 stacks/aws/postgis-bootstrap/bootstrap.zip
+# Credential-safe candidate-preflight Lambda package.
+stacks/aws/candidate-preflight.zip

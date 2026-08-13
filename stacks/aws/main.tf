@@ -37,7 +37,7 @@ module "honua" {
   # needs git credentials that can fetch it — see README.md → "Module source
   # (private repo auth)". Bump the ref deliberately (and re-run the drift
   # plan) when picking up module changes; do not float on a branch.
-  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=a4a1ea52336549e4e7beb6864f115cb335cdc43b"
+  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=7abdb07c85c7a389a9c3cc97583e534f6c636a3b"
 
   # Identity
   name_prefix = var.name_prefix

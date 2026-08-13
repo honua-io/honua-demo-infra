@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "honua-candidate-preflight-classification-v1",
+  "candidate": {
+    "sourceCommit": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+    "imageDigest": "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861",
+    "artifactReference": "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
+  },
+  "scripts": [
+    { "name": "Honua.Server.Migrations.092_CreateSavedMapOperationLog.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.093_EnsureConfiguredStudioPackageLifecycle.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.094_CreateSavedMapCheckpointVersionRecovery.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.095_DeleteSavedMapOperationLogWithStudioDraft.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.096_AddReplicaConflictClientEditApplied.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.097_AddReplicaConflictResolutionPreconditions.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.098_AddReplicaConflictClaimIdentity.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.099_AddReplicaConflictClientEditOutcomeUnknown.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.100_AddReplicaConflictClientEditSuperseded.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.101_AddReplicaConflictPreWriteStateToken.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.102_WidenReplicaConflictTypeForDeleteDelete.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.103_AddReplicaConflictPreWriteRowAbsent.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.104_AddReplicaConflictStorageObjectId.sql", "phase": "Expand" },
+    { "name": "Honua.Server.Migrations.105_AddChangeLogPublicObjectId.sql", "phase": "Expand" }
+  ]
+}
