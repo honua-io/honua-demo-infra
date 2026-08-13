@@ -44,6 +44,9 @@ stacks/aws/          The Phase A demo.honua.io Terraform root module
                         (SDK client-compat certification target)
   README.md             Full operational README for the stack (moved verbatim
                         from honua-iac; read this before touching anything)
+stacks/aws-candidate-preflight/
+                      Isolated credential-safe candidate probe root; consumes
+                      metadata-only secret identity and owns no app resources
 manifest/
   demo-services.v1.json Generated public service manifest (#19) — see below
   generate-demo-services.py
@@ -68,6 +71,15 @@ only provisions and operates the AWS resources the demo runs on.
 | Key | `demo/aws-demo/terraform.tfstate` |
 | Region | `us-east-1` (the bucket's region — deliberately different from the demo's own `us-west-2`) |
 | Locking | S3-native conditional-write locking (`use_lockfile`, Terraform >= 1.10) |
+
+The candidate-preflight helper has a separate state key,
+`demo/aws-demo/candidate-preflight.tfstate` and never reads the primary state.
+This is a security and deployment boundary: helper plans cannot traverse or
+copy the primary root's application, RDS, secret-version, seed/bootstrap,
+CloudFront, or sensitive output graph. Its exact admin-secret name is resolved
+by metadata-only `DescribeSecret`; no secret value is read. See
+`runbook/candidate-preflight-v1.md` for the fail-closed source and plan
+allowlists.
 
 This state **is reachable and was read successfully** as part of the
 honua-iac#126 extraction (see "Migration proof" below) — it is not

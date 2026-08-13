@@ -9,10 +9,13 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IAC = ROOT / "stacks" / "aws" / "candidate-preflight.tf"
+IAC = ROOT / "stacks" / "aws-candidate-preflight" / "main.tf"
+IAC_VERSIONS = ROOT / "stacks" / "aws-candidate-preflight" / "versions.tf"
 HANDLER = ROOT / "stacks" / "aws" / "candidate-preflight" / "handler.py"
 MANIFEST = ROOT / "stacks" / "aws" / "candidate-preflight" / "classification.v1.json"
 RUNBOOK = ROOT / "runbook" / "candidate-preflight-v1.md"
+PLAN_APPLY_PROCEDURE = ROOT / "scripts" / "candidate-preflight-plan-apply.sh"
+INVOKE_PROCEDURE = ROOT / "scripts" / "candidate-preflight-invoke.sh"
 MAIN = ROOT / "stacks" / "aws" / "main.tf"
 INTERFACE = ROOT / "stacks" / "aws" / "validation" / "honua-module-interface"
 
@@ -30,12 +33,23 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn(f"ref={self.MODULE_COMMIT}", contract["source"])
         self.assertIn('output "admin_password_secret_arn"', outputs)
 
+    def test_helper_root_is_state_isolated_and_uses_metadata_only_secret_discovery(self):
+        iac = IAC.read_text(encoding="utf-8")
+        versions = IAC_VERSIONS.read_text(encoding="utf-8")
+        self.assertIn('data "aws_secretsmanager_secret" "admin_password"', iac)
+        self.assertIn('name = "honua-demo-demo/admin-password"', iac)
+        self.assertIn("data.aws_secretsmanager_secret.admin_password.arn", iac)
+        self.assertNotIn("terraform_remote_state", iac)
+        self.assertNotIn("secret_string", iac.lower())
+        self.assertNotIn("module.honua", iac)
+        self.assertIn('key          = "demo/aws-demo/candidate-preflight.tfstate"', versions)
+
     def test_iam_is_qualified_only_and_has_no_mutation_or_network_permissions(self):
         iac = IAC.read_text(encoding="utf-8")
-        self.assertIn("module.honua.admin_password_secret_arn", iac)
-        self.assertIn('Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
-        self.assertIn('Resource = ["${module.honua.lambda_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
-        self.assertIn('Resource = ["${aws_cloudwatch_log_group.candidate_preflight.arn}:*"]', iac)
+        self.assertIn("Resource = [local.admin_password_secret_arn]", iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_log_group_arn}:*"]', iac)
         self.assertNotIn("vpc_config", iac)
         self.assertNotIn("aws_security_group", iac)
         self.assertNotRegex(iac, r'resource\s+"aws_lambda_invocation"')
@@ -60,8 +74,23 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('runtime                        = "python3.13"', iac)
         self.assertIn('architectures                  = ["arm64"]', iac)
         self.assertIn("reserved_concurrent_executions = 1", iac)
+        self.assertIn("publish                        = true", iac)
         self.assertIn("timeout                        = 120", iac)
         self.assertNotIn("AWSLambdaBasicExecutionRole", iac)
+        self.assertIn("candidate_preflight_role_arn", iac)
+        self.assertIn("candidate_preflight_handler_sha256", iac)
+        self.assertIn("candidate_preflight_classification_sha256", iac)
+        self.assertNotIn("source_dir", iac)
+
+    def test_production_root_has_no_redirect_or_account_escape_hatch(self):
+        iac = IAC.read_text(encoding="utf-8")
+        versions = IAC_VERSIONS.read_text(encoding="utf-8")
+        self.assertIn('data "aws_secretsmanager_secret" "admin_password"', iac)
+        self.assertIn('name = "honua-demo-demo/admin-password"', iac)
+        self.assertIn('region              = "us-west-2"', versions)
+        self.assertIn('allowed_account_ids = ["585192672263"]', versions)
+        self.assertNotIn("var.", iac + versions)
+        self.assertNotIn("skip_requesting_account_id", iac + versions)
 
     def test_manifest_is_exact_expand_set_tied_to_candidate(self):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -82,6 +111,8 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('lifecycle_field="status"', handler)
         self.assertIn('value.get("isReady") is not True', handler)
         self.assertIn('value.get("isFailed") is not False', handler)
+        self.assertIn('variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]', handler)
+        self.assertIn('"sourceCommit": variables["HONUA_GIT_SHA"]', handler)
         self.assertNotRegex(handler, r"\bprint\s*\(")
         for path in (
             "/healthz/live",
@@ -93,13 +124,35 @@ class CandidatePreflightContractTests(unittest.TestCase):
 
     def test_runbook_keeps_execution_manual_and_non_mutating(self):
         runbook = RUNBOOK.read_text(encoding="utf-8")
+        plan_apply = PLAN_APPLY_PROCEDURE.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
         self.assertIn("operator-invoked", runbook)
         self.assertIn("candidate-preflight-v1", runbook)
         self.assertIn("--log-type None", runbook)
         self.assertIn("does not move `live`", runbook)
         self.assertIn("does not run migrations", runbook)
         self.assertIn("Do not invoke", runbook)
+        self.assertIn("-refresh=false", plan_apply)
+        self.assertIn("candidate-preflight-plan-apply.sh", runbook)
+        self.assertIn("candidate-preflight-invoke.sh", runbook)
+        self.assertIn("assert-candidate-preflight-plan.py", plan_apply)
+        self.assertIn("git diff --exit-code", plan_apply)
+        self.assertIn("candidate-preflight-plan-receipt.py", plan_apply + invoke)
+        self.assertIn("candidate_preflight_qualified_arn", invoke)
+        self.assertIn("assert-candidate-preflight-runtime.py", invoke)
+        self.assertIn("assert-candidate-preflight-invocation.py", invoke)
+        self.assertNotIn("candidate_preflight_function_name", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
+
+    def test_operator_procedures_are_fail_fast_and_readonly_initialized(self):
+        plan_apply = PLAN_APPLY_PROCEDURE.read_text(encoding="utf-8")
+        invoke = INVOKE_PROCEDURE.read_text(encoding="utf-8")
+        self.assertTrue(plan_apply.startswith("#!/usr/bin/env bash\nset -euo pipefail\n"))
+        self.assertTrue(invoke.startswith("#!/usr/bin/env bash\nset -euo pipefail\n"))
+        self.assertIn("init -input=false -lockfile=readonly", plan_apply)
+        self.assertIn('apply "$EVIDENCE_DIR/candidate-preflight.tfplan"', plan_apply)
+        self.assertIn("Controlled aggregation begins only at invocation", invoke)
+        self.assertIn("capture_helper_audit postinvoke", invoke)
 
 
 if __name__ == "__main__":

@@ -47,6 +47,49 @@ This probe does not move `live`, does not run migrations, does not seed data,
 and does not produce a promotion receipt. A passing response is preflight
 evidence only.
 
+## Terraform and source boundary
+
+The helper is owned by the dedicated `stacks/aws-candidate-preflight` root and
+state key `demo/aws-demo/candidate-preflight.tfstate`. It never reads the
+primary Terraform state. The exact module-owned name
+`honua-demo-demo/admin-password` is unique within the fixed AWS account and
+region; Terraform resolves it with metadata-only `DescribeSecret`. This returns
+the authoritative generated-suffix ARN but never `SecretString`.
+
+The deployment archive contains exactly `handler.py` and
+`classification.v1.json`. Their SHA-256 values are pinned in Terraform and the
+plan checker; the deterministic ZIP hash is also pinned. Never add a directory
+source, third file, layer, filesystem, dead-letter destination, VPC attachment,
+or copied/derived secret ARN.
+
+After PR merge, use a clean checkout at the exact reviewed merge SHA. Set
+`MERGED_SHA` to that immutable commit. The executable operator procedure uses
+`set -euo pipefail` across plan creation, validation, receipt binding, every
+pre-apply recheck, and the exact saved-plan apply. Any failed command exits
+before `terraform apply` is reachable:
+
+```bash
+EVIDENCE_DIR="$HOME/.honua-runtime-proof/candidate-preflight-$MERGED_SHA"
+scripts/candidate-preflight-plan-apply.sh "$MERGED_SHA" "$EVIDENCE_DIR"
+```
+
+Keep the saved plan, show JSON, generated ZIP, ZIP checksum, `MERGED_SHA`, and
+plan-checker result together as one local review bundle. Plan JSON can contain
+state values, so never upload it. The assertion requires an applyable supported
+plan with no drift, deferral, Terraform actions/triggers/invocations, extra
+outputs, child modules, or resources beyond the exact helper graph. It verifies
+the exact role ARN, least-privilege IAM, environment, source member hashes,
+ZIP `source_code_hash`, filename, and absence of layers/VPC/filesystems/DLQ.
+
+The procedure hashes the saved plan and show JSON immediately after assertion,
+then repeats the clean-SHA check, receipt/hash verification, exact saved-plan
+show, plan assertion, and byte comparison immediately before applying that same
+file. It never replans or regenerates the ZIP between review and apply.
+
+Any mismatch is a hard stop. Do not use `terraform state` editing, `-target`,
+`ignore_changes`, a copied secret ARN, an unsaved plan, or a dirty/different
+checkout as a shortcut.
+
 ## Required re-audit
 
 Before an authorized apply or invocation, repeat read-only `get-function`,
@@ -60,22 +103,31 @@ and the release owner explicitly authorizes the exact candidate check. Do not
 use the wrapper after any pin changes; update and re-review the manifest and
 code instead.
 
-## Authorized invocation
+## Published-helper receipt and authorized invocation
 
-Only after that authorization, invoke synchronously with tail logging disabled:
+The apply publishes an immutable helper version. There is deliberately no
+unqualified helper-name output. After explicit release-owner authorization,
+run the second executable procedure:
 
 ```bash
-aws lambda invoke \
-  --function-name "$(terraform output -raw candidate_preflight_function_name)" \
-  --cli-binary-format raw-in-base64-out \
-  --invocation-type RequestResponse \
-  --log-type None \
-  --payload '{"operation":"candidate-preflight-v1"}' \
-  candidate-preflight-result.json
+scripts/candidate-preflight-invoke.sh "$MERGED_SHA" "$EVIDENCE_DIR"
 ```
 
-Require `status` to equal `passed`, candidate and alias pins to match this
-document, `migration.phase` to equal `Expand`, and `pendingScriptCount` to equal
-`14`. Any `failed` response, Lambda `FunctionError`, timeout, or pin drift is a
-hard stop. Never continue to migration, seed, alias movement, or promotion from
-this wrapper alone.
+The procedure uses `set -euo pipefail` from post-apply receipt verification
+through all pre-invocation gates. The runtime audit requires the exact qualified `FunctionArn`, numeric `Version`,
+ZIP `CodeSha256`, `RevisionId`, runtime, architecture, handler, role, environment,
+layers, VPC, filesystem, dead-letter configuration, reserved concurrency, role
+trust, inline policy, and attachment sets. Before invocation, re-read everything
+and require exact agreement with the deployment receipt. Invoke only the
+qualified ARN with tail logging disabled (`--log-type None`). Any post-apply or pre-invocation gate
+failure exits before invoke. Controlled failure aggregation begins only at the
+invoke: invoke or semantic assertion failure still attempts the complete
+post-invocation runtime/IAM audit, and the procedure then exits nonzero.
+
+The invocation assertion requires transport `StatusCode=200`, no
+`FunctionError`, `ExecutedVersion` equal to the exact published helper version,
+the exact result schema and operation, `status=passed`, exact candidate and
+alias pins, `migration.phase=Expand`, `pendingScriptCount=14`, the exact pending
+script digest, and the exact ordered check set. Any mismatch is a hard stop.
+Never continue to migration, seed, alias movement, or promotion from this
+wrapper alone.

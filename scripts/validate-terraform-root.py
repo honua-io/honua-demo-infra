@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the AWS root and pinned private-module caller interface.
+"""Validate both AWS roots and the pinned private-module caller interface.
 
 The root resources and provider schemas remain real. CI replaces only the
 credential-inaccessible private module with a checked-in typed caller-interface
@@ -20,6 +20,8 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 STACK = REPOSITORY_ROOT / "stacks" / "aws"
+CANDIDATE_STACK = REPOSITORY_ROOT / "stacks" / "aws-candidate-preflight"
+STACKS = REPOSITORY_ROOT / "stacks"
 INTERFACE_STUB = STACK / "validation" / "honua-module-interface"
 
 
@@ -119,13 +121,14 @@ def validate_negative_contracts(stack: Path) -> None:
 def main() -> None:
     if not INTERFACE_STUB.is_dir():
         raise RuntimeError("checked-in honua module interface stub is missing")
-    run(["terraform", "fmt", "-check", "-recursive", str(STACK)])
+    run(["terraform", "fmt", "-check", "-recursive", str(STACKS)])
     with tempfile.TemporaryDirectory(prefix="honua-terraform-validate-") as temporary:
         validation_root = Path(temporary) / "repository"
         validation_stack = validation_root / "stacks" / "aws"
+        validation_candidate_stack = validation_root / "stacks" / "aws-candidate-preflight"
         shutil.copytree(
-            STACK,
-            validation_stack,
+            STACKS,
+            validation_root / "stacks",
             ignore=shutil.ignore_patterns(".terraform", "terraform.tfstate", "terraform.tfstate.*"),
         )
         shutil.copytree(REPOSITORY_ROOT / "manifest", validation_root / "manifest")
@@ -133,6 +136,11 @@ def main() -> None:
         run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=validation_stack)
         run(["terraform", "validate", "-no-color"], cwd=validation_stack)
         validate_negative_contracts(validation_stack)
+        run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=validation_candidate_stack,
+        )
+        run(["terraform", "validate", "-no-color"], cwd=validation_candidate_stack)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@ class FakeLambda:
             "Environment": {
                 "Variables": {
                     "HONUA_SKIP_MIGRATIONS": "true",
+                    "HONUA_GIT_SHA": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
                     "ControlPlane__DeployTargets__0__ArtifactReference": (
                         "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@"
                         "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
@@ -245,6 +246,7 @@ class CandidatePreflightHandlerTests(unittest.TestCase):
     def test_success_is_sanitized_and_invokes_only_qualified_candidate(self):
         result, lambda_client, secrets_client, _, output = self.execute()
         self.assertEqual("passed", result["status"])
+        self.assertEqual("7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad", result["candidate"]["sourceCommit"])
         self.assertEqual(14, result["migration"]["pendingScriptCount"])
         self.assertNotIn(SECRET, json.dumps(result) + output)
         self.assertEqual(1, len(secrets_client.calls))
