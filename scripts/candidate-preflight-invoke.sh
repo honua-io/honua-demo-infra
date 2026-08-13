@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "usage: $0 GOVERNANCE_SHA DEPLOYMENT_SHA EVIDENCE_DIR" >&2
+if [[ $# -ne 4 ]]; then
+  echo "usage: $0 GOVERNANCE_SHA DEPLOYMENT_SHA EVIDENCE_DIR DEPLOYMENT_ROOT" >&2
   exit 64
 fi
 
 readonly GOVERNANCE_SHA="$1"
 readonly DEPLOYMENT_SHA="$2"
 readonly EVIDENCE_DIR="$3"
+readonly DEPLOYMENT_ROOT="$4"
 readonly ARCHIVE="stacks/aws-candidate-preflight/candidate-preflight.zip"
 readonly HELPER_NAME="honua-demo-demo-candidate-preflight"
 readonly ROLE_NAME="${HELPER_NAME}-role"
@@ -112,6 +113,13 @@ python scripts/candidate-preflight-governance-receipt.py create \
   --historical-deployment-receipt "$EVIDENCE_DIR/postapply-deployment-receipt.json" \
   --receipt "$EVIDENCE_DIR/governance-receipt.json"
 governance_receipt_verify
+python scripts/materialize-candidate-preflight-archive.py \
+  --governance-sha "$GOVERNANCE_SHA" \
+  --deployment-sha "$DEPLOYMENT_SHA" \
+  --deployment-root "$DEPLOYMENT_ROOT" \
+  --governance-receipt "$EVIDENCE_DIR/governance-receipt.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --receipt "$EVIDENCE_DIR/archive-materialization-receipt.json"
 plan_receipt_verify
 readonly QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn)"
 readonly HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
@@ -179,6 +187,7 @@ if ! sha256sum \
   "$EVIDENCE_DIR/invocation-metadata.json" \
   "$EVIDENCE_DIR/invocation-payload.json" \
   "$EVIDENCE_DIR/invocation-receipt.json" \
+  "$EVIDENCE_DIR/archive-materialization-receipt.json" \
   "$EVIDENCE_DIR/governance-receipt.json" \
   "$EVIDENCE_DIR/governed-deployment-receipt.json" \
   "$EVIDENCE_DIR/postinvoke-ecr-evidence.json" \

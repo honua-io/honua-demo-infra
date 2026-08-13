@@ -59,6 +59,9 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
             "unqualified": lambda r: r["operatorContract"].update(qualifiedHelperOnly=False),
             "logs": lambda r: r["operatorContract"].update(invokeLogType="Tail"),
             "payload": lambda r: r["operatorContract"].update(payloadSha256="0" * 64),
+            "archive hash": lambda r: r["operatorContract"]["archiveMaterialization"].update(archiveSha256="0" * 64),
+            "deployment root": lambda r: r["operatorContract"]["archiveMaterialization"].update(deploymentRootBasename="arbitrary"),
+            "member order": lambda r: r["operatorContract"]["archiveMaterialization"].update(orderedMembers=list(reversed(r["operatorContract"]["archiveMaterialization"]["orderedMembers"]))),
         }
         for label, mutation in mutations.items():
             receipt = copy.deepcopy(valid_receipt())
@@ -108,7 +111,7 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 if relative.endswith("candidate-preflight-invoke.sh"):
                     path.write_text(
-                        "AWS_MAX_ATTEMPTS=1\naws lambda invoke \\\n+  --log-type None \\\n+  --payload '{\"operation\":\"candidate-preflight-v1\"}'\n",
+                        "AWS_MAX_ATTEMPTS=1\npython scripts/materialize-candidate-preflight-archive.py \\\n+  --deployment-root \"$DEPLOYMENT_ROOT\"\naws lambda invoke \\\n+  --log-type None \\\n+  --payload '{\"operation\":\"candidate-preflight-v1\"}'\n",
                         encoding="utf-8",
                     )
                 else:

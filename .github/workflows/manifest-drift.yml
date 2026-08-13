@@ -59,6 +59,7 @@ jobs:
           python3 scripts/test-candidate-preflight-contract.py
           python3 scripts/test-candidate-preflight-invocation.py
           python3 scripts/test-candidate-preflight-governance-receipt.py
+          python3 scripts/test-candidate-preflight-archive-materialization.py
           bash scripts/test-candidate-preflight-operator-flow.sh
 
   terraform-contract:

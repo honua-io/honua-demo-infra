@@ -38,12 +38,24 @@ CONTROL_PATHS = (
     "scripts/candidate-preflight-governance-receipt.py",
     "scripts/candidate-preflight-invoke.sh",
     "scripts/candidate-preflight-plan-receipt.py",
+    "scripts/materialize-candidate-preflight-archive.py",
 )
 DEPLOYMENT_PATHS = (
     "stacks/aws-candidate-preflight",
     "stacks/aws/candidate-preflight",
 )
 OPERATOR_CONTRACT = {
+    "archiveMaterialization": {
+        "archiveRelativePath": "stacks/aws-candidate-preflight/candidate-preflight.zip",
+        "archiveSha256": "4eebc158663051c270cf989bbd385581e2b75245b0ddd0f76fb01a90e7c99da0",
+        "deploymentRootBasename": "candidate-preflight-plan-3a00dfd3",
+        "memberSha256": {
+            "classification.v1.json": "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579",
+            "handler.py": "cbf0863771f962c05e39b282dacda2294f88063ca01effa603ff425937f3a5cb",
+        },
+        "orderedMembers": ["classification.v1.json", "handler.py"],
+        "repositoryOrigin": "https://github.com/honua-io/honua-demo-infra.git",
+    },
     "awsMaxAttempts": 1,
     "iamTerminalPagination": True,
     "invokeLogType": "None",
@@ -85,6 +97,8 @@ def validate_operator_source() -> None:
     require("AWS_MAX_ATTEMPTS=1" in operator, "operator one-attempt guard is missing")
     require(operator.count("--log-type None") == 1, "operator log boundary drifted")
     require(operator.count("--payload '{\"operation\":\"candidate-preflight-v1\"}'") == 1, "operator payload boundary drifted")
+    require(operator.count("python scripts/materialize-candidate-preflight-archive.py \\") == 1, "operator archive materialization boundary drifted")
+    require(operator.count('--deployment-root "$DEPLOYMENT_ROOT"') == 1, "operator deployment-root boundary drifted")
 
 
 def validate_receipt(receipt: dict, governance_sha: str, deployment_sha: str) -> None:
