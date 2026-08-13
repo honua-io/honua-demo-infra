@@ -63,12 +63,28 @@ terraform -chdir=stacks/aws output -raw admin_password_secret_arn
 ```
 
 If the output is absent, stop. Its declaration must be materialized by a
-separately reviewed, state-only primary-root operation. Create a saved
-`terraform plan -refresh-only`, inspect its JSON, and require zero non-no-op
-resource actions and exactly one non-no-op output action: creation of
-`admin_password_secret_arn`. Any other resource or output action is a hard
-stop. Applying that exact reviewed plan writes Terraform state but does not
-change AWS; it still requires explicit release-owner authorization. Do not use
+separately reviewed, state-only primary-root operation. Use a saved normal plan
+with refresh disabled so remote drift cannot be accepted into state as part of
+this handoff:
+
+```bash
+terraform -chdir=stacks/aws plan -refresh=false -input=false -out=primary-output.tfplan
+terraform -chdir=stacks/aws show -json primary-output.tfplan > primary-output.show.json
+python scripts/assert-primary-output-materialization-plan.py primary-output.show.json
+```
+
+The assertion requires `errored=false`, `complete=true`, empty resource drift
+and deferred changes, every resource action to be `no-op`, no action reasons,
+and exactly one changed output: a known, non-sensitive, exact demo admin-secret
+ARN created from `module.honua.admin_password_secret_arn`. Any other action is
+a hard stop. Applying that exact reviewed saved plan writes Terraform state but
+does not change AWS; it still requires explicit release-owner authorization:
+
+```bash
+terraform -chdir=stacks/aws apply primary-output.tfplan
+```
+
+Do not create a second plan between assertion and apply. Do not use refresh-only,
 `terraform state` editing, `-target`, `ignore_changes`, a copied secret ARN, or
 an unsaved plan as a shortcut.
 
@@ -77,7 +93,7 @@ local show JSON:
 
 ```bash
 terraform -chdir=stacks/aws-candidate-preflight init -input=false
-terraform -chdir=stacks/aws-candidate-preflight plan -input=false -out=candidate-preflight.tfplan
+terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out=candidate-preflight.tfplan
 terraform -chdir=stacks/aws-candidate-preflight show -json candidate-preflight.tfplan > candidate-preflight.show.json
 python scripts/assert-candidate-preflight-plan.py candidate-preflight.show.json
 ```

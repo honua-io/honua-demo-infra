@@ -7,8 +7,22 @@
 ###############################################################################
 
 data "terraform_remote_state" "primary" {
-  backend = var.primary_state_backend
-  config  = var.primary_state_config
+  backend   = "s3"
+  workspace = "default"
+  config = {
+    bucket       = "honua-tfstate-585192672263"
+    key          = "demo/aws-demo/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}
+
+check "default_workspace_only" {
+  assert {
+    condition     = terraform.workspace == "default"
+    error_message = "candidate-preflight must be planned and applied only from the default workspace."
+  }
 }
 
 locals {
@@ -31,6 +45,8 @@ locals {
   candidate_preflight_log_group     = "/aws/lambda/${local.candidate_preflight_function_name}"
 
   candidate_preflight_app_function_name     = "honua-demo-demo-honua"
+  candidate_preflight_app_function_arn      = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua"
+  candidate_preflight_log_group_arn         = "arn:aws:logs:us-west-2:585192672263:log-group:/aws/lambda/honua-demo-demo-candidate-preflight"
   candidate_preflight_candidate_version     = "40"
   candidate_preflight_candidate_revision_id = "0326e209-4231-4acd-9bb4-d3cb89402db0"
   candidate_preflight_live_alias_name       = "live"
@@ -89,19 +105,19 @@ resource "aws_iam_role_policy" "candidate_preflight" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration",
         ]
-        Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]
+        Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_candidate_version}"]
       },
       {
         Sid      = "ReadExactLiveAlias"
         Effect   = "Allow"
         Action   = ["lambda:GetAlias"]
-        Resource = ["${local.app_function_arn}:${local.candidate_preflight_live_alias_name}"]
+        Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_live_alias_name}"]
       },
       {
         Sid      = "InvokeExactCandidate"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]
+        Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_candidate_version}"]
       },
       {
         Sid    = "WriteExactLogGroup"
@@ -110,7 +126,7 @@ resource "aws_iam_role_policy" "candidate_preflight" {
           "logs:CreateLogStream",
           "logs:PutLogEvents",
         ]
-        Resource = ["${aws_cloudwatch_log_group.candidate_preflight.arn}:*"]
+        Resource = ["${local.candidate_preflight_log_group_arn}:*"]
       },
     ]
   })
@@ -156,12 +172,16 @@ resource "aws_lambda_function" "candidate_preflight" {
       error_message = "candidate-preflight-v1 is pinned to the exact demo Honua function name."
     }
     precondition {
-      condition     = can(regex("^arn:aws:secretsmanager:us-west-2:[0-9]{12}:secret:honua-demo-demo/admin-password-[A-Za-z0-9]+$", local.admin_password_secret_arn))
+      condition     = can(regex("^arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-[A-Za-z0-9]{6}$", local.admin_password_secret_arn))
       error_message = "the authoritative module output is not the exact demo admin-password secret ARN."
     }
     precondition {
-      condition     = endswith(local.app_function_arn, ":function:${local.candidate_preflight_app_function_name}")
+      condition     = local.app_function_arn == local.candidate_preflight_app_function_arn
       error_message = "the authoritative primary-state output is not the exact demo Honua function ARN."
+    }
+    precondition {
+      condition     = terraform.workspace == "default"
+      error_message = "candidate-preflight must be applied only from the default workspace."
     }
   }
 

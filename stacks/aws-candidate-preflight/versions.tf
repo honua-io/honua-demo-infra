@@ -24,12 +24,6 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
-
-  # These switches exist only for the executable offline-plan contract test.
-  # The guard in variables.tf rejects offline mode with the live S3 handoff.
-  skip_credentials_validation = var.offline_plan
-  skip_metadata_api_check     = var.offline_plan
-  skip_region_validation      = var.offline_plan
-  skip_requesting_account_id  = var.offline_plan
+  region              = "us-west-2"
+  allowed_account_ids = ["585192672263"]
 }

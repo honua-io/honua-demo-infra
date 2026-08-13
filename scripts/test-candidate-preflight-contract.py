@@ -50,9 +50,9 @@ class CandidatePreflightContractTests(unittest.TestCase):
     def test_iam_is_qualified_only_and_has_no_mutation_or_network_permissions(self):
         iac = IAC.read_text(encoding="utf-8")
         self.assertIn("Resource = [local.admin_password_secret_arn]", iac)
-        self.assertIn('Resource = ["${local.app_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
-        self.assertIn('Resource = ["${local.app_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
-        self.assertIn('Resource = ["${aws_cloudwatch_log_group.candidate_preflight.arn}:*"]', iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_candidate_version}"]', iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_app_function_arn}:${local.candidate_preflight_live_alias_name}"]', iac)
+        self.assertIn('Resource = ["${local.candidate_preflight_log_group_arn}:*"]', iac)
         self.assertNotIn("vpc_config", iac)
         self.assertNotIn("aws_security_group", iac)
         self.assertNotRegex(iac, r'resource\s+"aws_lambda_invocation"')
@@ -79,6 +79,17 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("reserved_concurrent_executions = 1", iac)
         self.assertIn("timeout                        = 120", iac)
         self.assertNotIn("AWSLambdaBasicExecutionRole", iac)
+
+    def test_production_root_has_no_redirect_or_account_escape_hatch(self):
+        iac = IAC.read_text(encoding="utf-8")
+        versions = IAC_VERSIONS.read_text(encoding="utf-8")
+        self.assertIn('backend   = "s3"', iac)
+        self.assertIn('workspace = "default"', iac)
+        self.assertIn('key          = "demo/aws-demo/terraform.tfstate"', iac)
+        self.assertIn('region              = "us-west-2"', versions)
+        self.assertIn('allowed_account_ids = ["585192672263"]', versions)
+        self.assertNotIn("var.", iac + versions)
+        self.assertNotIn("skip_requesting_account_id", iac + versions)
 
     def test_manifest_is_exact_expand_set_tied_to_candidate(self):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -118,6 +129,9 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("Do not invoke", runbook)
         self.assertIn("state-only", runbook)
         self.assertIn("assert-candidate-preflight-plan.py", runbook)
+        self.assertIn("assert-primary-output-materialization-plan.py", runbook)
+        self.assertIn("-refresh=false", runbook)
+        self.assertNotIn("-refresh-only", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
 
 
