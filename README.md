@@ -46,7 +46,7 @@ stacks/aws/          The Phase A demo.honua.io Terraform root module
                         from honua-iac; read this before touching anything)
 stacks/aws-candidate-preflight/
                       Isolated credential-safe candidate probe root; consumes
-                      persisted primary-root outputs and owns no app resources
+                      metadata-only secret identity and owns no app resources
 manifest/
   demo-services.v1.json Generated public service manifest (#19) — see below
   generate-demo-services.py

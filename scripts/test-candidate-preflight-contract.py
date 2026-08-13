@@ -109,6 +109,8 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('lifecycle_field="status"', handler)
         self.assertIn('value.get("isReady") is not True', handler)
         self.assertIn('value.get("isFailed") is not False', handler)
+        self.assertIn('variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]', handler)
+        self.assertIn('"sourceCommit": variables["HONUA_GIT_SHA"]', handler)
         self.assertNotRegex(handler, r"\bprint\s*\(")
         for path in (
             "/healthz/live",
@@ -132,8 +134,25 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("candidate_preflight_qualified_arn", runbook)
         self.assertIn("candidate-preflight-plan-receipt.py", runbook)
         self.assertIn("assert-candidate-preflight-runtime.py", runbook)
+        self.assertIn("assert-candidate-preflight-invocation.py", runbook)
+        self.assertIn("invocation-metadata.json", runbook)
+        self.assertIn("invocation-payload.json", runbook)
         self.assertNotIn("candidate_preflight_function_name", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
+
+    def test_runbook_init_is_readonly_and_negative_mutation_is_rejected(self):
+        runbook = RUNBOOK.read_text(encoding="utf-8")
+
+        def require_readonly_init(document: str) -> None:
+            commands = [line for line in document.splitlines() if line.startswith("terraform -chdir=stacks/aws-candidate-preflight init")]
+            self.assertEqual(
+                ["terraform -chdir=stacks/aws-candidate-preflight init -input=false -lockfile=readonly"],
+                commands,
+            )
+
+        require_readonly_init(runbook)
+        with self.assertRaises(AssertionError):
+            require_readonly_init(runbook.replace(" -lockfile=readonly", ""))
 
 
 if __name__ == "__main__":

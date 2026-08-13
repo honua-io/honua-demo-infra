@@ -178,6 +178,8 @@ def _candidate_fingerprint(lambda_client: Any) -> dict[str, Any]:
         raise PreflightFailure("candidate-environment-invalid")
     if variables.get("HONUA_SKIP_MIGRATIONS") != IMMUTABLE["skipMigrations"]:
         raise PreflightFailure("candidate-migration-mode-drift")
+    if variables.get("HONUA_GIT_SHA") != IMMUTABLE["sourceCommit"]:
+        raise PreflightFailure("candidate-source-commit-drift")
     if (
         variables.get("ControlPlane__DeployTargets__0__ArtifactReference")
         != IMMUTABLE["artifactReference"]
@@ -199,6 +201,7 @@ def _candidate_fingerprint(lambda_client: Any) -> dict[str, Any]:
         "resolvedImageUri": code["ResolvedImageUri"],
         "skipMigrations": variables["HONUA_SKIP_MIGRATIONS"],
         "artifactReference": variables["ControlPlane__DeployTargets__0__ArtifactReference"],
+        "sourceCommit": variables["HONUA_GIT_SHA"],
     }
 
 

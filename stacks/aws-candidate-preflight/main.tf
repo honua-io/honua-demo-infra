@@ -62,9 +62,9 @@ locals {
   candidate_preflight_source_commit         = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
   candidate_preflight_handler_source        = replace(file("${local.candidate_preflight_dir}/handler.py"), "\r\n", "\n")
   candidate_preflight_classification_source = replace(file("${local.candidate_preflight_dir}/classification.v1.json"), "\r\n", "\n")
-  candidate_preflight_handler_sha256        = "589a67ec77eb49086a083ebf85f1a3143011831645bd885147755c026c65995f"
+  candidate_preflight_handler_sha256        = "cb7f4589f32a884c72552eb5e2227378f9cae810f4c9eb56a653be1139bb7415"
   candidate_preflight_classification_sha256 = "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579"
-  candidate_preflight_archive_base64sha256  = "Kp7YlzXM5GL34jI4A/Dx6kTO/sAQBPXPoE+QKvBW0hY="
+  candidate_preflight_archive_base64sha256  = "Uuh51TGz/JTPCJIbL7FAxtAsjl4Y42u1KEx7UtoshVQ="
 }
 
 data "archive_file" "candidate_preflight" {

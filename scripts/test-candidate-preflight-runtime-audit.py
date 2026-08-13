@@ -86,7 +86,18 @@ class RuntimeAuditTests(unittest.TestCase):
             "role_policy": {"RoleName": AUDIT.ROLE_NAME, "PolicyName": AUDIT.POLICY_NAME, "PolicyDocument": AUDIT.expected_policy(SECRET)},
             "attached_policies": {"AttachedPolicies": [], "IsTruncated": False},
             "inline_policies": {"PolicyNames": [AUDIT.POLICY_NAME], "IsTruncated": False},
-            "plan_receipt": {"schema": "fixture"},
+            "plan_receipt": {
+                "schema": AUDIT.PLAN_RECEIPT_SCHEMA,
+                "mergedSha": "a" * 40,
+                "terraformVersion": AUDIT.TERRAFORM_VERSION,
+                "planFormatVersion": AUDIT.PLAN_FORMAT_VERSION,
+                "artifacts": {
+                    "savedPlanSha256": "1" * 64,
+                    "showJsonSha256": "2" * 64,
+                    "archiveSha256": AUDIT.ARCHIVE_SHA256,
+                },
+                "sourceSha256": AUDIT.SOURCE_HASHES,
+            },
         }
 
     def tearDown(self):
@@ -133,6 +144,48 @@ class RuntimeAuditTests(unittest.TestCase):
         changed = copy.deepcopy(self.documents)
         changed["function"]["Configuration"]["RevisionId"] = "1326e209-4231-4acd-9bb4-d3cb89402db1"
         self.assertNotEqual(receipt, AUDIT.audit(self.args(changed)))
+
+    def test_plan_receipt_mutations_fail_closed(self):
+        mutations = {
+            "root extra": lambda r: r.update(extra=True),
+            "schema": lambda r: r.update(schema="wrong"),
+            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "Terraform version": lambda r: r.update(terraformVersion="1.15.9"),
+            "format version": lambda r: r.update(planFormatVersion="1.3"),
+            "artifact extra": lambda r: r["artifacts"].update(extra="0" * 64),
+            "saved plan hash": lambda r: r["artifacts"].update(savedPlanSha256="bad"),
+            "show hash": lambda r: r["artifacts"].update(showJsonSha256="bad"),
+            "ZIP hash": lambda r: r["artifacts"].update(archiveSha256="0" * 64),
+            "source extra": lambda r: r["sourceSha256"].update(**{"sensitive-output": "0" * 64}),
+            "handler hash": lambda r: r["sourceSha256"].update(**{"handler.py": "0" * 64}),
+            "classification hash": lambda r: r["sourceSha256"].update(**{"classification.v1.json": "0" * 64}),
+        }
+        for label, mutation in mutations.items():
+            documents = copy.deepcopy(self.documents)
+            mutation(documents["plan_receipt"])
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                AUDIT.audit(self.args(documents))
+
+    def test_deployment_receipt_mutations_fail_closed(self):
+        receipt = AUDIT.audit(self.args(self.documents))
+        mutations = {
+            "root extra": lambda r: r.update(extra=True),
+            "schema": lambda r: r.update(schema="wrong"),
+            "merged SHA": lambda r: r.update(mergedSha="b" * 40),
+            "plan receipt hash": lambda r: r.update(planReceiptSha256="bad"),
+            "qualified ARN": lambda r: r.update(qualifiedArn=r["qualifiedArn"].rsplit(":", 1)[0]),
+            "version": lambda r: r.update(version="$LATEST"),
+            "revision": lambda r: r.update(revisionId="wrong"),
+            "code hash": lambda r: r.update(codeSha256="wrong"),
+            "role": lambda r: r.update(roleArn="arn:aws:iam::585192672263:role/other"),
+            "policy": lambda r: r.update(policyName="other"),
+            "secret": lambda r: r.update(secretArn="arn:aws:secretsmanager:us-west-2:585192672263:secret:other-Ab12Cd"),
+        }
+        for label, mutation in mutations.items():
+            changed = copy.deepcopy(receipt)
+            mutation(changed)
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                AUDIT.validate_deployment_receipt(changed, "a" * 40)
 
 
 if __name__ == "__main__":

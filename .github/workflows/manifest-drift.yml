@@ -56,6 +56,7 @@ jobs:
         run: |
           python3 scripts/test-candidate-preflight-handler.py
           python3 scripts/test-candidate-preflight-contract.py
+          python3 scripts/test-candidate-preflight-invocation.py
 
   terraform-contract:
     name: Terraform format and validate
@@ -77,4 +78,5 @@ jobs:
       - name: Validate isolated candidate plan and runtime contracts
         run: |
           python3 scripts/test-candidate-preflight-plan-isolation.py
+          python3 scripts/test-candidate-preflight-plan-receipt.py
           python3 scripts/test-candidate-preflight-runtime-audit.py

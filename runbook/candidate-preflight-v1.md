@@ -73,11 +73,11 @@ test "$(git rev-parse HEAD)" = "$MERGED_SHA"
 git diff --exit-code
 git diff --cached --exit-code
 test -z "$(git status --porcelain)"
-terraform -chdir=stacks/aws-candidate-preflight init -input=false
+terraform -chdir=stacks/aws-candidate-preflight init -input=false -lockfile=readonly
 terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out="$EVIDENCE_DIR/candidate-preflight.tfplan"
 terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/candidate-preflight.show.json"
 python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/candidate-preflight.show.json"
-test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "2a9ed89735cce462f7e2323803f0f1ea44cefec01004f5cfa04f902af056d216"
+test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "52e879d531b3fc94cf08921b2fb140c6d02c8e5e18e36bb5284c7b52da2c8554"
 python scripts/candidate-preflight-plan-receipt.py create \
   --merged-sha "$MERGED_SHA" \
   --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
@@ -152,7 +152,8 @@ QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw can
 HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
 test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:$HELPER_VERSION"
 
-capture_helper_audit() {
+capture_helper_audit() (
+  set -e
   prefix="$1"
   aws lambda get-function --function-name "$QUALIFIED_ARN" > "$EVIDENCE_DIR/$prefix-function.json"
   aws lambda get-function-concurrency --function-name honua-demo-demo-candidate-preflight > "$EVIDENCE_DIR/$prefix-concurrency.json"
@@ -160,8 +161,14 @@ capture_helper_audit() {
   aws iam get-role-policy --role-name honua-demo-demo-candidate-preflight-role --policy-name credential-safe-candidate-preflight-v1 > "$EVIDENCE_DIR/$prefix-role-policy.json"
   aws iam list-attached-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-attached-policies.json"
   aws iam list-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-inline-policies.json"
-}
+)
 
+python scripts/candidate-preflight-plan-receipt.py verify \
+  --merged-sha "$MERGED_SHA" \
+  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
+  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
+  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
+  --receipt "$EVIDENCE_DIR/plan-receipt.json"
 capture_helper_audit postapply
 python scripts/assert-candidate-preflight-runtime.py create \
   --function "$EVIDENCE_DIR/postapply-function.json" \
@@ -185,6 +192,12 @@ qualified ARN with tail logging disabled:
 
 ```bash
 sha256sum --check "$EVIDENCE_DIR/deployment-receipt.sha256"
+python scripts/candidate-preflight-plan-receipt.py verify \
+  --merged-sha "$MERGED_SHA" \
+  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
+  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
+  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
+  --receipt "$EVIDENCE_DIR/plan-receipt.json"
 capture_helper_audit preinvoke
 python scripts/assert-candidate-preflight-runtime.py verify \
   --function "$EVIDENCE_DIR/preinvoke-function.json" \
@@ -197,21 +210,29 @@ python scripts/assert-candidate-preflight-runtime.py verify \
   --merged-sha "$MERGED_SHA" \
   --receipt "$EVIDENCE_DIR/deployment-receipt.json"
 
-aws lambda invoke \
+invocation_status=0
+if ! aws lambda invoke \
   --function-name "$QUALIFIED_ARN" \
   --cli-binary-format raw-in-base64-out \
   --invocation-type RequestResponse \
   --log-type None \
   --payload '{"operation":"candidate-preflight-v1"}' \
-  candidate-preflight-result.json
-```
+  "$EVIDENCE_DIR/invocation-payload.json" \
+  > "$EVIDENCE_DIR/invocation-metadata.json"; then
+  invocation_status=1
+fi
+if ! python scripts/assert-candidate-preflight-invocation.py \
+  --metadata "$EVIDENCE_DIR/invocation-metadata.json" \
+  --payload "$EVIDENCE_DIR/invocation-payload.json" \
+  --expected-version "$HELPER_VERSION"; then
+  invocation_status=1
+fi
 
-Immediately after invocation, capture and verify the same qualified version and
-IAM surface again:
-
-```bash
-capture_helper_audit postinvoke
-python scripts/assert-candidate-preflight-runtime.py verify \
+# Always attempt the post-invocation audit, including after invoke/assert failure.
+if ! capture_helper_audit postinvoke; then
+  invocation_status=1
+fi
+if ! python scripts/assert-candidate-preflight-runtime.py verify \
   --function "$EVIDENCE_DIR/postinvoke-function.json" \
   --concurrency "$EVIDENCE_DIR/postinvoke-concurrency.json" \
   --role "$EVIDENCE_DIR/postinvoke-role.json" \
@@ -220,11 +241,22 @@ python scripts/assert-candidate-preflight-runtime.py verify \
   --inline-policies "$EVIDENCE_DIR/postinvoke-inline-policies.json" \
   --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
   --merged-sha "$MERGED_SHA" \
-  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"; then
+  invocation_status=1
+fi
+if ! sha256sum \
+  "$EVIDENCE_DIR/invocation-metadata.json" \
+  "$EVIDENCE_DIR/invocation-payload.json" \
+  > "$EVIDENCE_DIR/invocation-artifacts.sha256"; then
+  invocation_status=1
+fi
+test "$invocation_status" -eq 0
 ```
 
-Require `status` to equal `passed`, candidate and alias pins to match this
-document, `migration.phase` to equal `Expand`, and `pendingScriptCount` to equal
-`14`. Any `failed` response, Lambda `FunctionError`, timeout, or pin drift is a
-hard stop. Never continue to migration, seed, alias movement, or promotion from
-this wrapper alone.
+The invocation assertion requires transport `StatusCode=200`, no
+`FunctionError`, `ExecutedVersion` equal to the exact published helper version,
+the exact result schema and operation, `status=passed`, exact candidate and
+alias pins, `migration.phase=Expand`, `pendingScriptCount=14`, the exact pending
+script digest, and the exact ordered check set. Any mismatch is a hard stop.
+Never continue to migration, seed, alias movement, or promotion from this
+wrapper alone.
