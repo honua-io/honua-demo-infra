@@ -78,7 +78,18 @@ terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false
 terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/candidate-preflight.show.json"
 python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/candidate-preflight.show.json"
 test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "2a9ed89735cce462f7e2323803f0f1ea44cefec01004f5cfa04f902af056d216"
-sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip > "$EVIDENCE_DIR/candidate-preflight.zip.sha256"
+python scripts/candidate-preflight-plan-receipt.py create \
+  --merged-sha "$MERGED_SHA" \
+  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
+  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
+  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
+  --receipt "$EVIDENCE_DIR/plan-receipt.json"
+sha256sum \
+  "$EVIDENCE_DIR/candidate-preflight.tfplan" \
+  "$EVIDENCE_DIR/candidate-preflight.show.json" \
+  stacks/aws-candidate-preflight/candidate-preflight.zip \
+  "$EVIDENCE_DIR/plan-receipt.json" \
+  > "$EVIDENCE_DIR/reviewed-artifacts.sha256"
 ```
 
 Keep the saved plan, show JSON, generated ZIP, ZIP checksum, `MERGED_SHA`, and
@@ -90,15 +101,25 @@ the exact role ARN, least-privilege IAM, environment, source member hashes,
 ZIP `source_code_hash`, filename, and absence of layers/VPC/filesystems/DLQ.
 
 Immediately before an authorized apply, repeat the clean-SHA checks and verify
-the ZIP checksum against the recorded file. Apply only the exact saved plan;
-do not re-plan or regenerate the ZIP:
+the plan, show JSON, ZIP, and receipt hashes. Re-render and re-assert that same
+saved plan, then require the new show JSON to be byte-identical. Apply only the
+exact saved plan; do not re-plan or regenerate the ZIP:
 
 ```bash
 test "$(git rev-parse HEAD)" = "$MERGED_SHA"
 git diff --exit-code
 git diff --cached --exit-code
 test -z "$(git status --porcelain)"
-test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "2a9ed89735cce462f7e2323803f0f1ea44cefec01004f5cfa04f902af056d216"
+sha256sum --check "$EVIDENCE_DIR/reviewed-artifacts.sha256"
+python scripts/candidate-preflight-plan-receipt.py verify \
+  --merged-sha "$MERGED_SHA" \
+  --plan "$EVIDENCE_DIR/candidate-preflight.tfplan" \
+  --show "$EVIDENCE_DIR/candidate-preflight.show.json" \
+  --archive stacks/aws-candidate-preflight/candidate-preflight.zip \
+  --receipt "$EVIDENCE_DIR/plan-receipt.json"
+terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/preapply.show.json"
+python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/preapply.show.json"
+cmp "$EVIDENCE_DIR/candidate-preflight.show.json" "$EVIDENCE_DIR/preapply.show.json"
 terraform -chdir=stacks/aws-candidate-preflight apply "$EVIDENCE_DIR/candidate-preflight.tfplan"
 ```
 
@@ -119,18 +140,87 @@ and the release owner explicitly authorizes the exact candidate check. Do not
 use the wrapper after any pin changes; update and re-review the manifest and
 code instead.
 
-## Authorized invocation
+## Published-helper receipt and authorized invocation
 
-Only after that authorization, invoke synchronously with tail logging disabled:
+The apply publishes an immutable helper version. There is deliberately no
+unqualified helper-name output. Capture the qualified ARN and numeric version,
+then record a deployment receipt after auditing the exact function, concurrency,
+role, inline policy, and absence of managed-policy attachments:
 
 ```bash
+QUALIFIED_ARN="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_qualified_arn)"
+HELPER_VERSION="$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_version)"
+test "$QUALIFIED_ARN" = "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:$HELPER_VERSION"
+
+capture_helper_audit() {
+  prefix="$1"
+  aws lambda get-function --function-name "$QUALIFIED_ARN" > "$EVIDENCE_DIR/$prefix-function.json"
+  aws lambda get-function-concurrency --function-name honua-demo-demo-candidate-preflight > "$EVIDENCE_DIR/$prefix-concurrency.json"
+  aws iam get-role --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-role.json"
+  aws iam get-role-policy --role-name honua-demo-demo-candidate-preflight-role --policy-name credential-safe-candidate-preflight-v1 > "$EVIDENCE_DIR/$prefix-role-policy.json"
+  aws iam list-attached-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-attached-policies.json"
+  aws iam list-role-policies --role-name honua-demo-demo-candidate-preflight-role > "$EVIDENCE_DIR/$prefix-inline-policies.json"
+}
+
+capture_helper_audit postapply
+python scripts/assert-candidate-preflight-runtime.py create \
+  --function "$EVIDENCE_DIR/postapply-function.json" \
+  --concurrency "$EVIDENCE_DIR/postapply-concurrency.json" \
+  --role "$EVIDENCE_DIR/postapply-role.json" \
+  --role-policy "$EVIDENCE_DIR/postapply-role-policy.json" \
+  --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
+  --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --merged-sha "$MERGED_SHA" \
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+sha256sum "$EVIDENCE_DIR/deployment-receipt.json" > "$EVIDENCE_DIR/deployment-receipt.sha256"
+```
+
+The runtime audit requires the exact qualified `FunctionArn`, numeric `Version`,
+ZIP `CodeSha256`, `RevisionId`, runtime, architecture, handler, role, environment,
+layers, VPC, filesystem, dead-letter configuration, reserved concurrency, role
+trust, inline policy, and attachment sets. Before invocation, re-read everything
+and require exact agreement with the deployment receipt. Invoke only the
+qualified ARN with tail logging disabled:
+
+```bash
+sha256sum --check "$EVIDENCE_DIR/deployment-receipt.sha256"
+capture_helper_audit preinvoke
+python scripts/assert-candidate-preflight-runtime.py verify \
+  --function "$EVIDENCE_DIR/preinvoke-function.json" \
+  --concurrency "$EVIDENCE_DIR/preinvoke-concurrency.json" \
+  --role "$EVIDENCE_DIR/preinvoke-role.json" \
+  --role-policy "$EVIDENCE_DIR/preinvoke-role-policy.json" \
+  --attached-policies "$EVIDENCE_DIR/preinvoke-attached-policies.json" \
+  --inline-policies "$EVIDENCE_DIR/preinvoke-inline-policies.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --merged-sha "$MERGED_SHA" \
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+
 aws lambda invoke \
-  --function-name "$(terraform -chdir=stacks/aws-candidate-preflight output -raw candidate_preflight_function_name)" \
+  --function-name "$QUALIFIED_ARN" \
   --cli-binary-format raw-in-base64-out \
   --invocation-type RequestResponse \
   --log-type None \
   --payload '{"operation":"candidate-preflight-v1"}' \
   candidate-preflight-result.json
+```
+
+Immediately after invocation, capture and verify the same qualified version and
+IAM surface again:
+
+```bash
+capture_helper_audit postinvoke
+python scripts/assert-candidate-preflight-runtime.py verify \
+  --function "$EVIDENCE_DIR/postinvoke-function.json" \
+  --concurrency "$EVIDENCE_DIR/postinvoke-concurrency.json" \
+  --role "$EVIDENCE_DIR/postinvoke-role.json" \
+  --role-policy "$EVIDENCE_DIR/postinvoke-role-policy.json" \
+  --attached-policies "$EVIDENCE_DIR/postinvoke-attached-policies.json" \
+  --inline-policies "$EVIDENCE_DIR/postinvoke-inline-policies.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --merged-sha "$MERGED_SHA" \
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
 ```
 
 Require `status` to equal `passed`, candidate and alias pins to match this

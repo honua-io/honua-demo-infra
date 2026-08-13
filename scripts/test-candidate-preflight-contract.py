@@ -72,6 +72,7 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn('runtime                        = "python3.13"', iac)
         self.assertIn('architectures                  = ["arm64"]', iac)
         self.assertIn("reserved_concurrent_executions = 1", iac)
+        self.assertIn("publish                        = true", iac)
         self.assertIn("timeout                        = 120", iac)
         self.assertNotIn("AWSLambdaBasicExecutionRole", iac)
         self.assertIn("candidate_preflight_role_arn", iac)
@@ -128,6 +129,10 @@ class CandidatePreflightContractTests(unittest.TestCase):
         self.assertIn("assert-candidate-preflight-plan.py", runbook)
         self.assertIn("-refresh=false", runbook)
         self.assertIn("git diff --exit-code", runbook)
+        self.assertIn("candidate_preflight_qualified_arn", runbook)
+        self.assertIn("candidate-preflight-plan-receipt.py", runbook)
+        self.assertIn("assert-candidate-preflight-runtime.py", runbook)
+        self.assertNotIn("candidate_preflight_function_name", runbook)
         self.assertNotIn("terraform apply -auto-approve", runbook)
 
 

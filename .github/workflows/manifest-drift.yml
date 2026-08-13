@@ -74,5 +74,7 @@ jobs:
       - name: Validate Terraform root and private-module interface
         run: python3 scripts/validate-terraform-root.py
 
-      - name: Validate state-handoff and isolated candidate plan contracts
-        run: python3 scripts/test-candidate-preflight-plan-isolation.py
+      - name: Validate isolated candidate plan and runtime contracts
+        run: |
+          python3 scripts/test-candidate-preflight-plan-isolation.py
+          python3 scripts/test-candidate-preflight-runtime-audit.py

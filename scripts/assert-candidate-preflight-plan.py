@@ -29,6 +29,37 @@ EXPECTED_TAGS = {
     "Project": "honua-server",
     "Purpose": "public-demo",
 }
+EXPECTED_PROVIDERS = {
+    "archive": {
+        "name": "archive",
+        "full_name": "registry.terraform.io/hashicorp/archive",
+        "version_constraint": ">= 2.4.0, < 3.0.0",
+    },
+    "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": ">= 5.0.0, < 7.0.0",
+        "expressions": {
+            "allowed_account_ids": {"constant_value": ["585192672263"]},
+            "region": {"constant_value": "us-west-2"},
+        },
+    },
+}
+PROVIDER_KEYS = {
+    "aws_cloudwatch_log_group.candidate_preflight": "aws",
+    "aws_iam_role.candidate_preflight": "aws",
+    "aws_iam_role_policy.candidate_preflight": "aws",
+    "aws_lambda_function.candidate_preflight": "aws",
+    "data.archive_file.candidate_preflight": "archive",
+    "data.aws_iam_policy_document.candidate_preflight_assume": "aws",
+    "data.aws_secretsmanager_secret.admin_password": "aws",
+}
+EXPECTED_CHECKS = {
+    "aws_lambda_function.candidate_preflight",
+    "check.default_workspace_only",
+    "data.archive_file.candidate_preflight",
+    "data.aws_secretsmanager_secret.admin_password",
+}
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
 FUNCTION_NAME = "honua-demo-demo-honua"
@@ -86,6 +117,14 @@ def assert_production_source(configuration_root: Path = DEFAULT_CONFIGURATION_RO
     require("terraform.workspace == \"default\"" in main, "default-workspace precondition missing")
     require("module.honua" not in main, "isolated root contains a module.honua dependency")
     require(not re.search(r"admin-password-[A-Za-z0-9]{6}(?:\"|$)", main), "secret ARN suffix was hard-coded")
+    require(
+        re.search(
+            r"admin_password_secret_arn\s*=\s*data\.aws_secretsmanager_secret\.admin_password\.arn",
+            main,
+        )
+        is not None,
+        "secret ARN provenance is disconnected from metadata lookup",
+    )
     require(main.count("source {") == 2, "archive source allowlist is not exactly two files")
     require('filename = "handler.py"' in main, "handler.py archive member missing")
     require('filename = "classification.v1.json"' in main, "classification archive member missing")
@@ -137,6 +176,8 @@ def assert_plan(
     plan: dict,
     configuration_root: Path = DEFAULT_CONFIGURATION_ROOT,
     secret_data_address: str = "data.aws_secretsmanager_secret.admin_password",
+    provider_contract: dict | None = None,
+    check_contract: set[str] | None = None,
 ) -> None:
     assert_production_source(configuration_root)
     require(plan.get("errored") is not True, "candidate-preflight plan is marked errored")
@@ -150,12 +191,16 @@ def assert_plan(
         require(not plan.get(field), f"candidate-preflight plan contains top-level {field}")
     checks = plan.get("checks", [])
     require(checks, "candidate-preflight plan has no evaluated safety checks")
+    actual_check_addresses = {check.get("address", {}).get("to_display") for check in checks}
+    require(actual_check_addresses == (check_contract or EXPECTED_CHECKS), f"safety check address set drifted: {sorted(actual_check_addresses)}")
     for check in checks:
         require(check.get("status") == "pass", f"safety check did not pass: {check.get('address')}")
         for instance in check.get("instances", []):
             require(instance.get("status") == "pass", f"safety check instance did not pass: {instance.get('address')}")
 
     configuration = plan.get("configuration", {}).get("root_module", {})
+    provider_config = plan.get("configuration", {}).get("provider_config", {})
+    require(provider_config == (provider_contract or EXPECTED_PROVIDERS), "provider configuration set or values drifted")
     require(not configuration.get("module_calls"), "candidate-preflight configuration has child modules")
     config_resources = {resource["address"]: resource for resource in configuration.get("resources", [])}
     expected_data = (EXPECTED_DATA - {"data.aws_secretsmanager_secret.admin_password"}) | {secret_data_address}
@@ -164,10 +209,65 @@ def assert_plan(
         require(config_resources[address].get("mode") == "managed", f"{address} must be managed")
     for address in expected_data:
         require(config_resources[address].get("mode") == "data", f"{address} must be data")
+    expected_provider_keys = dict(PROVIDER_KEYS)
+    if secret_data_address != "data.aws_secretsmanager_secret.admin_password":
+        expected_provider_keys.pop("data.aws_secretsmanager_secret.admin_password")
+        expected_provider_keys[secret_data_address] = "archive"
+    for address, expected_key in expected_provider_keys.items():
+        require(config_resources[address].get("provider_config_key") == expected_key, f"{address} provider binding drifted")
 
     if secret_data_address == "data.aws_secretsmanager_secret.admin_password":
         secret_data = config_resources[secret_data_address]
         require(expression_constant(secret_data, "name") == "honua-demo-demo/admin-password", "secret metadata identity drifted")
+
+    policy_config = config_resources["aws_iam_role_policy.candidate_preflight"]
+    require(
+        policy_config["expressions"]["policy"].get("references")
+        == [
+            "local.admin_password_secret_arn",
+            "local.candidate_preflight_app_function_arn",
+            "local.candidate_preflight_candidate_version",
+            "local.candidate_preflight_app_function_arn",
+            "local.candidate_preflight_live_alias_name",
+            "local.candidate_preflight_app_function_arn",
+            "local.candidate_preflight_candidate_version",
+            "local.candidate_preflight_log_group_arn",
+        ],
+        "IAM policy expression provenance drifted",
+    )
+    require(policy_config["expressions"]["role"].get("references") == ["local.candidate_preflight_role_name"], "IAM role expression provenance drifted")
+
+    function_config = config_resources["aws_lambda_function.candidate_preflight"]
+    require(function_config["expressions"]["role"].get("references") == ["local.candidate_preflight_role_arn"], "Lambda role expression provenance drifted")
+    require(
+        function_config["expressions"]["filename"].get("references")
+        == ["data.archive_file.candidate_preflight.output_path", "data.archive_file.candidate_preflight"],
+        "Lambda filename expression provenance drifted",
+    )
+    require(
+        function_config["expressions"]["source_code_hash"].get("references")
+        == ["data.archive_file.candidate_preflight.output_base64sha256", "data.archive_file.candidate_preflight"],
+        "Lambda source hash expression provenance drifted",
+    )
+    require(expression_constant(function_config, "publish") is True, "Lambda immutable publication is disabled")
+    require(
+        function_config["expressions"]["environment"][0]["variables"].get("references")
+        == [
+            "local.admin_password_secret_arn",
+            "local.candidate_preflight_app_function_name",
+            "local.candidate_preflight_artifact_reference",
+            "local.candidate_preflight_candidate_revision_id",
+            "local.candidate_preflight_candidate_version",
+            "local.candidate_preflight_image_digest",
+            "local.candidate_preflight_live_alias_name",
+            "local.candidate_preflight_live_revision_id",
+            "local.candidate_preflight_live_version",
+            "local.candidate_preflight_source_commit",
+            "local.candidate_preflight_classification_sha256",
+            "local.candidate_preflight_handler_sha256",
+        ],
+        "Lambda environment expression provenance drifted",
+    )
 
     changes = {change["address"]: change for change in plan.get("resource_changes", [])}
     require(set(changes) == EXPECTED_MANAGED, "resource-change set is not exactly the four helper resources")
@@ -176,17 +276,19 @@ def assert_plan(
         require(not change.get("action_reason"), f"{address} has an action reason")
 
     outputs = plan.get("output_changes", {})
-    require(set(outputs) == {"candidate_preflight_function_name"}, "helper output set drifted")
-    output = outputs["candidate_preflight_function_name"]
-    require(output.get("actions") == ["create"], "helper output must be create-only")
-    require(output.get("after") == HELPER_NAME, "helper output value drifted")
-    require(output.get("after_unknown") is False, "helper output must be known")
-    require(output.get("after_sensitive") is False, "helper output must be non-sensitive")
+    expected_outputs = {"candidate_preflight_qualified_arn", "candidate_preflight_version"}
+    require(set(outputs) == expected_outputs, "helper output set drifted")
+    for name, output in outputs.items():
+        require(output.get("actions") == ["create"], f"{name} must be create-only")
+        require(output.get("after") is None, f"{name} must be unknown before apply")
+        require(output.get("after_unknown") is True, f"{name} must be resolved only after publication")
+        require(output.get("after_sensitive") is False, f"{name} must be non-sensitive")
 
     planned_outputs = plan.get("planned_values", {}).get("outputs", {})
-    require(set(planned_outputs) == {"candidate_preflight_function_name"}, "planned output set contains an unexpected or sensitive output")
-    require(planned_outputs["candidate_preflight_function_name"].get("value") == HELPER_NAME, "planned helper output drifted")
-    require(planned_outputs["candidate_preflight_function_name"].get("sensitive") is False, "planned helper output is sensitive")
+    require(set(planned_outputs) == expected_outputs, "planned output set contains an unexpected or unqualified output")
+    for name, output in planned_outputs.items():
+        require("value" not in output, f"{name} unexpectedly has an unqualified or pre-publication value")
+        require(output.get("sensitive") is False, f"{name} is sensitive")
 
     def find_forbidden_secret_fields(value) -> bool:
         if isinstance(value, dict):
@@ -253,6 +355,7 @@ def assert_plan(
     require(function["runtime"] == "python3.13" and function["handler"] == "handler.handler", "helper runtime contract drifted")
     require(function["timeout"] == 120 and function["memory_size"] == 128, "helper resource bounds drifted")
     require(function["reserved_concurrent_executions"] == 1, "helper concurrency bound drifted")
+    require(function["publish"] is True, "helper version publication drifted")
     require(function["tags"] == EXPECTED_TAGS, "helper tags drifted")
     require(function["role"] == ROLE_ARN, "helper execution role ARN drifted")
     require(function["filename"] == "./candidate-preflight.zip", "helper archive filename drifted")

@@ -125,13 +125,23 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             check=True,
         )
         cls.valid_plan = json.loads(show.stdout)
+        cls.provider_contract = copy.deepcopy(cls.valid_plan["configuration"]["provider_config"])
+        cls.check_contract = {
+            item["address"]["to_display"] for item in cls.valid_plan["checks"]
+        }
 
     @classmethod
     def tearDownClass(cls):
         cls.temporary.cleanup()
 
     def assert_plan(self, plan):
-        ASSERTION_MODULE.assert_plan(plan, STACK, self.secret_data_address)
+        ASSERTION_MODULE.assert_plan(
+            plan,
+            STACK,
+            self.secret_data_address,
+            self.provider_contract,
+            self.check_contract,
+        )
 
     def assert_rejected(self, label: str, mutate) -> None:
         candidate = copy.deepcopy(self.valid_plan)
@@ -198,6 +208,10 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "action invocations": lambda p: p.update(action_invocations=[{"address": "bad"}]),
             "action triggers": lambda p: p.update(action_triggers=[{"address": "bad"}]),
             "unknown safety check": lambda p: p["checks"][0].update(status="unknown"),
+            "replaced safety check": lambda p: p["checks"][0]["address"].update(to_display="check.other"),
+            "aliased provider": lambda p: p["configuration"]["provider_config"].update(**{"aws.other": {"name": "aws", "full_name": "registry.terraform.io/hashicorp/aws"}}),
+            "provider region": lambda p: p["configuration"]["provider_config"]["aws"]["expressions"]["region"].update(constant_value="us-east-1"),
+            "resource provider alias": lambda p: next(item for item in p["configuration"]["root_module"]["resources"] if item["address"] == function_address).update(provider_config_key="aws.other"),
             "child module": lambda p: p["configuration"]["root_module"].update(module_calls={"bad": {}}),
             "extra config resource": lambda p: p["configuration"]["root_module"]["resources"].append({"address": "aws_s3_bucket.bad", "mode": "managed"}),
             "missing config data": lambda p: p["configuration"]["root_module"]["resources"].pop(),
@@ -206,9 +220,9 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "resource update": lambda p: resource(p, function_address)["change"].update(actions=["update"]),
             "action reason": lambda p: resource(p, function_address).update(action_reason="replace_because_tainted"),
             "extra output": lambda p: p["output_changes"].update(bad={"actions": ["create"]}),
-            "output unknown": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after_unknown=True),
-            "output sensitive": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after_sensitive=True),
-            "output value": lambda p: p["output_changes"]["candidate_preflight_function_name"].update(after="wrong"),
+            "output becomes known": lambda p: p["output_changes"]["candidate_preflight_qualified_arn"].update(after="arn:unqualified", after_unknown=False),
+            "output sensitive": lambda p: p["output_changes"]["candidate_preflight_qualified_arn"].update(after_sensitive=True),
+            "unqualified output": lambda p: p["output_changes"].update(candidate_preflight_function_name={"actions": ["create"], "after": "unqualified", "after_unknown": False, "after_sensitive": False}),
             "IAM widened": lambda p: mutate_policy(p, "Action", ["lambda:*"]),
             "IAM resource widened": lambda p: mutate_policy(p, "Resource", ["*"]),
             "environment changed": lambda p: resource(p, function_address)["change"]["after"]["environment"][0]["variables"].update(EXPECTED_LIVE_VERSION="40"),
@@ -220,6 +234,11 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "archive hash": lambda p: resource(p, function_address)["change"]["after"].update(source_code_hash="wrong"),
             "archive filename": lambda p: resource(p, function_address)["change"]["after"].update(filename="other.zip"),
             "role ARN": lambda p: resource(p, function_address)["change"]["after"].update(role="arn:aws:iam::585192672263:role/other"),
+            "publish disabled": lambda p: resource(p, function_address)["change"]["after"].update(publish=False),
+            "IAM expression disconnected": lambda p: next(item for item in p["configuration"]["root_module"]["resources"] if item["address"] == policy_address)["expressions"]["policy"].update(references=[]),
+            "environment expression disconnected": lambda p: next(item for item in p["configuration"]["root_module"]["resources"] if item["address"] == function_address)["expressions"]["environment"][0]["variables"].update(references=[]),
+            "role expression disconnected": lambda p: next(item for item in p["configuration"]["root_module"]["resources"] if item["address"] == function_address)["expressions"]["role"].update(references=[]),
+            "archive expression disconnected": lambda p: next(item for item in p["configuration"]["root_module"]["resources"] if item["address"] == function_address)["expressions"]["source_code_hash"].update(references=[]),
         }
         for label, mutation in mutations.items():
             self.assert_rejected(label, mutation)
@@ -238,6 +257,14 @@ class CandidatePreflightPlanIsolationTests(unittest.TestCase):
             "extra archive source": ('source {', 'source {\n    filename = "extra.py"\n  }\n  source {'),
             "handler hash": (ASSERTION_MODULE.HANDLER_SHA256, "0" * 64),
             "classification hash": (ASSERTION_MODULE.CLASSIFICATION_SHA256, "1" * 64),
+            "hardcoded secret suffix": (
+                "admin_password_secret_arn = data.aws_secretsmanager_secret.admin_password.arn",
+                'admin_password_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/admin-password-Ab12Cd"',
+            ),
+            "disconnected secret expression": (
+                "admin_password_secret_arn = data.aws_secretsmanager_secret.admin_password.arn",
+                "admin_password_secret_arn = local.candidate_preflight_app_function_arn",
+            ),
         }
         for label, (old, new) in mutations.items():
             with self.subTest(label=label), tempfile.TemporaryDirectory(prefix="candidate-source-negative-") as temporary:

@@ -184,6 +184,7 @@ resource "aws_lambda_function" "candidate_preflight" {
   timeout                        = 120
   memory_size                    = 128
   reserved_concurrent_executions = 1
+  publish                        = true
 
   environment {
     variables = {
@@ -232,7 +233,12 @@ resource "aws_lambda_function" "candidate_preflight" {
   tags = local.common_tags
 }
 
-output "candidate_preflight_function_name" {
-  description = "Credential-safe synchronous candidate-preflight wrapper; accepts only candidate-preflight-v1."
-  value       = aws_lambda_function.candidate_preflight.function_name
+output "candidate_preflight_qualified_arn" {
+  description = "Immutable published candidate-preflight Lambda ARN; invoke only this qualified ARN."
+  value       = aws_lambda_function.candidate_preflight.qualified_arn
+}
+
+output "candidate_preflight_version" {
+  description = "Immutable published candidate-preflight Lambda version."
+  value       = aws_lambda_function.candidate_preflight.version
 }
