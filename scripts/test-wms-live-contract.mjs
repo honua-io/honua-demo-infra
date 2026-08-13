@@ -8,11 +8,14 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
-import { inspectPng, validateWmsCapabilities } from "./live-demo-canary.mjs";
+import { inspectPng, selectWmsBindings, validateWmsCapabilities } from "./live-demo-canary.mjs";
 
 const script = fileURLToPath(new URL("./live-demo-canary.mjs", import.meta.url));
 const imageDigest = `sha256:${"a".repeat(64)}`;
 const sourceCommit = "b".repeat(40);
+const stacServerCommit = "1fc339a3692289e9bc4ec90ed1533c5eb22a995e";
+const stacSeedSha256 = "d".repeat(64);
+const stacCollectionId = "90810";
 
 test("planned WMS canary binds deployment, manifest, capabilities, and semantic PNG", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "honua-wms-canary-"));
@@ -57,6 +60,14 @@ test("PNG semantic gate rejects a same-color blank map", () => {
   );
 });
 
+test("explicit live WMS admission requires at least one advertised live binding", () => {
+  assert.throws(() => selectWmsBindings(fixtureManifest(), "live"), /at least one advertised live WMS binding/u);
+});
+
+test("optional-live WMS admission permits no binding without selecting planned WMS", () => {
+  assert.deepEqual(selectWmsBindings(fixtureManifest(), "optional-live"), []);
+});
+
 test("capabilities gate requires the governed layer and rejects exceptions", () => {
   validateWmsCapabilities(
     '<?xml version="1.0"?><WMS_Capabilities><Capability><Layer><Name>maui-flood-hazard</Name></Layer></Capability></WMS_Capabilities>',
@@ -81,8 +92,25 @@ function fixtureManifest() {
   };
   return {
     format: "honua.demo-services.v1",
-    schemaVersion: "1.1.0",
-    services: [{ id: "maui-flood-hazard", protocols: {} }],
+    schemaVersion: "1.2.0",
+    sources: {
+      stacSeed: `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`,
+      stacSeedSha256,
+    },
+    services: [
+      { id: "maui-flood-hazard", protocols: {} },
+      {
+        id: "demo-stac",
+        protocols: {
+          stac: {
+            path: "/stac",
+            collectionsPath: "/stac/collections",
+            searchPath: "/stac/search",
+            collections: [{ id: stacCollectionId, path: `/stac/collections/${stacCollectionId}` }],
+          },
+        },
+      },
+    ],
     releaseContracts: {
       wms: {
         status: "planned", definitionSha256: "c".repeat(64),
@@ -100,8 +128,26 @@ function handleRequest(request, response, manifestBytes, png) {
   } else if (request.url === "/demo-services.v1.json") {
     response.setHeader("content-type", "application/json");
     response.end(manifestBytes);
+  } else if (request.url === "/api/v1/capabilities/manifest") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ server: { deploymentRevision: sourceCommit } }));
   } else if (request.url === "/healthz/ready") {
     response.end("ready");
+  } else if (request.url === "/stac") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ type: "Catalog" }));
+  } else if (request.url === "/stac/collections") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ collections: [{ id: stacCollectionId }] }));
+  } else if (request.url === `/stac/collections/${stacCollectionId}`) {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ type: "Collection", id: stacCollectionId }));
+  } else if (request.url === `/stac/collections/${stacCollectionId}/items?limit=2` || (request.method === "POST" && request.url === "/stac/search")) {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", id: "fixture-item", collection: stacCollectionId, geometry: null, properties: {} }],
+    }));
   } else if (request.url.includes("REQUEST=GetCapabilities")) {
     response.setHeader("content-type", "application/xml");
     response.end('<?xml version="1.0"?><WMS_Capabilities><Capability><Layer><Name>maui-flood-hazard</Name></Layer></Capability></WMS_Capabilities>');

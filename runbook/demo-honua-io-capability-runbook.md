@@ -149,7 +149,7 @@ activates it. Existing graph entities (the 11 `maui-*` layers) are preserved.
 > Before any repeat apply, inspect `Metadata__Environment` / `Environment` on the
 > serving Lambda version or query the active environment in `metadata_v2_current`.
 
-**[OPERATOR]** Set `HONUA_SEED_ENV` to the env id the demo Lambda is configured with —
+**[OPERATOR]** Set mandatory `SEED_ENV` to the env id the serving Lambda is configured with —
 this MUST match the server's `Metadata__Environment` / `Environment` setting (it defaults
 to `default`; confirm against the serving Lambda's environment variables or the active
 `metadata_v2_current` row — the capabilities manifest's host-environment field is not
@@ -157,23 +157,55 @@ the metadata environment):
 
 ```bash
 # Local / direct-psql target:
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
 PGHOST=... PGPORT=5432 PGUSER=honua PGDATABASE=honua PGPASSWORD=... \
-HONUA_SEED_ENV=default HONUA_SEED_SCHEMA=honua \
+HONUA_SEED_ENV="$SEED_ENV" HONUA_SEED_SCHEMA=honua \
   tests/seed/apply-demo-stac-seed.sh
 ```
 
-For `demo.honua.io` the DB is in-VPC only. Send the **entire** contents of
-`tests/seed/demo-stac-imagery-v1.sql` (it is one transaction) as a single statement to the
-bootstrap Lambda, with the `env`/`schema` psql vars pre-substituted (the file reads them
-via `:'env'` / `:"schema"`; when going through the Lambda, replace those tokens with the
-literal env/schema before sending, or wrap the body so `set_config('honua.seed_env', ...)`
-is set first):
+For `demo.honua.io` the DB is in-VPC only. Terraform provisions two purpose-specific
+functions: `honua-demo-demo-stac-seed-manager` owns the allowlisted write and
+`honua-demo-demo-stac-seed-receipt` owns one fixed query. The manager independently
+downloads the repository-pinned immutable URL, hashes the exact source bytes, renders
+and hashes the exact SQL bytes it executes, compares the source digest and server commit
+with its deployed configuration, and writes the attestation in the seed transaction.
+The invocation payload contains no SQL, URL, digest, environment, or commit to spoof.
+
+The manager still holds effective database-administrator privilege because relation-loss
+recovery and receipt-role provisioning require it. Only an already-authorized break-glass
+DBA operator/role may invoke it after reviewing the exact pinned source. Ordinary
+`lambda:InvokeFunction` permission is not sufficient operational authorization. The older
+`honua-demo-demo-postgis-bootstrap` remains an explicit `break-glass-sql` arbitrary-SQL
+surface and must not be used for managed seeding or receipt reads.
 
 ```bash
-# [OPERATOR] example: invoke the bootstrap Lambda with the seed body
-aws lambda invoke --function-name honua-demo-demo-postgis-bootstrap \
-  --payload "$(jq -Rs '{query: .}' < tests/seed/demo-stac-imagery-v1.sql)" \
-  --cli-binary-format raw-in-base64-out /dev/stdout
+# [OPERATOR] validate the repository pin, then invoke the allowlisted manager
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+seed_ref=1fc339a3692289e9bc4ec90ed1533c5eb22a995e
+seed_sha256=de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687
+curl --fail --location \
+  "https://raw.githubusercontent.com/honua-io/honua-server/${seed_ref}/tests/seed/demo-stac-imagery-v1.sql" \
+  --output /tmp/demo-stac-imagery-v1.sql
+python3 stacks/aws/scripts/render-demo-stac-seed.py \
+  --seed-file /tmp/demo-stac-imagery-v1.sql \
+  --environment "$SEED_ENV" \
+  --schema honua \
+  --server-commit "$seed_ref" \
+  --expected-source-sha256 "$seed_sha256" \
+  > /tmp/demo-stac-seed-payload.json
+test "$(jq -r '.operation' /tmp/demo-stac-seed-payload.json)" = apply-demo-stac-seed
+aws lambda invoke --function-name honua-demo-demo-stac-seed-manager \
+  --payload fileb:///tmp/demo-stac-seed-payload.json \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/demo-stac-seed-response.json \
+  > /tmp/demo-stac-seed-invoke.json
+jq -e '.StatusCode == 200 and (.FunctionError | not)' /tmp/demo-stac-seed-invoke.json
+jq -e --arg sha "$seed_sha256" --arg env "$SEED_ENV" --arg commit "$seed_ref" \
+  '.format == "honua.demo.stac-seed-attestation.v1" and
+   .seedId == "demo-stac-imagery-v1" and .sourceSha256 == $sha and
+   .serverCommit == $commit and .metadataEnvironment == $env and
+   (.executionSha256 | test("^[0-9a-f]{64}$")) and .metadataRevision >= 1' \
+  /tmp/demo-stac-seed-response.json
 ```
 
 The seed is **idempotent**: re-running advances the snapshot revision and re-applies the
@@ -185,6 +217,44 @@ Open `https://demo.honua.io/stac/collections` in a browser and confirm it contai
 
 Acceptance: Imagery & Terrain Studio (`demo-imagery-terrain.html`) shows a live STAC
 catalog instead of the bundled sample lane.
+
+### Post-deploy semantic gate **[OPERATOR]**
+
+This repository still does not claim an automatic `demo-deployed` producer: production
+alias promotion and the authorized manager invocation are distinct operational actions.
+After both succeed, dispatch the workflow. Its exact-trunk GitHub OIDC role can invoke
+only `honua-demo-demo-stac-seed-receipt`; that function uses a separate PostgreSQL login
+with `CONNECT`, schema `USAGE`, and `SELECT` only on `demo_seed_revisions` and
+`metadata_v2_current`. It cannot mutate the marker or any application table. The workflow
+rejects a receipt unless its independently measured source URL/digest/commit matches the
+checked-out manifest and its recorded metadata revision is still current.
+
+```bash
+: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+# One-time repository settings from Terraform outputs and the same serving config:
+gh variable set HONUA_DEMO_STAC_RECEIPT_ROLE_ARN \
+  --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_github_role_arn)"
+gh variable set HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME \
+  --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_function_name)"
+gh variable set HONUA_DEMO_STAC_METADATA_ENVIRONMENT \
+  --repo honua-io/honua-demo-infra --body "$SEED_ENV"
+
+# Set this from the successful deployment output, not from an untrusted public response.
+DEPLOYMENT_REVISION=<exact-40-character-runtime-sha>
+test "$(printf '%s' "$DEPLOYMENT_REVISION" | wc -c)" -eq 40
+test "$(curl --fail --silent https://demo.honua.io/api/v1/capabilities/manifest \
+  | jq -r '.server.deploymentRevision')" = "$DEPLOYMENT_REVISION"
+gh workflow run live-canary.yml \
+  --repo honua-io/honua-demo-infra \
+  --ref trunk \
+  -f deployment_revision="$DEPLOYMENT_REVISION" \
+  -f wms_admission=optional-live
+```
+
+The workflow derives the expected STAC seed URL, server commit, seed source SHA-256, and
+manifest SHA-256 from the checked-out contract, reads the trusted in-VPC receipt itself,
+then probes the public deployment. It passes only when the receipt matches exactly and a
+non-empty collection `90810` item/search result is present on the deployed runtime.
 
 ---
 

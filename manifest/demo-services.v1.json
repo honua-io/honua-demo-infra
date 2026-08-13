@@ -1,12 +1,13 @@
 {
   "format": "honua.demo-services.v1",
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "description": "Publicly discoverable seeded services of the demo.honua.io demo environment. Generated from seed definitions by manifest/generate-demo-services.py (honua-demo-infra#19) — never edit by hand.",
   "baseUrl": "https://demo.honua.io",
   "publishUrl": "https://demo.honua.io/demo-services.v1.json",
   "sources": {
     "seedManifest": "stacks/aws/SEED_MANIFEST.md",
-    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql",
+    "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/1fc339a3692289e9bc4ec90ed1533c5eb22a995e/tests/seed/demo-stac-imagery-v1.sql",
+    "stacSeedSha256": "de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687",
     "wmsRelease": "manifest/wms-release.v1.json"
   },
   "releaseContracts": {

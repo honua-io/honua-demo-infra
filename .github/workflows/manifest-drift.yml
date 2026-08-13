@@ -42,3 +42,29 @@ jobs:
 
       - name: Validate planned WMS release and semantic canary
         run: node --test scripts/test-wms-live-contract.mjs
+
+      - name: Validate STAC deployment semantic canary
+        run: node --test scripts/test-stac-live-contract.mjs
+
+      - name: Validate in-VPC STAC seed renderer
+        run: |
+          python3 scripts/test-render-demo-stac-seed.py
+          python3 scripts/test-stac-seed-handler.py
+          python3 scripts/test-stac-runbook-contract.py
+
+  terraform-contract:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.15.8"
+          terraform_wrapper: false
+
+      - name: Validate Terraform root and private-module interface
+        run: python3 scripts/validate-terraform-root.py

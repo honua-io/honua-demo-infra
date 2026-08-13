@@ -13,15 +13,40 @@ const evidencePath = process.env.HONUA_DEMO_CANARY_EVIDENCE_PATH
   ?? path.join(evidenceDir, "live-demo-canary.v1.json");
 const baseUrl = (process.env.HONUA_DEMO_BASE_URL ?? "https://demo.honua.io").replace(/\/$/u, "");
 const timeoutMs = Number(process.env.HONUA_DEMO_TIMEOUT_MS ?? 20_000);
-const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "live";
+const wmsAdmission = process.env.HONUA_DEMO_WMS_ADMISSION ?? "optional-live";
+const expectedDeploymentRevision = (process.env.HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION ?? "").trim();
+const requireDeploymentBinding = process.env.HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING === "true";
+const expectedStacSeedUrl = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_URL ?? "").trim();
+const expectedStacServerCommit = (process.env.HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT ?? "").trim();
+const expectedStacSeedSha256 = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_SHA256 ?? "").trim();
+const expectedManifestSha256 = (process.env.HONUA_DEMO_EXPECTED_MANIFEST_SHA256 ?? "").trim();
+const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
+const results = [];
 
 async function main() {
-  if (!["live", "planned"].includes(wmsAdmission)) {
-    throw new Error("HONUA_DEMO_WMS_ADMISSION must be live or planned");
+  if (!["live", "planned", "optional-live"].includes(wmsAdmission)) {
+    throw new Error("HONUA_DEMO_WMS_ADMISSION must be live, planned, or optional-live");
+  }
+  if (requireDeploymentBinding) {
+    if (!/^[0-9a-f]{40}$/u.test(expectedDeploymentRevision)) {
+      throw new Error("dispatch requires an exact 40-character HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION");
+    }
+    if (!expectedStacSeedUrl || !/^[0-9a-f]{40}$/u.test(expectedStacServerCommit) || !/^[0-9a-f]{64}$/u.test(expectedStacSeedSha256) || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)) {
+      throw new Error("dispatch requires exact checked-out STAC seed URL, server commit, source digest, and manifest SHA-256 bindings");
+    }
   }
 
-  const results = [];
   await probeLanding(results);
+  const capabilityManifest = await probeJson(results, "capability-manifest", "/api/v1/capabilities/manifest");
+  const deploymentRevision = capabilityManifest.server?.deploymentRevision;
+  const capabilityResult = results.find((result) => result.name === "capability-manifest");
+  if (!/^[0-9a-f]{40}$/u.test(deploymentRevision ?? "")) {
+    failResult(capabilityResult, "capability manifest has no exact 40-character deployment revision");
+  } else if (expectedDeploymentRevision && deploymentRevision !== expectedDeploymentRevision) {
+    failResult(capabilityResult, `deployment revision ${deploymentRevision} does not match expected revision ${expectedDeploymentRevision}`);
+  } else if (capabilityResult) {
+    capabilityResult.semantic = { deploymentRevision };
+  }
   const manifest = await probeJson(results, "manifest", "/demo-services.v1.json");
   if (manifest.format !== "honua.demo-services.v1" || !/^1\.\d+\.\d+$/u.test(manifest.schemaVersion ?? "")) {
     throw new Error(`unexpected manifest contract ${manifest.format}@${manifest.schemaVersion}`);
@@ -29,9 +54,35 @@ async function main() {
   if (!Array.isArray(manifest.services) || manifest.services.length === 0) {
     throw new Error("published demo manifest contains no services");
   }
-  const manifestSha256 = results.find((result) => result.name === "manifest")?.sha256;
+  const manifestResult = results.find((result) => result.name === "manifest");
+  const manifestSha256 = manifestResult?.sha256;
+  const stacSeedUrl = manifest.sources?.stacSeed;
+  const stacSeedMatch = /^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-server\/([0-9a-f]{40})\/tests\/seed\/demo-stac-imagery-v1\.sql$/u.exec(stacSeedUrl ?? "");
+  const stacServerCommit = stacSeedMatch?.[1] ?? null;
+  const stacSeedSha256 = manifest.sources?.stacSeedSha256;
+  if (!stacSeedMatch) {
+    failResult(manifestResult, "manifest sources.stacSeed is not an immutable honua-server commit URL");
+  } else if (expectedStacSeedUrl && stacSeedUrl !== expectedStacSeedUrl) {
+    failResult(manifestResult, "published manifest STAC seed URL does not match the checked-out contract");
+  } else if (expectedStacServerCommit && stacServerCommit !== expectedStacServerCommit) {
+    failResult(manifestResult, "published manifest STAC seed commit does not match the checked-out contract");
+  } else if (!/^[0-9a-f]{64}$/u.test(stacSeedSha256 ?? "")) {
+    failResult(manifestResult, "published manifest STAC seed source digest is invalid");
+  } else if (expectedStacSeedSha256 && stacSeedSha256 !== expectedStacSeedSha256) {
+    failResult(manifestResult, "published manifest STAC seed source digest does not match the checked-out contract");
+  } else if (expectedManifestSha256 && manifestSha256 !== expectedManifestSha256) {
+    failResult(manifestResult, "published manifest digest does not match the checked-out contract");
+  }
+  if (manifestResult) {
+    manifestResult.semantic = { ...(manifestResult.semantic ?? {}), stacSeedUrl, stacServerCommit, stacSeedSha256 };
+  }
 
   await probeText(results, "readiness", "/healthz/ready");
+  const stacServices = manifest.services.filter((service) => service.protocols?.stac);
+  if (stacServices.length === 0) {
+    throw new Error("published demo manifest contains no advertised STAC service");
+  }
+  const canaryBindings = [];
   for (const service of manifest.services) {
     const protocols = service.protocols ?? {};
     if (protocols.featureServer) {
@@ -59,14 +110,42 @@ async function main() {
       for (const collection of protocols.stac.collections ?? []) {
         await probeJson(results, `${service.id}:stac:${collection.id}`, collection.path);
       }
+      const canaryCollection = (protocols.stac.collections ?? [])
+        .find((collection) => collection.id === stacCanaryCollectionId);
+      if (canaryCollection) {
+        canaryBindings.push({ service, collection: canaryCollection });
+      }
     }
   }
+  if (canaryBindings.length !== 1) {
+    throw new Error(`published STAC contract must declare exact canary collection ${stacCanaryCollectionId} once; found ${canaryBindings.length}`);
+  }
+  const stacCanary = canaryBindings[0];
+  await probeStacFeatureCollection(
+    results,
+    `${stacCanary.service.id}:stac:${stacCanaryCollectionId}:items`,
+    `${stacCanary.collection.path}/items?limit=2`,
+    stacCanaryCollectionId,
+    2,
+  );
+  await probeStacFeatureCollection(
+    results,
+    `${stacCanary.service.id}:stac:${stacCanaryCollectionId}:search`,
+    stacCanary.service.protocols.stac.searchPath,
+    stacCanaryCollectionId,
+    2,
+    {
+      method: "POST",
+      body: JSON.stringify({ collections: [stacCanaryCollectionId], limit: 2 }),
+    },
+  );
 
   const wmsBindings = selectWmsBindings(manifest, wmsAdmission);
   const wmsRelease = manifest.releaseContracts?.wms;
+  const wmsContractAdmission = wmsAdmission === "optional-live" ? "live" : wmsAdmission;
   let deployment = null;
   if (wmsBindings.length > 0) {
-    deployment = validateWmsDeployment(wmsRelease, wmsAdmission);
+    deployment = validateWmsDeployment(wmsRelease, wmsContractAdmission);
     for (const binding of wmsBindings) {
       await probeWmsCapabilities(results, binding);
       await probeWmsMap(results, binding);
@@ -83,14 +162,30 @@ async function main() {
     format: "honua.demo.live-canary.v1",
     generatedAt: new Date().toISOString(),
     baseUrl,
+    deployment: {
+      revision: deploymentRevision ?? null,
+      expectedRevision: expectedDeploymentRevision || null,
+    },
     manifest: {
       format: manifest.format,
       schemaVersion: manifest.schemaVersion,
       serviceCount: manifest.services.length,
       sha256: manifestSha256,
+      expectedSha256: expectedManifestSha256 || null,
+      stacSeedUrl,
+      expectedStacSeedUrl: expectedStacSeedUrl || null,
+      stacServerCommit,
+      expectedStacServerCommit: expectedStacServerCommit || null,
+      stacSeedSha256,
+      expectedStacSeedSha256: expectedStacSeedSha256 || null,
+    },
+    stac: {
+      canaryCollectionId: stacCanaryCollectionId,
+      serviceId: stacCanary.service.id,
     },
     wms: {
       admission: wmsAdmission,
+      contractAdmission: wmsContractAdmission,
       bindingCount: wmsBindings.length,
       deployment,
       releaseDefinitionSha256: wmsRelease?.definitionSha256 ?? null,
@@ -112,7 +207,7 @@ async function main() {
   if (receipt.summary.failed > 0) process.exitCode = 1;
 }
 
-function selectWmsBindings(manifest, admission) {
+export function selectWmsBindings(manifest, admission) {
   if (admission === "planned") {
     const candidate = manifest.releaseCandidates?.wms;
     if (!candidate || candidate.status !== "planned" || !Array.isArray(candidate.bindings)) {
@@ -120,9 +215,13 @@ function selectWmsBindings(manifest, admission) {
     }
     return candidate.bindings;
   }
-  return manifest.services
+  const liveBindings = manifest.services
     .filter((service) => service.protocols?.wms)
     .map((service) => ({ serviceId: service.id, wms: service.protocols.wms }));
+  if (admission === "live" && liveBindings.length === 0) {
+    throw new Error("live WMS admission requires at least one advertised live WMS binding");
+  }
+  return liveBindings;
 }
 
 function validateWmsDeployment(release, admission) {
@@ -369,16 +468,88 @@ async function probeJson(results, name, urlPath) {
   }
 }
 
+async function probeStacFeatureCollection(
+  results,
+  name,
+  urlPath,
+  collectionId,
+  limit,
+  requestOptions = {},
+) {
+  const response = await probe(
+    results,
+    name,
+    urlPath,
+    {
+      accept: "application/geo+json,application/json",
+      ...(requestOptions.body ? { "content-type": "application/json" } : {}),
+    },
+    [200],
+    requestOptions,
+  );
+  if (!response.ok) return {};
+
+  let payload;
+  try {
+    payload = JSON.parse(response.body.toString("utf8"));
+  } catch (error) {
+    failResult(response.result, `invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return {};
+  }
+
+  const features = payload.type === "FeatureCollection" && Array.isArray(payload.features)
+    ? payload.features
+    : null;
+  if (!features) {
+    failResult(response.result, "expected a STAC FeatureCollection");
+    return payload;
+  }
+  if (features.length === 0) {
+    failResult(response.result, `expected a non-empty result for STAC collection ${collectionId}`);
+    return payload;
+  }
+  if (features.length > limit) {
+    failResult(response.result, `expected at most ${limit} STAC features (received ${features.length})`);
+    return payload;
+  }
+
+  const invalidFeature = features.find((feature) =>
+    typeof feature?.id !== "string" || feature.id.length === 0 || feature.collection !== collectionId);
+  if (invalidFeature) {
+    failResult(response.result, `STAC result is not identity-bound to collection ${collectionId}`);
+    return payload;
+  }
+
+  response.result.semantic = {
+    collectionId,
+    featureCount: features.length,
+    itemIds: features.map((feature) => feature.id),
+  };
+  return payload;
+}
+
 async function probeText(results, name, urlPath) { return probe(results, name, urlPath, {}, [200]); }
 async function probeBinary(results, name, urlPath) { return probe(results, name, urlPath, {}, [200]); }
 async function probeRange(results, name, urlPath) { return probe(results, name, urlPath, { range: "bytes=0-126" }, [206]); }
 
-async function probe(results, name, urlPath, headers, expectedStatuses) {
+async function probe(results, name, urlPath, headers, expectedStatuses, requestOptions = {}) {
   const started = performance.now();
-  const result = { name, url: `${baseUrl}${urlPath}`, passed: false, status: 0, latencyMs: 0, bytes: 0 };
+  const result = {
+    name,
+    method: requestOptions.method ?? "GET",
+    url: `${baseUrl}${urlPath}`,
+    passed: false,
+    status: 0,
+    latencyMs: 0,
+    bytes: 0,
+  };
   results.push(result);
   try {
-    const response = await fetch(result.url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetch(result.url, {
+      ...requestOptions,
+      headers: { ...(requestOptions.headers ?? {}), ...headers },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     const body = Buffer.from(await response.arrayBuffer());
     result.status = response.status;
     result.latencyMs = Math.round(performance.now() - started);
@@ -399,9 +570,14 @@ function failResult(result, error) { result.passed = false; result.error = error
 
 async function writeFatal(error) {
   await mkdir(path.dirname(evidencePath), { recursive: true });
+  const summary = {
+    total: results.length,
+    passed: results.filter((result) => result.passed).length,
+    failed: results.filter((result) => !result.passed).length,
+  };
   await writeFile(
     evidencePath,
-    `${JSON.stringify({ format: "honua.demo.live-canary.v1", generatedAt: new Date().toISOString(), baseUrl, fatal: error instanceof Error ? error.message : String(error) }, null, 2)}\n`,
+    `${JSON.stringify({ format: "honua.demo.live-canary.v1", generatedAt: new Date().toISOString(), baseUrl, fatal: error instanceof Error ? error.message : String(error), summary, results }, null, 2)}\n`,
     "utf8",
   );
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);

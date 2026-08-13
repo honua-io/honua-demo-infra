@@ -180,11 +180,13 @@ is exactly the same operation in reverse).
   Reference it by a pinned honua-server ref, e.g.:
 
   ```
-  https://raw.githubusercontent.com/honua-io/honua-server/30d6d6f115e23e193fdaceb2a5742180165cc618/tests/seed/demo-stac-imagery-v1.sql
+    https://raw.githubusercontent.com/honua-io/honua-server/1fc339a3692289e9bc4ec90ed1533c5eb22a995e/tests/seed/demo-stac-imagery-v1.sql
   ```
 
+  Exact seed SHA-256: `de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687`.
+
   honua-server is public, so that raw URL works without auth. Bump the
-  `30d6d6f1…` ref deliberately when picking up newer seed fixtures; don't
+  pinned commit deliberately when picking up newer seed fixtures; don't
   float on `trunk`. See `stacks/aws/SEED_MANIFEST.md` for which fixtures apply
   to which layers and `stacks/aws/scripts/seed-test-service.sh` for the one
   seed path in this repo (it deliberately does *not* apply
@@ -208,8 +210,17 @@ of the demo's publicly discoverable services (issue #19) — derived from
 hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
 public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
 wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
-the shared Terraform state since 2026-07-31. The scheduled public canary
-probes every declared service family and uploads its receipt. Consumer:
+  the shared Terraform state since 2026-07-31. The scheduled and explicit
+  operator-dispatched public canary records the exact runtime revision, probes every declared service
+  family, and requires non-empty item and bounded POST search results tied to STAC
+  collection `90810` before its receipt passes. Its checked-out contract also binds
+  the exact seed source SHA-256. A managed in-VPC executor independently hashes the
+  source and rendered bytes it executes and writes a transactional marker; the explicit
+  dispatch workflow reads that marker through a separate query-only Lambda/DB role.
+  There is no automatic `demo-deployed` producer: alias promotion and the authorized
+  seed-manager invocation remain an explicit operator gate. Scheduled and push canaries use
+  `optional-live` WMS admission, which permits no live WMS binding without reporting
+  one; explicit `live` admission requires at least one advertised live binding. Consumer:
 honua-io/honua-sdk-js#825. See [`manifest/README.md`](./manifest/README.md).
 
 ## Demo ops runbook

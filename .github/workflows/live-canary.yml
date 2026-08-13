@@ -5,12 +5,17 @@ on:
     - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
-      wms_admission:
-        description: "Probe live WMS, or planned WMS during an approved promotion"
+      deployment_revision:
+        description: "Exact 40-character server commit reported by the deployed runtime"
         required: true
-        default: live
+        type: string
+      wms_admission:
+        description: "Probe optional advertised live WMS, require live WMS, or probe an approved planned candidate"
+        required: true
+        default: optional-live
         type: choice
         options:
+          - optional-live
           - live
           - planned
   push:
@@ -18,6 +23,7 @@ on:
     paths:
       - "manifest/**"
       - "scripts/live-demo-canary.mjs"
+      - "scripts/test-stac-live-contract.mjs"
       - "scripts/test-wms-live-contract.mjs"
       - "scripts/client-compat-canary.mjs"
       - "stacks/aws/client-compat-seed.v1.json"
@@ -25,6 +31,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: live-demo-canary
@@ -41,9 +48,105 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Bind canary to checked-out publication contract
+        id: contract
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHash } = require("node:crypto");
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const bytes = readFileSync("manifest/demo-services.v1.json");
+          const manifest = JSON.parse(bytes);
+          const seedUrl = manifest.sources?.stacSeed;
+          const seedSha256 = manifest.sources?.stacSeedSha256;
+          const match = /^https:\/\/raw\.githubusercontent\.com\/honua-io\/honua-server\/([0-9a-f]{40})\/tests\/seed\/demo-stac-imagery-v1\.sql$/.exec(seedUrl ?? "");
+          if (!match) {
+            throw new Error("manifest sources.stacSeed must be an immutable honua-server commit URL");
+          }
+          if (!/^[0-9a-f]{64}$/.test(seedSha256 ?? "")) {
+            throw new Error("manifest sources.stacSeedSha256 must be an exact source digest");
+          }
+          const digest = createHash("sha256").update(bytes).digest("hex");
+          appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_url=${seedUrl}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_server_commit=${match[1]}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `stac_seed_sha256=${seedSha256}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `manifest_sha256=${digest}\n`);
+          NODE
+
+      - name: Require managed seed receipt binding
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          RECEIPT_ROLE_ARN: ${{ vars.HONUA_DEMO_STAC_RECEIPT_ROLE_ARN }}
+          RECEIPT_FUNCTION_NAME: ${{ vars.HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME }}
+          METADATA_ENVIRONMENT: ${{ vars.HONUA_DEMO_STAC_METADATA_ENVIRONMENT }}
+        shell: bash
+        run: |
+          : "${RECEIPT_ROLE_ARN:?Set HONUA_DEMO_STAC_RECEIPT_ROLE_ARN from Terraform output}"
+          : "${RECEIPT_FUNCTION_NAME:?Set HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME from Terraform output}"
+          : "${METADATA_ENVIRONMENT:?Set HONUA_DEMO_STAC_METADATA_ENVIRONMENT from serving Lambda configuration}"
+
+      - name: Configure AWS credentials for query-only receipt
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_STAC_RECEIPT_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Read trusted in-VPC seed receipt
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          RECEIPT_FUNCTION_NAME: ${{ vars.HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME }}
+        shell: bash
+        run: |
+          mkdir -p .artifacts/live-demo-canary
+          aws lambda invoke \
+            --function-name "$RECEIPT_FUNCTION_NAME" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"operation":"read-demo-stac-seed-receipt"}' \
+            .artifacts/live-demo-canary/managed-seed-receipt.json \
+            > .artifacts/live-demo-canary/managed-seed-invoke.json
+
+      - name: Bind receipt to checked-out seed and active metadata revision
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          RECEIPT_PATH: .artifacts/live-demo-canary/managed-seed-receipt.json
+          EXPECTED_SOURCE_URL: ${{ steps.contract.outputs.stac_seed_url }}
+          EXPECTED_SOURCE_SHA256: ${{ steps.contract.outputs.stac_seed_sha256 }}
+          EXPECTED_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
+          EXPECTED_METADATA_ENVIRONMENT: ${{ vars.HONUA_DEMO_STAC_METADATA_ENVIRONMENT }}
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const receipt = JSON.parse(readFileSync(process.env.RECEIPT_PATH, "utf8"));
+          const required = {
+            format: "honua.demo.stac-seed-receipt.v1",
+            seedId: "demo-stac-imagery-v1",
+            sourceUrl: process.env.EXPECTED_SOURCE_URL,
+            sourceSha256: process.env.EXPECTED_SOURCE_SHA256,
+            serverCommit: process.env.EXPECTED_SERVER_COMMIT,
+            metadataEnvironment: process.env.EXPECTED_METADATA_ENVIRONMENT,
+          };
+          for (const [key, value] of Object.entries(required)) {
+            if (receipt[key] !== value) throw new Error(`managed seed receipt ${key} mismatch`);
+          }
+          if (!/^[0-9a-f]{64}$/.test(receipt.executionSha256 ?? "")) {
+            throw new Error("managed seed receipt has no exact execution digest");
+          }
+          if (!Number.isSafeInteger(receipt.metadataRevision) || receipt.metadataRevision < 1 ||
+              receipt.metadataRevision !== receipt.currentRevision) {
+            throw new Error("managed seed receipt is not bound to the active metadata revision");
+          }
+          NODE
+
       - name: Probe every published demo service family
         env:
-          HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'live' }}
+          HONUA_DEMO_EXPECTED_DEPLOYMENT_REVISION: ${{ inputs.deployment_revision || '' }}
+          HONUA_DEMO_REQUIRE_DEPLOYMENT_BINDING: ${{ github.event_name == 'workflow_dispatch' }}
+          HONUA_DEMO_EXPECTED_STAC_SEED_URL: ${{ steps.contract.outputs.stac_seed_url }}
+          HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
+          HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: ${{ steps.contract.outputs.stac_seed_sha256 }}
+          HONUA_DEMO_EXPECTED_MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
+          HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'optional-live' }}
           HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}
           HONUA_DEMO_WMS_SERVER_COMMIT: ${{ vars.HONUA_DEMO_WMS_SERVER_COMMIT }}
           HONUA_DEMO_WMS_SERVER_ARCHITECTURE: ${{ vars.HONUA_DEMO_WMS_SERVER_ARCHITECTURE }}

@@ -5,6 +5,11 @@ region      = "us-west-2"
 environment = "demo"
 name_prefix = "honua-demo"
 
+# Mandatory Metadata v2 environment served by the live Lambda. Source this from
+# Metadata__Environment / Environment or the active metadata_v2_current row;
+# never infer it from ASPNETCORE_ENVIRONMENT.
+stac_seed_metadata_environment = "default"
+
 # Lambda AOT image — pin to an immutable release tag or digest from ECR.
 # The image MUST be pushed to ECR before apply (Lambda requires ECR; GHCR is
 # not supported directly by Lambda). Push the ghcr.io image to your ECR repo.
