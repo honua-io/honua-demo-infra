@@ -100,6 +100,73 @@ Any mismatch is a hard stop. Do not use `terraform state` editing, `-target`,
 `ignore_changes`, a copied secret ARN, an unsaved plan, or a dirty/different
 checkout as a shortcut.
 
+## Apply-actionless provider readback
+
+After the exact saved plan reports `4 added, 0 changed, 0 destroyed`, capture a
+normal full-refresh plan with the same verified Terraform `1.15.8` binary. This
+is an **apply-actionless provider readback**, not a second deployment:
+
+```bash
+set +e
+"$TERRAFORM_BIN" -chdir=stacks/aws-candidate-preflight plan \
+  -detailed-exitcode -input=false -no-color \
+  -out="$EVIDENCE_DIR/postapply-readback.tfplan" \
+  > "$EVIDENCE_DIR/postapply-readback.stdout.log" \
+  2> "$EVIDENCE_DIR/postapply-readback.stderr.log"
+status=$?
+set -e
+test "$status" -eq 0
+"$TERRAFORM_BIN" -chdir=stacks/aws-candidate-preflight show -json \
+  "$EVIDENCE_DIR/postapply-readback.tfplan" \
+  > "$EVIDENCE_DIR/postapply-readback.show.json"
+python scripts/assert-candidate-preflight-postapply.py \
+  "$EVIDENCE_DIR/postapply-readback.show.json"
+```
+
+The post-apply assertion does not relax or replace the zero-drift pre-apply
+assertion. It requires no resource or output actions and accepts either no
+provider readback drift or only the exact AWS provider `6.59.0` normalizations
+for the separately managed IAM inline policy and Lambda's `null`-to-empty
+`layers` value. Any other resource, field, action, action reason, output,
+unknown value, deferral, provider, source, or lock-file difference is a hard
+stop and never authorizes an apply.
+
+Capture the qualified helper runtime, concurrency, IAM role, standalone inline
+policy, empty attached-policy set, exact inline-policy-name set, and normalized
+ECR evidence. Bind them to the reviewed plan receipt and verify the resulting
+deployment receipt before any separately authorized invocation:
+
+```bash
+python scripts/assert-candidate-preflight-runtime.py create \
+  --function "$EVIDENCE_DIR/postapply-function.json" \
+  --concurrency "$EVIDENCE_DIR/postapply-concurrency.json" \
+  --role "$EVIDENCE_DIR/postapply-role.json" \
+  --role-policy "$EVIDENCE_DIR/postapply-role-policy.json" \
+  --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
+  --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
+  --merged-sha "$MERGED_SHA" \
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+python scripts/assert-candidate-preflight-runtime.py verify \
+  --function "$EVIDENCE_DIR/postapply-function.json" \
+  --concurrency "$EVIDENCE_DIR/postapply-concurrency.json" \
+  --role "$EVIDENCE_DIR/postapply-role.json" \
+  --role-policy "$EVIDENCE_DIR/postapply-role-policy.json" \
+  --attached-policies "$EVIDENCE_DIR/postapply-attached-policies.json" \
+  --inline-policies "$EVIDENCE_DIR/postapply-inline-policies.json" \
+  --plan-receipt "$EVIDENCE_DIR/plan-receipt.json" \
+  --ecr-evidence "$EVIDENCE_DIR/postapply-ecr-evidence.json" \
+  --merged-sha "$MERGED_SHA" \
+  --receipt "$EVIDENCE_DIR/deployment-receipt.json"
+```
+
+Never use `terraform apply -refresh-only`, any `terraform state` mutation,
+state-file editing, ignore rules, or configuration churn to erase provider
+readback observations. Preserve the saved readback plan, show JSON, runtime
+inputs, deployment receipt, source SHA, tool proof, and hashes together as
+local evidence. Do not upload plan or state JSON.
+
 ## Required re-audit
 
 Before an authorized apply or invocation, repeat read-only `get-function`,

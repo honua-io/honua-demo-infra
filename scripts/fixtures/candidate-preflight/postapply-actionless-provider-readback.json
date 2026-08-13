@@ -1,0 +1,74 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.8",
+  "applyable": false,
+  "complete": true,
+  "errored": false,
+  "configuration": {
+    "provider_config": {
+      "archive": {
+        "name": "archive",
+        "full_name": "registry.terraform.io/hashicorp/archive",
+        "version_constraint": ">= 2.4.0, < 3.0.0"
+      },
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": ">= 5.0.0, < 7.0.0",
+        "expressions": {
+          "allowed_account_ids": {"constant_value": ["585192672263"]},
+          "region": {"constant_value": "us-west-2"}
+        }
+      }
+    },
+    "root_module": {
+      "resources": [
+        {"address": "aws_cloudwatch_log_group.candidate_preflight", "mode": "managed", "provider_config_key": "aws"},
+        {"address": "aws_iam_role.candidate_preflight", "mode": "managed", "provider_config_key": "aws"},
+        {"address": "aws_iam_role_policy.candidate_preflight", "mode": "managed", "provider_config_key": "aws"},
+        {"address": "aws_lambda_function.candidate_preflight", "mode": "managed", "provider_config_key": "aws"},
+        {"address": "data.archive_file.candidate_preflight", "mode": "data", "provider_config_key": "archive"},
+        {"address": "data.aws_iam_policy_document.candidate_preflight_assume", "mode": "data", "provider_config_key": "aws"},
+        {"address": "data.aws_secretsmanager_secret.admin_password", "mode": "data", "provider_config_key": "aws"}
+      ]
+    }
+  },
+  "checks": [
+    {"address": {"to_display": "aws_lambda_function.candidate_preflight"}, "status": "pass"},
+    {"address": {"to_display": "check.default_workspace_only"}, "status": "pass"},
+    {"address": {"to_display": "data.archive_file.candidate_preflight"}, "status": "pass"},
+    {"address": {"to_display": "data.aws_secretsmanager_secret.admin_password"}, "status": "pass"}
+  ],
+  "resource_changes": [
+    {
+      "address": "aws_cloudwatch_log_group.candidate_preflight",
+      "change": {"actions": ["no-op"], "before": {"name": "/aws/lambda/honua-demo-demo-candidate-preflight"}, "after": {"name": "/aws/lambda/honua-demo-demo-candidate-preflight"}, "after_unknown": {}, "before_sensitive": {}, "after_sensitive": {}}
+    },
+    {
+      "address": "aws_iam_role.candidate_preflight",
+      "change": {"actions": ["no-op"], "before": {"name": "honua-demo-demo-candidate-preflight-role", "inline_policy": [{"name": "credential-safe-candidate-preflight-v1", "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"}]}, "after": {"name": "honua-demo-demo-candidate-preflight-role", "inline_policy": [{"name": "credential-safe-candidate-preflight-v1", "policy": "{\"Statement\":[{\"Action\":[\"lambda:GetAlias\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Sid\":\"ReadExactLiveAlias\"}],\"Version\":\"2012-10-17\"}"}]}, "after_unknown": {}, "before_sensitive": {"inline_policy": [{}]}, "after_sensitive": {"inline_policy": [{}]}}
+    },
+    {
+      "address": "aws_iam_role_policy.candidate_preflight",
+      "change": {"actions": ["no-op"], "before": {"name": "credential-safe-candidate-preflight-v1", "role": "honua-demo-demo-candidate-preflight-role", "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"}, "after": {"name": "credential-safe-candidate-preflight-v1", "role": "honua-demo-demo-candidate-preflight-role", "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"}, "after_unknown": {}, "before_sensitive": {}, "after_sensitive": {}}
+    },
+    {
+      "address": "aws_lambda_function.candidate_preflight",
+      "change": {"actions": ["no-op"], "before": {"function_name": "honua-demo-demo-candidate-preflight", "layers": []}, "after": {"function_name": "honua-demo-demo-candidate-preflight", "layers": []}, "after_unknown": {}, "before_sensitive": {"layers": []}, "after_sensitive": {"layers": []}}
+    }
+  ],
+  "output_changes": {
+    "candidate_preflight_qualified_arn": {"actions": ["no-op"], "before": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1", "after": "arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:1", "after_unknown": false, "before_sensitive": false, "after_sensitive": false},
+    "candidate_preflight_version": {"actions": ["no-op"], "before": "1", "after": "1", "after_unknown": false, "before_sensitive": false, "after_sensitive": false}
+  },
+  "resource_drift": [
+    {
+      "address": "aws_iam_role.candidate_preflight",
+      "change": {"actions": ["update"], "before": {"name": "honua-demo-demo-candidate-preflight-role", "inline_policy": []}, "after": {"name": "honua-demo-demo-candidate-preflight-role", "inline_policy": [{"name": "credential-safe-candidate-preflight-v1", "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadExactLiveAlias\",\"Resource\":[\"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live\"],\"Effect\":\"Allow\",\"Action\":[\"lambda:GetAlias\"]}]}"}]}, "after_unknown": {}}
+    },
+    {
+      "address": "aws_lambda_function.candidate_preflight",
+      "change": {"actions": ["update"], "before": {"function_name": "honua-demo-demo-candidate-preflight", "layers": null}, "after": {"function_name": "honua-demo-demo-candidate-preflight", "layers": []}, "after_unknown": {}}
+    }
+  ]
+}
