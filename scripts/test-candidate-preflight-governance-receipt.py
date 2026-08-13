@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -89,7 +90,7 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                     RECEIPT.validate_historical_deployment_receipt(path)
 
     def test_real_git_binding_rejects_wrong_head_dirty_nonancestor_drift_and_second_invoke(self):
-        with tempfile.TemporaryDirectory(prefix="candidate-governance-git-", ignore_cleanup_errors=True) as temporary:
+        with tempfile.TemporaryDirectory(prefix="candidate-governance-git-") as temporary:
             root = Path(temporary) / "repo"
             root.mkdir()
 
@@ -99,6 +100,9 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
             git("init", "-q")
             git("config", "user.name", "Candidate Governance Test")
             git("config", "user.email", "candidate-governance@example.invalid")
+            git("config", "gc.auto", "0")
+            git("config", "gc.autoDetach", "false")
+            git("config", "maintenance.auto", "false")
             for relative in RECEIPT.CONTROL_PATHS:
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -174,6 +178,15 @@ class CandidatePreflightGovernanceReceiptTests(unittest.TestCase):
                 second_head = git("rev-parse", "HEAD")
                 with self.assertRaises(RuntimeError):
                     RECEIPT.build_receipt(second_head, deployment, historical)
+                self.assertEqual([], list((root / ".git").rglob("*.lock")))
+                subprocess.run(
+                    ["git", "maintenance", "run", "--auto"],
+                    cwd=root,
+                    check=True,
+                    timeout=10,
+                )
+                time.sleep(0.05)
+                self.assertEqual([], list((root / ".git").rglob("*.lock")))
             finally:
                 (
                     RECEIPT.ROOT,
