@@ -60,21 +60,23 @@ locals {
   candidate_preflight_image_digest          = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
   candidate_preflight_artifact_reference    = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@${local.candidate_preflight_image_digest}"
   candidate_preflight_source_commit         = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
-  candidate_preflight_handler_sha256        = "f687b55788489e2e8a5b5d0fd2dbb29a4e835c6f278e98af799dff35a8e774c2"
-  candidate_preflight_classification_sha256 = "bfce514b11bc245ce99f72870578acbd3753aacd94c03db0fb5581a77aab90a0"
-  candidate_preflight_archive_base64sha256  = "2eR63E033GzbKgX9+fFDA9vjLRzKJIE7WUziLoiBGHQ="
+  candidate_preflight_handler_source        = replace(file("${local.candidate_preflight_dir}/handler.py"), "\r\n", "\n")
+  candidate_preflight_classification_source = replace(file("${local.candidate_preflight_dir}/classification.v1.json"), "\r\n", "\n")
+  candidate_preflight_handler_sha256        = "589a67ec77eb49086a083ebf85f1a3143011831645bd885147755c026c65995f"
+  candidate_preflight_classification_sha256 = "285b41bcc8b207b234b3ecfdeba7bae88b47920bffcbf0453fa4d099b585b579"
+  candidate_preflight_archive_base64sha256  = "Kp7YlzXM5GL34jI4A/Dx6kTO/sAQBPXPoE+QKvBW0hY="
 }
 
 data "archive_file" "candidate_preflight" {
   type = "zip"
 
   source {
-    content  = file("${local.candidate_preflight_dir}/handler.py")
+    content  = local.candidate_preflight_handler_source
     filename = "handler.py"
   }
 
   source {
-    content  = file("${local.candidate_preflight_dir}/classification.v1.json")
+    content  = local.candidate_preflight_classification_source
     filename = "classification.v1.json"
   }
 
@@ -82,11 +84,11 @@ data "archive_file" "candidate_preflight" {
 
   lifecycle {
     precondition {
-      condition     = filesha256("${local.candidate_preflight_dir}/handler.py") == local.candidate_preflight_handler_sha256
+      condition     = sha256(local.candidate_preflight_handler_source) == local.candidate_preflight_handler_sha256
       error_message = "candidate-preflight handler.py differs from the reviewed source hash."
     }
     precondition {
-      condition     = filesha256("${local.candidate_preflight_dir}/classification.v1.json") == local.candidate_preflight_classification_sha256
+      condition     = sha256(local.candidate_preflight_classification_source) == local.candidate_preflight_classification_sha256
       error_message = "candidate-preflight classification.v1.json differs from the reviewed source hash."
     }
     postcondition {

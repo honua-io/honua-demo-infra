@@ -77,7 +77,7 @@ terraform -chdir=stacks/aws-candidate-preflight init -input=false
 terraform -chdir=stacks/aws-candidate-preflight plan -refresh=false -input=false -out="$EVIDENCE_DIR/candidate-preflight.tfplan"
 terraform -chdir=stacks/aws-candidate-preflight show -json "$EVIDENCE_DIR/candidate-preflight.tfplan" > "$EVIDENCE_DIR/candidate-preflight.show.json"
 python scripts/assert-candidate-preflight-plan.py "$EVIDENCE_DIR/candidate-preflight.show.json"
-test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "d9e47adc4d37dc6cdb2a05fdf9f14303dbe32d1cca24813b594ce22e88811874"
+test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "2a9ed89735cce462f7e2323803f0f1ea44cefec01004f5cfa04f902af056d216"
 sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip > "$EVIDENCE_DIR/candidate-preflight.zip.sha256"
 ```
 
@@ -98,7 +98,7 @@ test "$(git rev-parse HEAD)" = "$MERGED_SHA"
 git diff --exit-code
 git diff --cached --exit-code
 test -z "$(git status --porcelain)"
-test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "d9e47adc4d37dc6cdb2a05fdf9f14303dbe32d1cca24813b594ce22e88811874"
+test "$(sha256sum stacks/aws-candidate-preflight/candidate-preflight.zip | cut -d' ' -f1)" = "2a9ed89735cce462f7e2323803f0f1ea44cefec01004f5cfa04f902af056d216"
 terraform -chdir=stacks/aws-candidate-preflight apply "$EVIDENCE_DIR/candidate-preflight.tfplan"
 ```
 
