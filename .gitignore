@@ -11,3 +11,6 @@ stacks/aws/postgis-bootstrap/build/
 stacks/aws/postgis-bootstrap/bootstrap.zip
 # Credential-safe candidate-preflight Lambda package.
 stacks/aws-candidate-preflight/candidate-preflight.zip
+# Governed database-migration runner build/package artifacts.
+stacks/aws-db-migration-runner/build/
+stacks/aws-db-migration-runner/db-migration-runner.zip

@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 STACK = REPOSITORY_ROOT / "stacks" / "aws"
 CANDIDATE_STACK = REPOSITORY_ROOT / "stacks" / "aws-candidate-preflight"
+MIGRATION_STACK = REPOSITORY_ROOT / "stacks" / "aws-db-migration-runner"
 STACKS = REPOSITORY_ROOT / "stacks"
 INTERFACE_STUB = STACK / "validation" / "honua-module-interface"
 
@@ -126,6 +128,7 @@ def main() -> None:
         validation_root = Path(temporary) / "repository"
         validation_stack = validation_root / "stacks" / "aws"
         validation_candidate_stack = validation_root / "stacks" / "aws-candidate-preflight"
+        validation_migration_stack = validation_root / "stacks" / "aws-db-migration-runner"
         shutil.copytree(
             STACKS,
             validation_root / "stacks",
@@ -133,6 +136,16 @@ def main() -> None:
         )
         shutil.copytree(REPOSITORY_ROOT / "manifest", validation_root / "manifest")
         bind_interface_stub(validation_stack)
+        run(
+            [
+                sys.executable,
+                str(validation_migration_stack / "runner" / "build.py"),
+                "--source",
+                str(validation_migration_stack / "runner"),
+                "--output",
+                str(validation_migration_stack / "db-migration-runner.zip"),
+            ]
+        )
         run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=validation_stack)
         run(["terraform", "validate", "-no-color"], cwd=validation_stack)
         validate_negative_contracts(validation_stack)
@@ -141,6 +154,11 @@ def main() -> None:
             cwd=validation_candidate_stack,
         )
         run(["terraform", "validate", "-no-color"], cwd=validation_candidate_stack)
+        run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=validation_migration_stack,
+        )
+        run(["terraform", "validate", "-no-color"], cwd=validation_migration_stack)
 
 
 if __name__ == "__main__":

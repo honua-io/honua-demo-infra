@@ -70,6 +70,16 @@ jobs:
           bash scripts/test-candidate-preflight-v2-operator-flow.sh
           bash scripts/test-candidate-preflight-v3-operator-flow.sh
 
+      - name: Validate governed database migration runner
+        run: |
+          python3 stacks/aws-db-migration-runner/runner/build.py --source stacks/aws-db-migration-runner/runner --output "$RUNNER_TEMP/runner-a.zip"
+          python3 stacks/aws-db-migration-runner/runner/build.py --source stacks/aws-db-migration-runner/runner --output "$RUNNER_TEMP/runner-b.zip"
+          cmp "$RUNNER_TEMP/runner-a.zip" "$RUNNER_TEMP/runner-b.zip"
+          printf '%s  %s\n' 'ec7b6775eb02cf37a73bd7053e6da2a524be343b7785e6384b43b3a708b2c79a' "$RUNNER_TEMP/runner-a.zip" | sha256sum --check --strict
+          python3 scripts/assert-db-migration-runner-source.py
+          python3 scripts/test-db-migration-runner.py
+          python3 scripts/test-db-migration-governance.py
+
   terraform-contract:
     name: Terraform format and validate
     runs-on: ubuntu-latest
