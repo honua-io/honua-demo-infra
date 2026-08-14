@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "honua-db-migration-runner-manifest-v1",
+  "sourceCommit": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
+  "candidateImageDigest": "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861",
+  "preflightReceiptSha256": "357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee",
+  "beforeVersion": 91,
+  "afterVersion": 105,
+  "pendingScriptsSha256": "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7",
+  "scripts": [
+    {"name":"Honua.Server.Migrations.092_CreateSavedMapOperationLog.sql","file":"092_CreateSavedMapOperationLog.sql","phase":"Expand","sha256":"4d450b4d920d66817832b369b2a050aa6fc135906662330ad7d3aafaca684136"},
+    {"name":"Honua.Server.Migrations.093_EnsureConfiguredStudioPackageLifecycle.sql","file":"093_EnsureConfiguredStudioPackageLifecycle.sql","phase":"Expand","sha256":"58729b7aa092c09851320ba56f3a827d0020db1818d042782a5eb0aa772e277e"},
+    {"name":"Honua.Server.Migrations.094_CreateSavedMapCheckpointVersionRecovery.sql","file":"094_CreateSavedMapCheckpointVersionRecovery.sql","phase":"Expand","sha256":"68859180cdde49ba76716af7d7a87a3d256fee6d32c42b5f5b2897263d2d4c8b"},
+    {"name":"Honua.Server.Migrations.095_DeleteSavedMapOperationLogWithStudioDraft.sql","file":"095_DeleteSavedMapOperationLogWithStudioDraft.sql","phase":"Expand","sha256":"850df60faeb59213494a8b0a26cd237b2e2c2e4e246cc09b7c4ac2be568b46cf"},
+    {"name":"Honua.Server.Migrations.096_AddReplicaConflictClientEditApplied.sql","file":"096_AddReplicaConflictClientEditApplied.sql","phase":"Expand","sha256":"b8dff905febf71ed4de5a3f821140510d15828ba3b2b1997f583f2d399926ece"},
+    {"name":"Honua.Server.Migrations.097_AddReplicaConflictResolutionPreconditions.sql","file":"097_AddReplicaConflictResolutionPreconditions.sql","phase":"Expand","sha256":"c93a0ba064021c8e7606d69a054f487217304f4e557c809281a18b17a5a62394"},
+    {"name":"Honua.Server.Migrations.098_AddReplicaConflictClaimIdentity.sql","file":"098_AddReplicaConflictClaimIdentity.sql","phase":"Expand","sha256":"d8482766dfee4566d71c8f0e2a131f4361c406cf9d627bd5022a94e16e778336"},
+    {"name":"Honua.Server.Migrations.099_AddReplicaConflictClientEditOutcomeUnknown.sql","file":"099_AddReplicaConflictClientEditOutcomeUnknown.sql","phase":"Expand","sha256":"adf6304457b5224bb770165f4bfe713b78e54883a401b7ce2b241de7708dc1a8"},
+    {"name":"Honua.Server.Migrations.100_AddReplicaConflictClientEditSuperseded.sql","file":"100_AddReplicaConflictClientEditSuperseded.sql","phase":"Expand","sha256":"8ebef79692b3a5190bdc2a01e8a1724840baeeef66ade04c2a2b6c6b402e3aa7"},
+    {"name":"Honua.Server.Migrations.101_AddReplicaConflictPreWriteStateToken.sql","file":"101_AddReplicaConflictPreWriteStateToken.sql","phase":"Expand","sha256":"bd04ce2fccf97a220215ce151ca795ab46ed2e374ded57cdd8143b2d2ee582e6"},
+    {"name":"Honua.Server.Migrations.102_WidenReplicaConflictTypeForDeleteDelete.sql","file":"102_WidenReplicaConflictTypeForDeleteDelete.sql","phase":"Expand","sha256":"85be9fc0d045bae82fe2648e6dcf4b267a1a9f5487759cd0d20188d5c635d2d3"},
+    {"name":"Honua.Server.Migrations.103_AddReplicaConflictPreWriteRowAbsent.sql","file":"103_AddReplicaConflictPreWriteRowAbsent.sql","phase":"Expand","sha256":"2d9cf9b3d602f130a33600cdd928573ea389f93352fbec51d5e23f50b9bf62dd"},
+    {"name":"Honua.Server.Migrations.104_AddReplicaConflictStorageObjectId.sql","file":"104_AddReplicaConflictStorageObjectId.sql","phase":"Expand","sha256":"e7eda22591ec96344d019268a3efa0c00418b346e0393273f686f098f4e85088"},
+    {"name":"Honua.Server.Migrations.105_AddChangeLogPublicObjectId.sql","file":"105_AddChangeLogPublicObjectId.sql","phase":"Expand","sha256":"b3da83982940d893c6968c4e438ddee56a0950684892b99e47a77662e856619c"}
+  ]
+}

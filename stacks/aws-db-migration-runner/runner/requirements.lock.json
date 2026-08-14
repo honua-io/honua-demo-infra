@@ -1,0 +1,15 @@
+{
+  "schema": "honua-python-wheel-lock-v1",
+  "wheels": [
+    {"filename":"asn1crypto-1.5.1-py2.py3-none-any.whl","sha256":"db4e40728b728508912cbb3d44f19ce188f218e9eba635821bb4b68564f8fd67","url":"https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl"},
+    {"filename":"pg8000-1.31.5-py3-none-any.whl","sha256":"0af2c1926b153307639868d2ee5cef6cd3a7d07448e12736989b10e1d491e201","url":"https://files.pythonhosted.org/packages/45/07/5fd183858dff4d24840f07fc845f213cd371a19958558607ba22035dadd7/pg8000-1.31.5-py3-none-any.whl"},
+    {"filename":"python_dateutil-2.9.0.post0-py2.py3-none-any.whl","sha256":"a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427","url":"https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl"},
+    {"filename":"scramp-1.4.17-py3-none-any.whl","sha256":"a4e3fd2e8169461a28a13777a166d3da94274454f0714a7d3023fee124474ac8","url":"https://files.pythonhosted.org/packages/7f/99/0e372781210cd36b2f2727e5be3ea93066edad7edd6fa2dfdec3b3e28845/scramp-1.4.17-py3-none-any.whl"},
+    {"filename":"six-1.17.0-py2.py3-none-any.whl","sha256":"4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274","url":"https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl"}
+  ],
+  "rdsCa": {
+    "filename": "rds-global-bundle.pem",
+    "sha256": "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3",
+    "url": "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
+  }
+}

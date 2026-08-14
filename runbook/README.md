@@ -39,6 +39,11 @@ helper `:2` one-attempt governance procedure; it does not repoint the v1 path.
 `candidate-preflight-v3.md` independently governs the immutable helper `:3`
 attempt and preserves both earlier operator paths and evidence.
 
+`db-recovery-and-migrations-092-105.md` governs the separate manual RDS
+recovery point and one-attempt, immutable, migrations-only 092-105 runner.
+It never toggles or invokes an application `$LATEST`, and it leaves candidate
+`:40`, live `:39`, and preflight helper `:3` unchanged.
+
 For the capability runbook, no separate probe/verification scripts were moved:
 its verification commands are inline `bash`/`curl` blocks within the markdown
 itself, not standalone script files. The one script it references,

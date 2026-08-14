@@ -21,6 +21,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 STACK = REPOSITORY_ROOT / "stacks" / "aws"
 CANDIDATE_STACK = REPOSITORY_ROOT / "stacks" / "aws-candidate-preflight"
+MIGRATION_STACK = REPOSITORY_ROOT / "stacks" / "aws-db-migration-runner"
 STACKS = REPOSITORY_ROOT / "stacks"
 INTERFACE_STUB = STACK / "validation" / "honua-module-interface"
 
@@ -126,6 +127,7 @@ def main() -> None:
         validation_root = Path(temporary) / "repository"
         validation_stack = validation_root / "stacks" / "aws"
         validation_candidate_stack = validation_root / "stacks" / "aws-candidate-preflight"
+        validation_migration_stack = validation_root / "stacks" / "aws-db-migration-runner"
         shutil.copytree(
             STACKS,
             validation_root / "stacks",
@@ -141,6 +143,11 @@ def main() -> None:
             cwd=validation_candidate_stack,
         )
         run(["terraform", "validate", "-no-color"], cwd=validation_candidate_stack)
+        run(
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
+            cwd=validation_migration_stack,
+        )
+        run(["terraform", "validate", "-no-color"], cwd=validation_migration_stack)
 
 
 if __name__ == "__main__":
