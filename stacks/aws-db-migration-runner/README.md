@@ -10,7 +10,7 @@ The runner is not the serving image with migrations toggled on. It is a fixed,
 reviewed artifact containing the exact SQL from server commit
 `7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad`. It accepts one event, runs with
 reserved concurrency one, obtains the same advisory migration lock as Honua,
-requires journal continuity 001-091, applies and journals 092-105 in one
+requires the exact ordered 104-name DbUp journal baseline through 091, applies and journals 092-105 in one
 transaction, and reports only an allowlisted receipt. It has no trigger and
 must be invoked only by qualified ARN after the runbook's manual snapshot gate.
 

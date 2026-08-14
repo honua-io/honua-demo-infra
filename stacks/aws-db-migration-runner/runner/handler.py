@@ -46,7 +46,11 @@ def _load_manifest() -> tuple[dict[str, Any], list[tuple[str, str]]]:
         manifest = json.loads(raw)
     except Exception as exc:
         raise MigrationFailure("manifest-invalid") from exc
-    required = {"schemaVersion", "sourceCommit", "candidateImageDigest", "preflightReceiptSha256", "beforeVersion", "afterVersion", "pendingScriptsSha256", "scripts"}
+    required = {
+        "schemaVersion", "sourceCommit", "candidateImageDigest", "preflightReceiptSha256",
+        "executedScriptsSha256", "executedScripts", "beforeVersion", "afterVersion",
+        "pendingScriptsSha256", "scripts",
+    }
     if not isinstance(manifest, dict) or set(manifest) != required:
         raise MigrationFailure("manifest-invalid")
     if manifest["schemaVersion"] != "honua-db-migration-runner-manifest-v1":
@@ -66,6 +70,22 @@ def _load_manifest() -> tuple[dict[str, Any], list[tuple[str, str]]]:
         raise MigrationFailure("manifest-source-drift")
     if manifest["beforeVersion"] != 91 or manifest["afterVersion"] != 105:
         raise MigrationFailure("migration-boundary-drift")
+
+    executed = manifest["executedScripts"]
+    if not isinstance(executed, list) or len(executed) != 104 or any(type(name) is not str for name in executed):
+        raise MigrationFailure("executed-script-baseline-drift")
+    if len(set(executed)) != len(executed):
+        raise MigrationFailure("executed-script-baseline-drift")
+    executed_versions: list[int] = []
+    for name in executed:
+        match = SCRIPT_PATTERN.fullmatch(name)
+        if not match:
+            raise MigrationFailure("executed-script-baseline-drift")
+        executed_versions.append(int(match.group(1)))
+    if executed_versions != sorted(executed_versions) or set(executed_versions) != set(range(1, 92)):
+        raise MigrationFailure("executed-script-baseline-drift")
+    if _sha("\n".join(executed).encode()) != manifest["executedScriptsSha256"]:
+        raise MigrationFailure("executed-script-baseline-digest-drift")
 
     loaded: list[tuple[str, str]] = []
     entries = manifest["scripts"]
@@ -180,16 +200,6 @@ def _journal(connection) -> list[str]:
     return names
 
 
-def _versions(names: list[str]) -> list[int]:
-    values: list[int] = []
-    for name in names:
-        match = SCRIPT_PATTERN.fullmatch(name)
-        if not match:
-            raise MigrationFailure("journal-unknown-script")
-        values.append(int(match.group(1)))
-    return values
-
-
 def _run() -> dict[str, Any]:
     manifest, scripts = _load_manifest()
     connection = _connect()
@@ -199,11 +209,12 @@ def _run() -> dict[str, Any]:
         if connection.run("SELECT pg_try_advisory_xact_lock(:key)", key=LOCK_KEY) != [[True]]:
             raise MigrationFailure("migration-lock-unavailable")
         before = _journal(connection)
-        if _versions(before) != list(range(1, 92)):
-            raise MigrationFailure("journal-before-boundary-drift")
+        expected_before = manifest["executedScripts"]
         expected = [name for name, _ in scripts]
         if any(name in before for name in expected):
             raise MigrationFailure("migration-replay-rejected")
+        if before != expected_before:
+            raise MigrationFailure("journal-before-boundary-drift")
 
         for name, source in scripts:
             rendered = source.replace("$HonuaSchema$", '"honua"')
@@ -214,7 +225,7 @@ def _run() -> dict[str, Any]:
                 name=name,
             )
         after = _journal(connection)
-        if after != before + expected or _versions(after) != list(range(1, 106)):
+        if after != expected_before + expected:
             raise MigrationFailure("journal-after-boundary-drift")
         connection.run("COMMIT")
         committed = True

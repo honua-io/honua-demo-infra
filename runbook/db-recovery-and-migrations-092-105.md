@@ -14,7 +14,8 @@ version, move `live`, seed data, or promote candidate `:40`.
 - Database: `honua-demo-demo-postgres`, PostgreSQL `15.17`, encrypted, status `available`
 - Pending set: ordered 092-105, all `Expand`, digest `e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7`
 - Recovery point: `honua-demo-pre-092-105-e0ee6b49e116`
-- Runner ZIP SHA-256: `6932540222f1e86821f2594ad4a57ffe2268753d633f8af4f7697471aea37504`
+- Runner ZIP SHA-256: `ea935421413a4029e775cb26346a30f38b202fe6fdc341af47de328ee16d256a`
+- Exact ordered 104-name pre-092 journal SHA-256: `8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4`
 
 ## Phase 1: deploy the runner
 

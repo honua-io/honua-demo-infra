@@ -4,7 +4,7 @@ import importlib.util,json,os,sys,tempfile,types,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; SOURCE=ROOT/"stacks/aws-db-migration-runner/runner"; MANIFEST=json.loads((SOURCE/"migration-manifest.v1.json").read_text())
 class Connection:
- def __init__(self,journal=None,fail=None): self.journal=journal or [f"Honua.Server.Migrations.{i:03d}_X.sql" for i in range(1,92)]; self.calls=[]; self.fail=fail
+ def __init__(self,journal=None,fail=None): self.journal=list(journal) if journal is not None else list(MANIFEST["executedScripts"]); self.calls=[]; self.fail=fail
  def run(self,sql,**kw):
   self.calls.append(sql)
   if self.fail and self.fail in sql: raise RuntimeError("password=do-not-leak")
@@ -27,9 +27,15 @@ class Tests(unittest.TestCase):
  def test_extra_request_rejected_without_connect(self):
   out=self.m.handler({"operation":"apply-092-105","sql":"DROP"},None); self.assertEqual(out["failure"],"invalid-request"); self.assertEqual(self.c.calls,[])
  def test_replay_rejected_and_rolled_back(self):
-  self.c.journal += [x["name"] for x in MANIFEST["scripts"]]; out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"journal-before-boundary-drift"); self.assertIn("ROLLBACK",self.c.calls)
+  self.c.journal += [x["name"] for x in MANIFEST["scripts"]]; out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"migration-replay-rejected"); self.assertIn("ROLLBACK",self.c.calls)
  def test_unknown_journal_rejected(self):
-  self.c.journal[10]="unknown"; out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"journal-unknown-script")
+  self.c.journal[10]="unknown"; out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"journal-before-boundary-drift")
+ def test_exact_baseline_rejects_reordered_missing_and_extra(self):
+  baseline=list(MANIFEST["executedScripts"])
+  reordered=list(baseline); reordered[17],reordered[18]=reordered[18],reordered[17]
+  for journal in (reordered,baseline[:-1],baseline+["Honua.Server.Migrations.091_Unexpected.sql"]):
+   with self.subTest(journal_size=len(journal)):
+    self.c.journal=list(journal); out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"journal-before-boundary-drift")
  def test_failure_is_sanitized_and_rolls_back(self):
   self.c.fail="ALTER TABLE"; out=self.m.handler({"operation":"apply-092-105"},None); self.assertEqual(out["failure"],"migration-transaction-failed"); self.assertNotIn("password",json.dumps(out).lower()); self.assertIn("ROLLBACK",self.c.calls)
  def test_environment_drift_fails_before_db(self):

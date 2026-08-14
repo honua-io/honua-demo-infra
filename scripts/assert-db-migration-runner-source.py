@@ -14,7 +14,8 @@ STACK = ROOT / "stacks" / "aws-db-migration-runner"
 RUNNER = STACK / "runner"
 SERVER_SOURCE = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
 PENDING_DIGEST = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
-ARCHIVE_SHA256 = "6932540222f1e86821f2594ad4a57ffe2268753d633f8af4f7697471aea37504"
+EXECUTED_DIGEST = "8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4"
+ARCHIVE_SHA256 = "ea935421413a4029e775cb26346a30f38b202fe6fdc341af47de328ee16d256a"
 
 
 def require(value: bool, message: str) -> None:
@@ -46,6 +47,13 @@ def main() -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     require(manifest["sourceCommit"] == SERVER_SOURCE, "server source pin drifted")
     require(manifest["beforeVersion"] == 91 and manifest["afterVersion"] == 105, "migration boundary drifted")
+    executed = manifest["executedScripts"]
+    require(len(executed) == 104 and len(set(executed)) == 104, "executed-script baseline size drifted")
+    require(all(re.fullmatch(r"Honua\.Server\.Migrations\.\d{3}_[A-Za-z0-9_]+\.sql", name) for name in executed), "executed-script baseline name drifted")
+    executed_versions = [int(re.search(r"\.(\d{3})_", name).group(1)) for name in executed]
+    require(executed_versions == sorted(executed_versions) and set(executed_versions) == set(range(1, 92)), "executed-script baseline order or coverage drifted")
+    require(executed[0] == "Honua.Server.Migrations.001_CreateHonuaSchema.sql" and executed[-1] == "Honua.Server.Migrations.091_RenormalizeGeocodeReferenceSearchText.sql", "executed-script baseline boundary drifted")
+    require(hashlib.sha256("\n".join(executed).encode()).hexdigest() == EXECUTED_DIGEST == manifest["executedScriptsSha256"], "executed-script baseline digest drifted")
     entries = manifest["scripts"]
     require(len(entries) == 14 and all(entry["phase"] == "Expand" for entry in entries), "exact Expand classification drifted")
     require(not any(entry["phase"] == "Contract" for entry in entries), "Contract migration admitted")
