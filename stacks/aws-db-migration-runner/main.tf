@@ -37,46 +37,24 @@ locals {
     Purpose     = "public-demo"
   }
 
-  account_id          = "585192672263"
-  region              = "us-west-2"
-  vpc_id              = "vpc-0ac1893d15caf97b8"
-  vpc_cidr            = "10.0.0.0/16"
-  private_subnet_ids  = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
-  function_name       = "honua-demo-demo-db-migration-092-105"
-  role_name           = "${local.function_name}-role"
-  log_group_name      = "/aws/lambda/${local.function_name}"
-  log_group_arn       = "arn:aws:logs:${local.region}:${local.account_id}:log-group:${local.log_group_name}"
-  source_commit       = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
-  candidate_digest    = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
-  pending_set_sha256  = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
-  preflight_sha256    = "357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee"
-  runner_source_dir   = "${path.module}/runner"
-  runner_build_dir    = "${path.module}/build"
-  build_script_sha256 = sha256(file("${local.runner_source_dir}/build.py"))
-  handler_sha256      = sha256(file("${local.runner_source_dir}/handler.py"))
-  manifest_sha256     = sha256(file("${local.runner_source_dir}/migration-manifest.v1.json"))
-  lock_sha256         = sha256(file("${local.runner_source_dir}/requirements.lock.json"))
-}
-
-resource "terraform_data" "runner_build" {
-  triggers_replace = [
-    local.build_script_sha256,
-    local.handler_sha256,
-    local.manifest_sha256,
-    local.lock_sha256,
-    local.source_commit,
-  ]
-
-  provisioner "local-exec" {
-    command = "python ${local.runner_source_dir}/build.py --source ${local.runner_source_dir} --output ${local.runner_build_dir}"
-  }
-}
-
-data "archive_file" "runner" {
-  type        = "zip"
-  source_dir  = local.runner_build_dir
-  output_path = "${path.module}/db-migration-runner.zip"
-  depends_on  = [terraform_data.runner_build]
+  account_id         = "585192672263"
+  region             = "us-west-2"
+  vpc_id             = "vpc-0ac1893d15caf97b8"
+  vpc_cidr           = "10.0.0.0/16"
+  private_subnet_ids = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
+  function_name      = "honua-demo-demo-db-migration-092-105"
+  role_name          = "${local.function_name}-role"
+  log_group_name     = "/aws/lambda/${local.function_name}"
+  log_group_arn      = "arn:aws:logs:${local.region}:${local.account_id}:log-group:${local.log_group_name}"
+  source_commit      = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
+  candidate_digest   = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
+  pending_set_sha256 = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
+  preflight_sha256   = "357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee"
+  runner_source_dir  = "${path.module}/runner"
+  runner_archive     = "${path.module}/db-migration-runner.zip"
+  handler_sha256     = sha256(file("${local.runner_source_dir}/handler.py"))
+  manifest_sha256    = sha256(file("${local.runner_source_dir}/migration-manifest.v1.json"))
+  lock_sha256        = sha256(file("${local.runner_source_dir}/requirements.lock.json"))
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -174,8 +152,8 @@ resource "aws_lambda_function" "runner" {
   runtime                        = "python3.13"
   handler                        = "handler.handler"
   architectures                  = ["arm64"]
-  filename                       = data.archive_file.runner.output_path
-  source_code_hash               = data.archive_file.runner.output_base64sha256
+  filename                       = local.runner_archive
+  source_code_hash               = filebase64sha256(local.runner_archive)
   timeout                        = 900
   memory_size                    = 512
   reserved_concurrent_executions = 1

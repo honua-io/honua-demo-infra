@@ -18,6 +18,12 @@ class Tests(unittest.TestCase):
   self.assertLess(text.index("create-db-snapshot"),text.index("db-snapshot-available")); self.assertLess(text.index("assert-db-migration-snapshot.py"),text.index("aws lambda invoke"))
   for forbidden in ("delete-db-snapshot","restore-db-instance","update-function-configuration","publish-version","update-alias","get-secret-value"):
    self.assertNotIn(forbidden,text)
+ def test_plan_builds_twice_before_plan_and_apply(self):
+  text=(ROOT/"scripts/db-migration-runner-plan-apply.sh").read_text()
+  self.assertEqual(text.count('runner/build.py" --source'),2)
+  self.assertLess(text.index("runner-a.zip"),text.index('terraform -chdir="$STACK" plan'))
+  self.assertLess(text.index('cmp "$EVIDENCE_DIR/runner-a.zip" "$EVIDENCE_DIR/runner-b.zip"'),text.index('terraform -chdir="$STACK" plan'))
+  self.assertLess(text.index('python scripts/assert-db-migration-runner-plan.py'),text.index('terraform -chdir="$STACK" apply'))
  def test_result_receipt_rejects_hostile_drift(self):
   spec=importlib.util.spec_from_file_location("migration_result",ROOT/"scripts/assert-db-migration-result.py"); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
   manifest=json.loads((ROOT/"stacks/aws-db-migration-runner/runner/migration-manifest.v1.json").read_text())

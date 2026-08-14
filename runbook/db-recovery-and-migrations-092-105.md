@@ -14,6 +14,7 @@ version, move `live`, seed data, or promote candidate `:40`.
 - Database: `honua-demo-demo-postgres`, PostgreSQL `15.17`, encrypted, status `available`
 - Pending set: ordered 092-105, all `Expand`, digest `e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7`
 - Recovery point: `honua-demo-pre-092-105-e0ee6b49e116`
+- Runner ZIP SHA-256: `6932540222f1e86821f2594ad4a57ffe2268753d633f8af4f7697471aea37504`
 
 ## Phase 1: deploy the runner
 
@@ -28,7 +29,10 @@ scripts/db-migration-runner-plan-apply.sh "$MERGED_SHA" "$DEPLOYMENT_EVIDENCE_DI
 
 Review `runner.show.json` before authorizing the saved-plan apply. It must be
 create-only and contain only the runner Lambda, role/policy, log group,
-security group, build identity, and three metadata/archive data sources.
+security group, and two metadata data sources. Before planning, the operator
+builds the fixed-metadata ZIP twice, requires byte equality, installs that
+exact canonical ZIP, and binds all three archive copies into the reviewed
+artifact manifest. No build or archive data source is deferred to apply.
 
 ## Phase 2: recovery point and single invocation
 

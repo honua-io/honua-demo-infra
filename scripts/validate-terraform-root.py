@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -135,6 +136,16 @@ def main() -> None:
         )
         shutil.copytree(REPOSITORY_ROOT / "manifest", validation_root / "manifest")
         bind_interface_stub(validation_stack)
+        run(
+            [
+                sys.executable,
+                str(validation_migration_stack / "runner" / "build.py"),
+                "--source",
+                str(validation_migration_stack / "runner"),
+                "--output",
+                str(validation_migration_stack / "db-migration-runner.zip"),
+            ]
+        )
         run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=validation_stack)
         run(["terraform", "validate", "-no-color"], cwd=validation_stack)
         validate_negative_contracts(validation_stack)

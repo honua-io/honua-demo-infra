@@ -27,6 +27,23 @@ def fetch(entry: dict, cache: Path) -> Path:
     return target
 
 
+def deterministic_zip(stage: Path, output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output, "w") as archive:
+        for path in sorted(item for item in stage.rglob("*") if item.is_file()):
+            relative = path.relative_to(stage).as_posix()
+            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(
+                info,
+                path.read_bytes(),
+                compress_type=zipfile.ZIP_DEFLATED,
+                compresslevel=9,
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
@@ -57,9 +74,7 @@ def main() -> None:
         migrations = stage / "migrations"
         shutil.copytree(source / "migrations", migrations)
 
-        if output.exists():
-            shutil.rmtree(output)
-        shutil.copytree(stage, output)
+        deterministic_zip(stage, output)
 
 
 if __name__ == "__main__":

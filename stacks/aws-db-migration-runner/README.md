@@ -14,5 +14,10 @@ requires journal continuity 001-091, applies and journals 092-105 in one
 transaction, and reports only an allowlisted receipt. It has no trigger and
 must be invoked only by qualified ARN after the runbook's manual snapshot gate.
 
+`runner/build.py` emits a fixed-timestamp, fixed-mode, sorted ZIP. The plan
+operator builds it twice and requires byte equality before installing the
+canonical archive that Terraform hashes directly. Artifact construction is
+therefore complete before planning and cannot be deferred to apply.
+
 Never run `terraform apply` directly. The reviewed saved-plan boundary is
 `scripts/db-migration-runner-plan-apply.sh`; runtime authorization is separate.

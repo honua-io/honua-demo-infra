@@ -14,6 +14,7 @@ STACK = ROOT / "stacks" / "aws-db-migration-runner"
 RUNNER = STACK / "runner"
 SERVER_SOURCE = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
 PENDING_DIGEST = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
+ARCHIVE_SHA256 = "6932540222f1e86821f2594ad4a57ffe2268753d633f8af4f7697471aea37504"
 
 
 def require(value: bool, message: str) -> None:
@@ -29,10 +30,11 @@ def main() -> None:
     require('allowed_account_ids = ["585192672263"]' in versions, "account guard drifted")
     require('region              = "us-west-2"' in versions, "provider region drifted")
     require('terraform.workspace == "default"' in main_tf, "default workspace guard missing")
-    for forbidden in ("terraform_remote_state", "module.honua", "aws_db_instance", "aws_db_snapshot", "aws_lambda_alias", "aws_lambda_invocation", "aws_secretsmanager_secret_version", "secret_string", "ignore_changes"):
+    for forbidden in ("terraform_remote_state", "terraform_data", "archive_file", "local-exec", "module.honua", "aws_db_instance", "aws_db_snapshot", "aws_lambda_alias", "aws_lambda_invocation", "aws_secretsmanager_secret_version", "secret_string", "ignore_changes"):
         require(forbidden not in all_tf, f"forbidden resource or escape hatch: {forbidden}")
     require(main_tf.count('resource "aws_lambda_function"') == 1, "runner function graph drifted")
     require("reserved_concurrent_executions = 1" in main_tf and "timeout                        = 900" in main_tf and "publish                        = true" in main_tf, "runner bounds drifted")
+    require("filename                       = local.runner_archive" in main_tf and "source_code_hash               = filebase64sha256(local.runner_archive)" in main_tf, "runner is not bound to the pre-plan canonical archive")
     require(not re.search(r'(?m)^\s*(event_source|schedule_expression|function_url|source_arn)\s*=', main_tf), "runner trigger surfaced")
     require('Action   = ["secretsmanager:GetSecretValue"]' in main_tf, "exact secret read missing")
     require('Resource = [data.aws_secretsmanager_secret.db_connection.arn]' in main_tf, "secret IAM scope drifted")
@@ -55,6 +57,11 @@ def main() -> None:
         data = (RUNNER / "migrations" / entry["file"]).read_bytes()
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"migration source hash drifted: {entry['file']}")
     handler = (RUNNER / "handler.py").read_text(encoding="utf-8")
+    build = (RUNNER / "build.py").read_text(encoding="utf-8")
+    for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "compresslevel=9", "0o100644 << 16", 'ZipFile(output, "w")'):
+        require(required in build, f"deterministic archive contract missing: {required}")
+    operator = (ROOT / "scripts" / "db-migration-runner-plan-apply.sh").read_text(encoding="utf-8")
+    require(f'ARCHIVE_SHA256="{ARCHIVE_SHA256}"' in operator, "operator archive digest drifted")
     for required in ("pg_try_advisory_xact_lock", 'connection.run("BEGIN")', 'connection.run("COMMIT")', 'connection.run("ROLLBACK")', "journal-before-boundary-drift", "migration-replay-rejected", "journal-after-boundary-drift"):
         require(required in handler, f"transaction/replay contract missing: {required}")
     for leak in ("traceback", "str(exc)", "SecretString\"]", "connectionString"):
