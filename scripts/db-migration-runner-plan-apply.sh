@@ -4,7 +4,7 @@ set -euo pipefail
 if [[ $# -ne 2 ]]; then echo "usage: $0 MERGED_SHA EVIDENCE_DIR" >&2; exit 64; fi
 readonly MERGED_SHA="$1" EVIDENCE_DIR="$2" STACK="stacks/aws-db-migration-runner"
 readonly CANONICAL_ARCHIVE="$STACK/db-migration-runner.zip"
-readonly ARCHIVE_SHA256="ea935421413a4029e775cb26346a30f38b202fe6fdc341af47de328ee16d256a"
+readonly ARCHIVE_SHA256="045418e0df0e52dcdca8a985f4de5a5bf2aaba9e0140f35098a6a7fa1f9d6eb5"
 [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
 readonly ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"

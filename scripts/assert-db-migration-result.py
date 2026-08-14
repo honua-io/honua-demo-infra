@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "stacks/aws-db-migration-runner/runner/migration-manifest.v1.json").read_text(encoding="utf-8"))
 NAMES = [entry["name"] for entry in MANIFEST["scripts"]]
 SHA = re.compile(r"^[0-9a-f]{64}$")
+EXPECTED_RUNNER_CODE_SHA256 = "BFQY4N8OUtzcqKmF9N5aW/Kqup4BQPNQmKan+h+dbrU="
 
 
 def require(value: bool, message: str) -> None:
@@ -44,13 +45,14 @@ def expected_payload() -> dict:
 def build(metadata_path: Path, payload_path: Path, snapshot_path: Path, runtime_path: Path) -> dict:
     metadata, payload, snapshot, runtime = map(load, (metadata_path, payload_path, snapshot_path, runtime_path))
     version = runtime["version"]
+    require(runtime.get("codeSha256") == EXPECTED_RUNNER_CODE_SHA256, "runtime runner code digest drifted")
     require(metadata == {"StatusCode": 200, "ExecutedVersion": version}, "qualified invocation metadata drifted or contains FunctionError")
     require(payload == expected_payload(), "migration result drifted")
     require(snapshot["Status"] == "available" and snapshot["SnapshotType"] == "manual", "snapshot is not an available manual recovery point")
     require(snapshot["DBInstanceIdentifier"] == "honua-demo-demo-postgres" and snapshot["DbiResourceId"] == "db-WNTITZLSHMDLINGEGSB6TEZQYI", "snapshot source drifted")
     require(snapshot["Engine"] == "postgres" and snapshot["EngineVersion"] == "15.17" and snapshot["Encrypted"] is True, "snapshot engine/encryption drifted")
     receipt = {"schema":"honua-db-migration-invocation-receipt-v1", "runnerQualifiedArn":runtime["qualifiedArn"],
-      "runnerVersion":version, "sourceCommit":MANIFEST["sourceCommit"], "candidateImageDigest":MANIFEST["candidateImageDigest"],
+      "runnerVersion":version, "runnerCodeSha256":runtime["codeSha256"], "sourceCommit":MANIFEST["sourceCommit"], "candidateImageDigest":MANIFEST["candidateImageDigest"],
       "preflightReceiptSha256":MANIFEST["preflightReceiptSha256"], "pendingScriptsSha256":MANIFEST["pendingScriptsSha256"],
       "snapshotIdentifier":snapshot["DBSnapshotIdentifier"], "snapshotArn":snapshot["DBSnapshotArn"],
       "metadataSha256":sha(metadata_path), "payloadSha256":sha(payload_path), "snapshotSha256":sha(snapshot_path), "runtimeSha256":sha(runtime_path)}

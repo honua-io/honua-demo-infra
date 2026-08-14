@@ -15,7 +15,7 @@ RUNNER = STACK / "runner"
 SERVER_SOURCE = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
 PENDING_DIGEST = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
 EXECUTED_DIGEST = "8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4"
-ARCHIVE_SHA256 = "ea935421413a4029e775cb26346a30f38b202fe6fdc341af47de328ee16d256a"
+ARCHIVE_SHA256 = "045418e0df0e52dcdca8a985f4de5a5bf2aaba9e0140f35098a6a7fa1f9d6eb5"
 
 
 def require(value: bool, message: str) -> None:
@@ -66,10 +66,16 @@ def main() -> None:
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"migration source hash drifted: {entry['file']}")
     handler = (RUNNER / "handler.py").read_text(encoding="utf-8")
     build = (RUNNER / "build.py").read_text(encoding="utf-8")
-    for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "compresslevel=9", "0o100644 << 16", 'ZipFile(output, "w")'):
+    for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "zipfile.ZIP_STORED", "0o100644 << 16", 'ZipFile(output, "w")'):
         require(required in build, f"deterministic archive contract missing: {required}")
+    require("ZIP_DEFLATED" not in build and "compresslevel" not in build, "host-dependent ZIP compression admitted")
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    for required in ("stacks/aws-db-migration-runner/runner/*.py text eol=lf", "stacks/aws-db-migration-runner/runner/*.json text eol=lf", "stacks/aws-db-migration-runner/runner/migrations/*.sql text eol=lf"):
+        require(required in attributes, f"hashed input LF pin missing: {required}")
     operator = (ROOT / "scripts" / "db-migration-runner-plan-apply.sh").read_text(encoding="utf-8")
     require(f'ARCHIVE_SHA256="{ARCHIVE_SHA256}"' in operator, "operator archive digest drifted")
+    workflow = (ROOT / ".github" / "workflows" / "manifest-drift.yml").read_text(encoding="utf-8")
+    require(workflow.count("runner/build.py --source") == 2 and ARCHIVE_SHA256 in workflow, "CI does not independently rebuild and pin the advertised archive")
     for required in ("pg_try_advisory_xact_lock", 'connection.run("BEGIN")', 'connection.run("COMMIT")', 'connection.run("ROLLBACK")', "journal-before-boundary-drift", "migration-replay-rejected", "journal-after-boundary-drift"):
         require(required in handler, f"transaction/replay contract missing: {required}")
     for leak in ("traceback", "str(exc)", "SecretString\"]", "connectionString"):

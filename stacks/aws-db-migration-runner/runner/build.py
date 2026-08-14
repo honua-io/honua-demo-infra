@@ -33,14 +33,13 @@ def deterministic_zip(stage: Path, output: Path) -> None:
         for path in sorted(item for item in stage.rglob("*") if item.is_file()):
             relative = path.relative_to(stage).as_posix()
             info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED
             info.create_system = 3
             info.external_attr = 0o100644 << 16
             archive.writestr(
                 info,
                 path.read_bytes(),
-                compress_type=zipfile.ZIP_DEFLATED,
-                compresslevel=9,
+                compress_type=zipfile.ZIP_STORED,
             )
 
 

@@ -23,11 +23,11 @@ test ! -e "$EVIDENCE_DIR"; mkdir -p "$EVIDENCE_DIR"
 
 audit() {
   local prefix="$1" status=0
-  aws lambda get-function --function-name "$QUALIFIED_ARN" > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
-  aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:40 > "$EVIDENCE_DIR/$prefix-candidate.json" || status=1
-  aws lambda get-alias --function-name honua-demo-demo-honua --name live > "$EVIDENCE_DIR/$prefix-live.json" || status=1
-  aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3 > "$EVIDENCE_DIR/$prefix-preflight.json" || status=1
-  aws rds describe-db-instances --db-instance-identifier "$DB_ID" --query 'DBInstances[0]' > "$EVIDENCE_DIR/$prefix-db.json" || status=1
+  aws lambda get-function --function-name "$QUALIFIED_ARN" --output json | python scripts/assert-db-migration-runtime.py sanitize runner > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
+  aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:40 --output json | python scripts/assert-db-migration-runtime.py sanitize candidate > "$EVIDENCE_DIR/$prefix-candidate.json" || status=1
+  aws lambda get-alias --function-name honua-demo-demo-honua --name live --output json | python scripts/assert-db-migration-runtime.py sanitize live > "$EVIDENCE_DIR/$prefix-live.json" || status=1
+  aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3 --output json | python scripts/assert-db-migration-runtime.py sanitize preflight > "$EVIDENCE_DIR/$prefix-preflight.json" || status=1
+  aws rds describe-db-instances --db-instance-identifier "$DB_ID" --query 'DBInstances[0].{DBInstanceIdentifier:DBInstanceIdentifier,DBInstanceArn:DBInstanceArn,DbiResourceId:DbiResourceId,DBInstanceStatus:DBInstanceStatus,Engine:Engine,EngineVersion:EngineVersion,StorageEncrypted:StorageEncrypted,KmsKeyId:KmsKeyId}' > "$EVIDENCE_DIR/$prefix-db.json" || status=1
   return "$status"
 }
 
@@ -38,10 +38,10 @@ printf '{"schema":"honua-db-migration-attempt-v1","attempt":1,"snapshotIdentifie
 set +o noclobber
 
 # Existing snapshot identity is a terminal replay guard, never an idempotent reuse.
-if aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" > "$EVIDENCE_DIR/existing-snapshot.json" 2> "$EVIDENCE_DIR/existing-snapshot.stderr"; then exit 1; fi
-aws rds create-db-snapshot --db-instance-identifier "$DB_ID" --db-snapshot-identifier "$SNAPSHOT_ID" --tags Key=HonuaMigration,Value=092-105 Key=PendingScriptsSha256,Value=e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7 > "$EVIDENCE_DIR/snapshot-created.json"
+if aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" --query 'DBSnapshots[0].{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,Status:Status}' > "$EVIDENCE_DIR/existing-snapshot.json" 2> "$EVIDENCE_DIR/existing-snapshot.stderr"; then exit 1; fi
+aws rds create-db-snapshot --db-instance-identifier "$DB_ID" --db-snapshot-identifier "$SNAPSHOT_ID" --tags Key=HonuaMigration,Value=092-105 Key=PendingScriptsSha256,Value=e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7 --query 'DBSnapshot.{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,DBInstanceIdentifier:DBInstanceIdentifier,DbiResourceId:DbiResourceId,Status:Status,SnapshotType:SnapshotType,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId,TagList:TagList}' > "$EVIDENCE_DIR/snapshot-created.json"
 aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAPSHOT_ID"
-aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" --query 'DBSnapshots[0]' > "$EVIDENCE_DIR/snapshot.json"
+aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" --query 'DBSnapshots[0].{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,DBInstanceIdentifier:DBInstanceIdentifier,DbiResourceId:DbiResourceId,Status:Status,SnapshotType:SnapshotType,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId,TagList:TagList}' > "$EVIDENCE_DIR/snapshot.json"
 python scripts/assert-db-migration-snapshot.py "$EVIDENCE_DIR/snapshot.json"
 
 status=0
