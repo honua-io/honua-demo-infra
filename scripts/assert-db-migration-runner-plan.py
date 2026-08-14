@@ -6,7 +6,7 @@ from pathlib import Path
 
 MANAGED={"aws_cloudwatch_log_group.runner","aws_iam_role.runner","aws_iam_role_policy.runner","aws_security_group.runner","aws_lambda_function.runner"}
 DATA={"data.aws_iam_policy_document.assume","data.aws_secretsmanager_secret.db_connection"}
-ARCHIVE_BASE64_SHA256="BFQY4N8OUtzcqKmF9N5aW/Kqup4BQPNQmKan+h+dbrU="
+ARCHIVE_BASE64_SHA256="7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o="
 def req(v,m):
     if not v: raise RuntimeError(m)
 def main():

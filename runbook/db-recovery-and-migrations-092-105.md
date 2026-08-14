@@ -14,8 +14,8 @@ version, move `live`, seed data, or promote candidate `:40`.
 - Database: `honua-demo-demo-postgres`, PostgreSQL `15.17`, encrypted, status `available`
 - Pending set: ordered 092-105, all `Expand`, digest `e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7`
 - Recovery point: `honua-demo-pre-092-105-e0ee6b49e116`
-- Runner ZIP SHA-256: `045418e0df0e52dcdca8a985f4de5a5bf2aaba9e0140f35098a6a7fa1f9d6eb5`
-- Expected AWS `Configuration.CodeSha256`: `BFQY4N8OUtzcqKmF9N5aW/Kqup4BQPNQmKan+h+dbrU=`
+- Runner ZIP SHA-256: `ec7b6775eb02cf37a73bd7053e6da2a524be343b7785e6384b43b3a708b2c79a`
+- Expected AWS `Configuration.CodeSha256`: `7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o=`
 - Exact ordered 104-name pre-092 journal SHA-256: `8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4`
 
 ## Phase 1: deploy the runner
@@ -35,7 +35,9 @@ security group, and two metadata data sources. Before planning, the operator
 builds the fixed-metadata ZIP twice, requires byte equality, installs that
 exact canonical ZIP, and binds all three archive copies into the reviewed
 artifact manifest. Members use uncompressed `ZIP_STORED` bytes and all hashed
-repository inputs are pinned to LF checkouts for cross-host reconstruction.
+repository inputs are pinned to LF checkouts and rejected byte-for-byte if any
+CR occurs. ZIP member order is based on UTF-8 POSIX member names, not host path
+semantics, for cross-host reconstruction.
 CI independently rebuilds twice and requires the same advertised digest. No
 build or archive data source is deferred to apply.
 
@@ -63,3 +65,6 @@ Raw `get-function` responses are never persisted: the operator validates the
 exact runner code/configuration and candidate/helper identities in a pipeline,
 then writes only allowlisted sanitized evidence. Pre/post receipts bind every
 artifact digest, including the qualified runner `Configuration.CodeSha256`.
+The runner sanitizer derives the exact security-group ID and DB-secret ARN from
+the isolated postapply state's exact seven-node graph, proves both the state
+Lambda and deployed Lambda reference them, and receipt-binds those safe IDs.

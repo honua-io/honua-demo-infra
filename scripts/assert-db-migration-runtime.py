@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "stacks" / "aws-db-migration-runner" / "runner"
-ARCHIVE_BASE64_SHA256 = "BFQY4N8OUtzcqKmF9N5aW/Kqup4BQPNQmKan+h+dbrU="
+ARCHIVE_BASE64_SHA256 = "7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o="
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
 RUNNER_NAME = "honua-demo-demo-db-migration-092-105"
@@ -25,6 +25,11 @@ IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6
 SHA64 = re.compile(r"^[A-Za-z0-9+/]{43}=$")
 SG = re.compile(r"^sg-[0-9a-f]{17}$")
 SECRET_ARN = re.compile(r"^arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-[A-Za-z0-9]{6}$")
+STATE_ADDRESSES = {
+    "data.aws_iam_policy_document.assume", "data.aws_secretsmanager_secret.db_connection",
+    "aws_cloudwatch_log_group.runner", "aws_iam_role.runner", "aws_iam_role_policy.runner",
+    "aws_security_group.runner", "aws_lambda_function.runner",
+}
 
 
 def req(value: bool, message: str) -> None:
@@ -51,24 +56,65 @@ def exact_keys(value: dict, keys: set[str], label: str) -> None:
     req(set(value) == keys, f"{label} allowlist drifted")
 
 
-def sanitize_runner(raw: dict) -> dict:
+def state_pins(state: dict) -> dict:
+    resources = state.get("resources")
+    req(type(resources) is list, "isolated state resources missing")
+    indexed: dict[str, dict] = {}
+    for resource in resources:
+        req(type(resource) is dict and resource.get("mode") in {"data", "managed"}, "isolated state resource invalid")
+        prefix = "data." if resource["mode"] == "data" else ""
+        address = f"{prefix}{resource.get('type')}.{resource.get('name')}"
+        instances = resource.get("instances")
+        req(address not in indexed and type(instances) is list and len(instances) == 1, "isolated state instance graph drifted")
+        attributes = instances[0].get("attributes") if type(instances[0]) is dict else None
+        req(type(attributes) is dict, "isolated state attributes missing")
+        indexed[address] = attributes
+    req(set(indexed) == STATE_ADDRESSES, "isolated state resource graph drifted")
+
+    secret = indexed["data.aws_secretsmanager_secret.db_connection"]
+    secret_arn = secret.get("arn")
+    req(secret.get("name") == "honua-demo-demo/connection-string" and type(secret_arn) is str and SECRET_ARN.fullmatch(secret_arn) is not None, "state DB secret identity drifted")
+    security_group = indexed["aws_security_group.runner"]
+    security_group_id = security_group.get("id")
+    req(type(security_group_id) is str and SG.fullmatch(security_group_id) is not None and security_group.get("vpc_id") == VPC_ID, "state runner security group drifted")
+    role = indexed["aws_iam_role.runner"]
+    req(role.get("arn") == RUNNER_ROLE and role.get("name") == f"{RUNNER_NAME}-role", "state runner role drifted")
+    runner = indexed["aws_lambda_function.runner"]
+    vpc = runner.get("vpc_config")
+    environment = runner.get("environment")
+    req(type(vpc) is list and len(vpc) == 1 and vpc[0].get("vpc_id") == VPC_ID, "state runner VPC missing")
+    req(sorted(vpc[0].get("subnet_ids", [])) == SUBNETS and vpc[0].get("security_group_ids") == [security_group_id], "state runner network references drifted")
+    req(type(environment) is list and len(environment) == 1 and environment[0].get("variables", {}).get("DB_SECRET_ARN") == secret_arn, "state runner secret reference drifted")
+    req(runner.get("role") == RUNNER_ROLE and runner.get("runtime") == "python3.13" and runner.get("handler") == "handler.handler" and runner.get("memory_size") == 512, "state runner configuration drifted")
+    req(runner.get("source_code_hash") == ARCHIVE_BASE64_SHA256, "state runner source digest drifted")
+    qualified_arn, version = runner.get("qualified_arn"), runner.get("version")
+    req(type(version) is str and re.fullmatch(r"[1-9][0-9]*", version) is not None and qualified_arn == f"{RUNNER_ARN}:{version}", "state runner qualified identity drifted")
+    outputs = state.get("outputs")
+    req(type(outputs) is dict and set(outputs) == {"db_migration_runner_qualified_arn", "db_migration_runner_version"}, "isolated state outputs drifted")
+    req(outputs["db_migration_runner_qualified_arn"].get("value") == qualified_arn and outputs["db_migration_runner_version"].get("value") == version, "isolated state output identity drifted")
+    identity = {"dbSecretArn":secret_arn, "securityGroupId":security_group_id, "runnerQualifiedArn":qualified_arn, "runnerVersion":version, "sourceCodeSha256":ARCHIVE_BASE64_SHA256}
+    return {**identity, "stateIdentitySha256":value_sha(identity)}
+
+
+def sanitize_runner(raw: dict, pins: dict) -> dict:
     config = raw.get("Configuration")
     req(type(config) is dict, "runner configuration missing")
     version = config.get("Version")
     req(type(version) is str and re.fullmatch(r"[1-9][0-9]*", version) is not None, "runner is not qualified")
-    req(config.get("FunctionName") == RUNNER_NAME and config.get("FunctionArn") == f"{RUNNER_ARN}:{version}", "runner identity drifted")
+    req(config.get("FunctionName") == RUNNER_NAME and config.get("FunctionArn") == pins["runnerQualifiedArn"] and version == pins["runnerVersion"], "runner identity drifted")
     req(config.get("CodeSha256") == ARCHIVE_BASE64_SHA256, "runner deployed code digest drifted")
     req(config.get("Runtime") == "python3.13" and config.get("Handler") == "handler.handler", "runner handler/runtime drifted")
     req(config.get("Role") == RUNNER_ROLE and config.get("MemorySize") == 512, "runner role/memory drifted")
-    req(config.get("Timeout") == 900 and config.get("ReservedConcurrentExecutions") == 1, "runner execution bounds drifted")
+    req(config.get("Timeout") == 900, "runner timeout drifted")
+    req(raw.get("Concurrency") == {"ReservedConcurrentExecutions": 1}, "runner reserved concurrency drifted")
     req(config.get("Architectures") == ["arm64"], "runner architecture drifted")
     vpc = config.get("VpcConfig")
     req(type(vpc) is dict and vpc.get("VpcId") == VPC_ID, "runner VPC drifted")
     subnets, security_groups = vpc.get("SubnetIds"), vpc.get("SecurityGroupIds")
     req(type(subnets) is list and sorted(subnets) == SUBNETS, "runner subnet set drifted")
-    req(type(security_groups) is list and len(security_groups) == 1 and SG.fullmatch(security_groups[0]) is not None, "runner security group drifted")
+    req(security_groups == [pins["securityGroupId"]], "runner security group drifted")
     environment = config.get("Environment", {}).get("Variables")
-    req(type(environment) is dict and SECRET_ARN.fullmatch(environment.get("DB_SECRET_ARN", "")) is not None, "runner secret reference drifted")
+    req(type(environment) is dict and environment.get("DB_SECRET_ARN") == pins["dbSecretArn"], "runner secret reference drifted")
     expected_environment = {
         "DB_SECRET_ARN": environment["DB_SECRET_ARN"],
         "EXPECTED_CANDIDATE_IMAGE_DIGEST": IMAGE_DIGEST,
@@ -128,15 +174,20 @@ def sanitize_live(raw: dict) -> dict:
             "name":"live", "functionVersion":"39", "revisionId":raw["RevisionId"], "routing":{}}
 
 
-SANITIZERS = {"runner": sanitize_runner, "candidate": sanitize_candidate, "preflight": sanitize_preflight, "live": sanitize_live}
+SANITIZERS = {"candidate": sanitize_candidate, "preflight": sanitize_preflight, "live": sanitize_live}
 
 
-def sanitize(kind: str, raw: dict) -> dict:
+def sanitize(kind: str, raw: dict, state: dict | None = None) -> dict:
+    if kind == "runner":
+        req(type(state) is dict, "runner sanitizer requires isolated postapply state")
+        return sanitize_runner(raw, state_pins(state))
+    req(state is None, "state is accepted only for runner sanitization")
     return SANITIZERS[kind](raw)
 
 
 def build(args: argparse.Namespace) -> dict:
     runner, candidate, live, preflight, db, state = map(load, (args.runner, args.candidate, args.live, args.preflight, args.db, args.state))
+    pins = state_pins(state)
     exact_keys(runner, {"schema","kind","functionName","functionArn","version","revisionId","codeSha256","runtime","handler","role","memorySize","timeout","reservedConcurrentExecutions","architectures","vpcId","subnetIds","securityGroupIds","environmentKeys","environmentSha256"}, "runner evidence")
     exact_keys(candidate, {"schema","kind","functionArn","version","revisionId","resolvedImageDigest","skipMigrations"}, "candidate evidence")
     exact_keys(live, {"schema","kind","aliasArn","name","functionVersion","revisionId","routing"}, "live evidence")
@@ -145,14 +196,15 @@ def build(args: argparse.Namespace) -> dict:
     req(runner["kind"] == "runner" and runner["codeSha256"] == ARCHIVE_BASE64_SHA256, "runner digest evidence drifted")
     req(runner["runtime"] == "python3.13" and runner["handler"] == "handler.handler" and runner["role"] == RUNNER_ROLE and runner["memorySize"] == 512, "runner deployed configuration drifted")
     req(runner["timeout"] == 900 and runner["reservedConcurrentExecutions"] == 1 and runner["architectures"] == ["arm64"], "runner bounds evidence drifted")
-    req(runner["vpcId"] == VPC_ID and runner["subnetIds"] == SUBNETS and len(runner["securityGroupIds"]) == 1 and SG.fullmatch(runner["securityGroupIds"][0]) is not None, "runner VPC evidence drifted")
+    req(runner["functionArn"] == pins["runnerQualifiedArn"] and runner["version"] == pins["runnerVersion"], "runner state identity binding drifted")
+    req(runner["vpcId"] == VPC_ID and runner["subnetIds"] == SUBNETS and runner["securityGroupIds"] == [pins["securityGroupId"]], "runner VPC evidence drifted")
     req(candidate == {"schema":"honua-db-migration-function-audit-v1","kind":"candidate","functionArn":f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:40","version":"40","revisionId":"0326e209-4231-4acd-9bb4-d3cb89402db0","resolvedImageDigest":IMAGE_DIGEST,"skipMigrations":True}, "candidate evidence drifted")
     req(live["functionVersion"] == "39" and live["revisionId"] == "4f73dd76-0294-44d3-8362-c6f8606f034e" and live["routing"] == {}, "live evidence drifted")
     req(preflight["version"] == "3" and preflight["revisionId"] == "8114746a-223f-4358-a260-bd5699d7f992", "preflight evidence drifted")
     exact_keys(db, {"DBInstanceIdentifier","DBInstanceArn","DbiResourceId","DBInstanceStatus","Engine","EngineVersion","StorageEncrypted","KmsKeyId"}, "DB evidence")
     req(db == {"DBInstanceIdentifier":"honua-demo-demo-postgres","DBInstanceArn":"arn:aws:rds:us-west-2:585192672263:db:honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","DBInstanceStatus":"available","Engine":"postgres","EngineVersion":"15.17","StorageEncrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}, "DB identity/status drifted")
     req(type(state.get("lineage")) is str and type(state.get("serial")) is int, "state identity missing")
-    return {"schema":"honua-db-migration-runtime-receipt-v1","qualifiedArn":runner["functionArn"],"version":runner["version"],"revisionId":runner["revisionId"],"codeSha256":runner["codeSha256"],"environmentSha256":runner["environmentSha256"],"stateLineage":state["lineage"],"stateSerial":state["serial"],"candidateVersion":"40","liveVersion":"39","preflightVersion":"3","runnerSha256":sha(args.runner),"candidateSha256":sha(args.candidate),"liveSha256":sha(args.live),"preflightSha256":sha(args.preflight),"dbSha256":sha(args.db)}
+    return {"schema":"honua-db-migration-runtime-receipt-v1","qualifiedArn":runner["functionArn"],"version":runner["version"],"revisionId":runner["revisionId"],"codeSha256":runner["codeSha256"],"environmentSha256":runner["environmentSha256"],"securityGroupId":pins["securityGroupId"],"dbSecretArn":pins["dbSecretArn"],"stateIdentitySha256":pins["stateIdentitySha256"],"stateLineage":state["lineage"],"stateSerial":state["serial"],"candidateVersion":"40","liveVersion":"39","preflightVersion":"3","runnerSha256":sha(args.runner),"candidateSha256":sha(args.candidate),"liveSha256":sha(args.live),"preflightSha256":sha(args.preflight),"dbSha256":sha(args.db)}
 
 
 def verify(expected: dict, actual: dict) -> None:
@@ -163,7 +215,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="mode", required=True)
     sanitize_parser = sub.add_parser("sanitize")
-    sanitize_parser.add_argument("kind", choices=tuple(SANITIZERS))
+    sanitize_parser.add_argument("kind", choices=("runner", *SANITIZERS))
+    sanitize_parser.add_argument("--state", type=Path)
     for mode in ("create", "verify"):
         item = sub.add_parser(mode)
         for name in ("runner","candidate","live","preflight","db","state","receipt"):
@@ -171,7 +224,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.mode == "sanitize":
         raw = json.load(sys.stdin)
-        print(json.dumps(sanitize(args.kind, raw), sort_keys=True, separators=(",", ":")))
+        state = load(args.state) if args.state else None
+        print(json.dumps(sanitize(args.kind, raw, state), sort_keys=True, separators=(",", ":")))
         return
     actual = build(args)
     if args.mode == "create":

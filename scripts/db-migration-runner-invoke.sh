@@ -23,7 +23,7 @@ test ! -e "$EVIDENCE_DIR"; mkdir -p "$EVIDENCE_DIR"
 
 audit() {
   local prefix="$1" status=0
-  aws lambda get-function --function-name "$QUALIFIED_ARN" --output json | python scripts/assert-db-migration-runtime.py sanitize runner > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
+  aws lambda get-function --function-name "$QUALIFIED_ARN" --output json | python scripts/assert-db-migration-runtime.py sanitize runner --state "$STATE" > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
   aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:40 --output json | python scripts/assert-db-migration-runtime.py sanitize candidate > "$EVIDENCE_DIR/$prefix-candidate.json" || status=1
   aws lambda get-alias --function-name honua-demo-demo-honua --name live --output json | python scripts/assert-db-migration-runtime.py sanitize live > "$EVIDENCE_DIR/$prefix-live.json" || status=1
   aws lambda get-function --function-name arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-candidate-preflight:3 --output json | python scripts/assert-db-migration-runtime.py sanitize preflight > "$EVIDENCE_DIR/$prefix-preflight.json" || status=1

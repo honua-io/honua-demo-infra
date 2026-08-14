@@ -15,7 +15,7 @@ RUNNER = STACK / "runner"
 SERVER_SOURCE = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
 PENDING_DIGEST = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
 EXECUTED_DIGEST = "8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4"
-ARCHIVE_SHA256 = "045418e0df0e52dcdca8a985f4de5a5bf2aaba9e0140f35098a6a7fa1f9d6eb5"
+ARCHIVE_SHA256 = "ec7b6775eb02cf37a73bd7053e6da2a524be343b7785e6384b43b3a708b2c79a"
 
 
 def require(value: bool, message: str) -> None:
@@ -66,7 +66,7 @@ def main() -> None:
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"migration source hash drifted: {entry['file']}")
     handler = (RUNNER / "handler.py").read_text(encoding="utf-8")
     build = (RUNNER / "build.py").read_text(encoding="utf-8")
-    for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "zipfile.ZIP_STORED", "0o100644 << 16", 'ZipFile(output, "w")'):
+    for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "zipfile.ZIP_STORED", "0o100644 << 16", 'ZipFile(output, "w")', 'if b"\\r" in data', 'key=lambda item: item[0].encode("utf-8")'):
         require(required in build, f"deterministic archive contract missing: {required}")
     require("ZIP_DEFLATED" not in build and "compresslevel" not in build, "host-dependent ZIP compression admitted")
     attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
