@@ -29,6 +29,20 @@ transferred demo-capability program epic); the honua-server originals are
 replaced with a pointer stub, and the one code reference
 (`MetadataReleaseOperationOptions` XML docs) now points here.
 
+## Feature streaming
+
+`streaming-snapshot-conformance.md` is the operator procedure for making
+baseline snapshot subscriptions serve and for enabling the controlled-
+conformance mutation surface that honua-io/honua-sdk-js#818 leases
+(honua-io/honua-server#3181). It records the evidence that the reported HTTP
+500 is manufactured by the buffered ~6 MB gateway response rather than emitted
+by the server, the triage rule that distinguishes the two, and the ordered
+remediation: redeploy onto a build carrying honua-server#3206/#3038, apply the
+explicit snapshot payload budget (`stacks/aws/streaming.tf`), provision a
+dedicated small conformance source, and decide the admin-scoped credential the
+mutating routes require. The remaining blocker for live-mutation evidence is
+honua-io/honua-demo-infra#67.
+
 ## Seed scripts
 
 ## Candidate preflight
