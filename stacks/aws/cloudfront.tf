@@ -263,7 +263,19 @@ resource "aws_cloudfront_function" "forwarded_host" {
             'cache-control': { value: 'no-store' },
             'content-security-policy': { value: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" },
             'x-content-type-options': { value: 'nosniff' },
-            'referrer-policy': { value: 'no-referrer' }
+            'referrer-policy': { value: 'no-referrer' },
+            // Match the origin's security baseline. honua-server stamps HSTS,
+            // COOP and X-Frame-Options on every application response, but `/`
+            // is answered entirely at the edge and never reaches the origin,
+            // and the default cache behavior carries no response-headers
+            // policy — so without these the root is the one demo.honua.io
+            // response missing them (honua-release#87). The CSP above already
+            // carries frame-ancestors 'none', so x-frame-options here is
+            // legacy-agent parity, not the security control.
+            // scripts/test-edge-root-response.mjs pins this exact set.
+            'strict-transport-security': { value: 'max-age=63072000; includeSubDomains; preload' },
+            'cross-origin-opener-policy': { value: 'same-origin' },
+            'x-frame-options': { value: 'DENY' }
           }
         };
         if (request.method === 'GET') {
