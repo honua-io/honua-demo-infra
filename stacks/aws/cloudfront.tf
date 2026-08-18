@@ -149,6 +149,67 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
 # be stamped per-response at the edge rather than trusted from the cache;
 # origin_override also masks honua-server#1627 (no CORS on error responses)
 # for these routes.
+# The API-route CORS policy. This exists LIVE (bc9f0cbf-7c74-41f9-85a0-2bbd84b35e11,
+# "honua-demo-demo-api-cors") and is attached to default_cache_behavior, but it was created
+# out-of-band and had never been declared here — `git log -S demo_cors_api` finds nothing in this
+# repository's history. Terraform therefore planned to DESTROY it and set the default behaviour's
+# response_headers_policy_id to null, which would have removed CORS from every non-tile route:
+# /rest/services, feature queries, /ogc/*, OData, admin, /healthz. Tiles were unaffected (they use
+# demo_cors below), so the failure would have been quiet — a browser client's basemap keeps
+# rendering while every data query fails cross-origin.
+#
+# honua-server cannot cover this: the deployed Lambda's own CORS is a narrow allowlist
+# (Cors__AllowedOrigins = honua.io, www.honua.io, localhost:8123), so without the edge policy the
+# demo API answers only those three origins.
+#
+# The values below are the LIVE policy, transcribed exactly. Note the deliberate asymmetry with
+# demo_cors: this one allows `*` while the tile policy allows three named origins. That asymmetry is
+# pre-existing and is codified here rather than changed — narrowing it is a security decision to take
+# on its own evidence, not a side effect of putting live state under configuration control
+# (honua-demo-infra#76).
+resource "aws_cloudfront_response_headers_policy" "demo_cors_api" {
+  #checkov:skip=CKV_AWS_259: HSTS is enforced at the distribution viewer_certificate level (TLSv1.2_2021 + redirect-to-https) and by the edge function on the generated root; this policy exists only to supply CORS to API routes.
+  name    = "${var.name_prefix}-${var.environment}-api-cors"
+  comment = "CORS for non-cached demo API routes"
+
+  cors_config {
+    access_control_allow_credentials = false
+    origin_override                  = true
+    access_control_max_age_sec       = 300
+
+    access_control_allow_origins {
+      items = ["*"]
+    }
+
+    access_control_allow_methods {
+      items = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    }
+
+    access_control_allow_headers {
+      items = [
+        "Content-Type",
+        "Authorization",
+        "X-API-Key",
+        "X-Correlation-ID",
+        "Range",
+        "If-Range",
+        "If-None-Match",
+        "If-Modified-Since",
+      ]
+    }
+
+    access_control_expose_headers {
+      items = [
+        "Content-Range",
+        "ETag",
+        "Last-Modified",
+        "Accept-Ranges",
+        "Content-Length",
+      ]
+    }
+  }
+}
+
 resource "aws_cloudfront_response_headers_policy" "demo_cors" {
   #checkov:skip=CKV_AWS_259: Demo CDN serves read-only tile/glyph bytes over HTTPS only; HSTS is enforced at the distribution viewer_certificate level (TLSv1.2_2021 + redirect-to-https) and does not require a strict-transport-security response header here.
   name    = "${var.name_prefix}-${var.environment}-tile-cors"
@@ -384,8 +445,9 @@ resource "aws_cloudfront_distribution" "demo" {
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods  = ["GET", "HEAD"]
 
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.demo_cors_api.id
 
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
