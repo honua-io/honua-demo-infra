@@ -325,51 +325,51 @@ deliberately different from the demo's `us-west-2`), with S3-native locking via
 checkout. (Earlier revisions of this README claimed state was inaccessible
 because the backend was commented out; that has not been true since #122.)
 
-Run the imports below so Terraform adopts the existing resources instead of
-trying to create duplicates. Run from this directory (`stacks/aws` in
-honua-demo-infra) with the toggles set in `terraform.tfvars`:
+**These imports are OBSOLETE (verified 2026-08-18).** The resources they adopt no
+longer exist, and the toggle that would recreate them is off:
 
-```bash
-# --- Pro license secret — NO IMPORT REQUIRED ------------------------------
-# The license secret is deliberately NOT managed by Terraform. The example
-# passes pro_license_secret_arn, so the module creates no secret and no secret
-# version for it and never reads the envelope — it only injects
-# Licensing__LicenseContentSecretRef and grants the Lambda role
-# GetSecretValue on that ARN. Nothing to import; nothing to keep in sync.
-# See "Pro licensing (adopt-by-ARN)" below.
-
-# --- Bedrock runtime VPC endpoint + its SG — OBSOLETE (2026-07-24) ---------
-# The endpoint was removed from config in the fck-nat cost round; there is no
-# longer a resource address to import to. If the live endpoint
-# vpce-003090af73dc835fe / SG sg-0ac55474b410c5d34 are still in state, the
-# next apply destroys them (intended); if they were never imported, delete
-# them by hand (aws ec2 delete-vpc-endpoints / delete-security-group) or they
-# keep billing as orphans.
-
-# --- Redis (item 4) — replication group, subnet group, SG, secret ----------
-terraform import 'module.honua.aws_elasticache_replication_group.redis[0]' honua-demo-redis
-terraform import 'module.honua.aws_elasticache_subnet_group.redis[0]'      honua-demo-demo-redis
-terraform import 'module.honua.aws_security_group.redis[0]'                sg-0454e3341c5de3068
-terraform import 'module.honua.aws_secretsmanager_secret.redis_connection[0]' honua-demo-demo/redis-connection
+```
+$ aws elasticache describe-replication-groups --replication-group-id honua-demo-redis
+ReplicationGroupNotFoundFault
+$ aws elasticache describe-cache-subnet-groups --cache-subnet-group-name honua-demo-demo-redis
+CacheSubnetGroupNotFoundFault
+$ aws ec2 describe-security-groups --group-ids sg-0454e3341c5de3068
+InvalidGroup.NotFound
+$ aws ec2 describe-vpc-endpoints --vpc-endpoint-ids vpce-003090af73dc835fe
+InvalidVpcEndpointId.NotFound      # the "orphan still billing ~$7.5/mo" warning is also moot
 ```
 
-Notes:
+Only `honua-demo-demo/redis-connection` (the secret) survives, and `demo.tfvars`
+sets `enable_redis = false`, so nothing tries to create or adopt a cluster. There
+is **no import step before plan/apply** any more. Tracked in honua-demo-infra#11.
 
-- **Lambda env vars + the IAM inline policies are not separately importable** —
-  they are attributes of resources Terraform already manages (the Lambda
-  function's `environment`, the role's inline `bedrock`/`secrets` policies).
-  Once the toggles are on and the imports above are in state, a `plan` should
-  show those as in-place updates (env keys merged, policy statements added),
-  which an operator reviews before applying. Expect the `random_password`
-  resources for the Redis auth token to want to generate on first apply if a
-  Redis cluster is imported that already has an auth token — supply the live
-  token via `redis_auth_token`/`redis_connection_string` (module variables) if
-  drift on the auth token must be avoided.
-- The module names the ElastiCache subnet group/replication group/SG from
-  `${name_prefix}-${environment}` (`honua-demo-demo-*`); the live cluster id in
-  the deploy record is `honua-demo-redis`. If the live names differ from what
-  the module would generate, import maps the live id into the module address
-  regardless — verify the `plan` shows no rename/replace after import.
+If Redis is ever re-enabled for this stack it will be a **create**, not an import,
+and the CIDR-egress note above still applies to it.
+
+## Applying
+
+Non-secret configuration is committed as `stacks/aws/demo.tfvars`. Three inputs are
+deliberately not in it — one because it is secret, two because they are per-release
+or per-environment and would go stale in a file:
+
+```bash
+# 1. the one secret, from pass (honua-iac scripts/lib/tf-secret-catalog.sh)
+source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)
+export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
+
+# 2/3. the release image and the metadata environment
+terraform plan -var-file=demo.tfvars \
+  -var "honua_image=<ECR image for the manifest-pinned server sha, this region>" \
+  -var "stac_seed_metadata_environment=<active metadata_v2_current row>"
+```
+
+`honua_admin_password` must **not** be sourced from Secrets Manager: terraform owns
+that secret (`module.honua.aws_secretsmanager_secret.admin_password`), so it is an
+*output* of this apply and reading it back as an input is circular.
+
+Redeploying the server means **publishing a Lambda version and repointing the `live`
+alias** — the alias serves a published version whose environment is frozen, so
+editing `$LATEST` does not change what serves.
 
 #### Pro licensing (adopt-by-ARN)
 
