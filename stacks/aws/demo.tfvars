@@ -46,8 +46,8 @@ region          = "us-west-2"
 route53_zone_id = "Z089181827C9GKIKHXUTT"
 
 # Studio AI — the demo runs Bedrock-backed generation.
-enable_studio_ai = true
-studio_ai_model  = "us.anthropic.claude-sonnet-4-6"
+enable_studio_ai  = true
+studio_ai_model   = "us.anthropic.claude-sonnet-4-6"
 enable_bedrock_ai = true
 
 # Amazon Location geocoding is ON for the demo (the server's compiled-in default is Nominatim).
