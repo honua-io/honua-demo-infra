@@ -353,9 +353,13 @@ deliberately not in it — one because it is secret, two because they are per-re
 or per-environment and would go stale in a file:
 
 ```bash
-# 1. the one secret, from pass (honua-iac scripts/lib/tf-secret-catalog.sh)
-source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)
-export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
+# 1. the one secret — read the CURRENT value back from Secrets Manager.
+#    (honua-iac's tf-secret-catalog.sh lists HONUA_ADMIN_PASSWORD as an essential `pass` entry, but
+#    no such entry exists in the operator store today — that catalog is aspirational. Do not go
+#    looking in `pass` for this value.)
+export TF_VAR_honua_admin_password="$(aws secretsmanager get-secret-value \
+  --secret-id honua-demo-demo/admin-password --region us-west-2 \
+  --query SecretString --output text)"
 
 # 2/3. the release image and the metadata environment
 terraform plan -var-file=demo.tfvars \
