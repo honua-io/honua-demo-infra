@@ -214,6 +214,14 @@ module "honua" {
     HONUA_SERVE_STAC_DEMO         = "true"
     MultiTenancy__Enabled         = "true"
     MultiTenancy__DefaultTenantId = "public"
+    # The public process contract is authenticated with a separately rotated,
+    # process:*:execute-scoped demo key. Rate limiting partitions by that key and
+    # uses Redis so Lambda replicas share one fixed one-minute window.
+    RateLimiting__Enabled                      = "true"
+    RateLimiting__GlobalRequestsPerMinute      = "60"
+    RateLimiting__UseDistributedRateLimiting   = "true"
+    RateLimiting__IncludeHeaders               = "true"
+    Geoprocessing__Executors__MaxArtifactBytes = "1048576"
     # Allow the API Gateway custom domain as a valid host
     HostValidation__AllowedHosts__1 = "demo.honua.io"
 

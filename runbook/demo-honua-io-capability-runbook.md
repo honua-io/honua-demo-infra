@@ -50,8 +50,9 @@ The 2026-07-24 ops round supersedes the two remaining open items in the table be
   `Range: bytes=0-16383` → `206`. Real PMTiles clients (always ranged) unaffected.
 - `/api/scenes` → 200 (0.7s); `/rest/services`, `/stac/collections`,
   `/ogc/features/collections` all 200 post-deploy.
-- Redis remains **off** (`enable_redis = false`) until a demo image contains the
-  server-side `aws:secretsmanager:` Redis-ref fix (server#3011, PR #3021).
+- The 2026.1 candidate turns Redis **on** (`enable_redis = true`) now that the
+  server-side secret-reference fix has landed; it is required for readiness,
+  durable `geometry.buffer` jobs, and the cross-replica request budget.
 
 ## As-verified live state (2026-07-23, server#2948)
 
@@ -749,12 +750,11 @@ monthly cost" for the full tables):
    (72 reported DB connections). The small instance is the public-demo reliability
    floor; the lower Lambda cap supplies additional connection headroom.
 
-**Redis / ElastiCache stays as-is**: `enable_redis` remains `false` in Terraform
-(nothing applied to remove) — honua-server hard-requires a durable feature-change
-event store in Production, and the toggle stays available for when the server-side
-`aws:secretsmanager:` Redis-ref fix (server#3011 / PR #3021) ships in a deployed
-image. Do not delete the toggle to save the ~$9/mo — that breaks `/healthz/ready`
-the day Redis is wired.
+**Redis / ElastiCache is a 2026.1 candidate gate**: `enable_redis` is `true` in
+Terraform. The old resources named in historical notes no longer exist, so the
+saved plan must create a new cluster and must not import those identities. Do
+not promote until `/healthz/ready` and the sync + async `geometry.buffer`
+canary pass against the exact deployed candidate.
 
 **Budget tripwire**: `aws_budgets_budget` (`cost-controls.tf`) — monthly $150 limit,
 email alerts to `mike@honua.io` at 100% and 200% (i.e. $150 and $300), both actual

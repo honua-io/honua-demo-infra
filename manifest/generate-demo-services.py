@@ -69,6 +69,101 @@ STAC_SEED_FILE = "tests/seed/demo-stac-imagery-v1.sql"
 
 WMS_SERVICE_IDS = {"maui-flood-hazard", "maui-sea-level-rise"}
 
+# Public, bounded OGC API Processes contract. The canary payload intentionally
+# uses the origin with a one-unit planar buffer: it is tiny, deterministic, and
+# exercises the same GeoJSON -> WKB normalization and managed executor as the
+# SDK/Studio journey without reading a demo dataset or exposing a mutating tool.
+GEOMETRY_BUFFER_OUTPUT_SHA256 = (
+    "a5797d4b43e2d8af4ac8b3be5dbc31edf96a206ab960497b991e191e5a7b3997"
+)
+
+
+def public_processes() -> list[dict]:
+    """Return the deliberately narrow public process allow-list."""
+    return [
+        {
+            "id": "geometry.buffer",
+            "title": "Buffer geometry",
+            "description": (
+                "Browser-safe managed planar buffer for a single bounded GeoJSON geometry. "
+                "No layer references, custom code, or destructive outputs are accepted."
+            ),
+            "execution": {
+                "path": "/ogc/processes/processes/geometry.buffer/execution",
+                "modes": ["sync", "async"],
+                "syncPreference": "respond-sync",
+                "asyncPreference": "respond-async",
+                "responseModes": ["document", "raw"],
+                "backend": "local",
+            },
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["wkb", "srid", "distance"],
+                "properties": {
+                    "wkb": {
+                        "oneOf": [
+                            {"$ref": "https://geojson.org/schema/Geometry.json"},
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["value", "mediaType"],
+                                "properties": {
+                                    "value": {"$ref": "https://geojson.org/schema/Geometry.json"},
+                                    "mediaType": {"const": "application/geo+json"},
+                                },
+                            },
+                        ]
+                    },
+                    "srid": {"type": "integer", "const": 4326},
+                    "distance": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1,
+                        "description": "Planar input-CRS units; geodesic execution is not advertised.",
+                    },
+                    "geodesic": {"type": "boolean", "const": False, "default": False},
+                },
+            },
+            "output": {
+                "name": "outputFeatureLayer",
+                "mediaType": "application/geo+json",
+                "kind": "FeatureLayer",
+            },
+            "auth": {
+                "mode": "demo-key",
+                "header": "X-API-Key",
+                "credentialProfile": "demo-process-execute",
+                "requiredGrant": "process:*:execute",
+            },
+            "lifecycle": {
+                "statusPath": "/ogc/processes/jobs/{jobId}",
+                "resultsPath": "/ogc/processes/jobs/{jobId}/results",
+                "dismissPath": "/ogc/processes/jobs/{jobId}",
+                "dismissMethod": "DELETE",
+                "dismissSemantics": "cancel-active-job",
+                "dismissConformanceClaimed": False,
+            },
+            "requestBudget": {
+                "scope": "demo-api-key/global",
+                "requestsPerWindow": 60,
+                "windowSeconds": 60,
+                "resetPolicy": "fixed-window",
+                "responseHeaders": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+            },
+            "canary": {
+                "inputs": {
+                    "wkb": {"type": "Point", "coordinates": [0, 0]},
+                    "srid": 4326,
+                    "distance": 1,
+                    "geodesic": False,
+                },
+                "expectedMediaType": "application/geo+json",
+                "expectedSha256": GEOMETRY_BUFFER_OUTPUT_SHA256,
+            },
+        }
+    ]
+
 
 def fail(msg: str) -> "SystemExit":
     return SystemExit(f"generate-demo-services: error: {msg}")
@@ -430,7 +525,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
 
     manifest = {
         "format": "honua.demo-services.v1",
-        "schemaVersion": "1.2.0",
+        "schemaVersion": "1.3.0",
         "description": (
             "Publicly discoverable seeded services of the demo.honua.io demo "
             "environment. Generated from seed definitions by "
@@ -447,6 +542,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
         },
         "releaseContracts": {"wms": wms_release},
         "services": services,
+        "processes": public_processes(),
         "assets": assets,
     }
     if wms_release["status"] == "planned":

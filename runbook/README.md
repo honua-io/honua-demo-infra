@@ -13,8 +13,9 @@ honua-server backlog).
 > Applied-state notes beyond the runbook: geocoding infra (place index +
 > `geo.places` endpoint) is live and serving is on v35 — see
 > stacks/aws/vpc-endpoints.tf and honua-demo-infra#11 for the remaining
-> enablement items (Redis stays off pending honua-server#3011; geocoding
-> e2e pending the next image with the AOT config-binding fix).
+> enablement items. The 2026.1 candidate now enables Redis for readiness,
+> durable GP jobs, and distributed rate limits; the live apply/canary receipt
+> remains required before that state is described as deployed.
 
 ## Demo B (ops champion) runbooks
 

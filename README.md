@@ -87,16 +87,12 @@ local/hand-managed state, despite that having been true in the past (older
 revisions of the stack's own README describe a since-fixed state predating
 honua-iac#122).
 
-**Known drift**: the live account runs three add-ons out-of-band —
-Pro license (adopt-by-ARN, already clean), Bedrock AI, and Redis (the latter
-two applied directly via AWS CLI/console and **not yet imported into this
-Terraform state** — a real `terraform plan` with `enable_bedrock_ai = true` /
-`enable_redis = true` currently proposes to *create* new copies of those
-resources rather than showing no changes). `stacks/aws/README.md` → "Pro + AI
-demo drift" documents the exact `terraform import` commands an operator must
-run once before a real `apply` with those toggles on. This is pre-existing
-drift, carried over faithfully from honua-iac — the extraction did not create
-or worsen it.
+**Known drift**: Pro is adopted by ARN and Bedrock remains the only live
+out-of-band add-on. The legacy Redis replication group/subnet group/security
+group no longer exist. The 2026.1 preset deliberately enables Redis as a new
+managed resource for durable GP jobs and distributed request limits; the
+reviewed plan must show creates, never imports of the obsolete identities.
+`stacks/aws/README.md` → "Pro + AI demo drift" records the read-only evidence.
 
 ## Migration proof (honua-iac#126)
 
@@ -114,8 +110,9 @@ checkout, and confirmed:
 - The S3 backend connects and reads all ~104 resources of real remote state.
 - The plan is **not** a literal no-op today, for three reasons, none of which
   are migration artifacts:
-  1. `enable_redis` / `enable_bedrock_ai` propose creates — the pre-existing
-     known drift above; needs the documented `terraform import` first.
+  1. `enable_bedrock_ai` reflects pre-existing drift, while the Redis creates
+     are now intentional 2026.1 release work and require candidate-bound apply
+     evidence rather than an import.
   2. The `postgis_bootstrap_build` `terraform_data` trigger hash differs from
      what's in state — the source `handler.py` was edited after the state's
      last real apply (pre-existing repo/state skew, unrelated to the move).
@@ -129,13 +126,10 @@ checkout, and confirmed:
   the state's last real apply (a sensitivity-marking behavior change on
   `environment.variables`), not a config difference.
 
-**What the operator should run for a literal zero-diff plan**: from
-`stacks/aws`, run the `terraform import` commands in `stacks/aws/README.md`
-(Bedrock VPC endpoint + SG, the Redis replication group/subnet group/SG/
-secret), supply the real `honua_admin_password` value, and re-run
-`terraform plan` with `enable_redis = true` and `enable_bedrock_ai = true`.
-That plan is expected to show 0 changes (module/provider-version
-housekeeping aside).
+**Operator rule for the 2026.1 candidate**: do not import the deleted Redis
+identities. Supply the real `honua_admin_password`, review a saved plan that
+creates the new Redis resources and keeps Batch disabled, apply that exact
+plan, then bind readiness and GP canary evidence to the resulting candidate.
 
 ## How to plan / apply
 
@@ -217,15 +211,17 @@ The public `demo-services.v1.json` continues to exclude this fixture.
 ## Service manifest (demo-services.v1.json)
 
 `manifest/demo-services.v1.json` is the generated, schema-versioned inventory
-of the demo's publicly discoverable services (issue #19) — derived from
-`stacks/aws/SEED_MANIFEST.md` and the pinned STAC seed above, never edited by
+of the demo's publicly discoverable services and its one governed public OGC
+process (issues #19 and #68) — derived from `stacks/aws/SEED_MANIFEST.md`, the
+pinned STAC seed, and the generator's exact process allow-list, never edited by
 hand (`.github/workflows/manifest-drift.yml` enforces this). Its stable
 public URL is `https://demo.honua.io/demo-services.v1.json`; the publish
 wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
   the shared Terraform state since 2026-07-31. The scheduled and explicit
   operator-dispatched public canary records the exact runtime revision, probes every declared service
-  family, and requires non-empty item and bounded POST search results tied to STAC
-  collection `90810` before its receipt passes. Its checked-out contract also binds
+  family, requires non-empty item and bounded POST search results tied to STAC
+  collection `90810`, and proves `geometry.buffer` sync plus durable async
+  status/results against the same pinned output digest. Its checked-out contract also binds
   the exact seed source SHA-256. A managed in-VPC executor independently hashes the
   source and rendered bytes it executes and writes a transactional marker; the explicit
   dispatch workflow reads that marker through a separate query-only Lambda/DB role.
