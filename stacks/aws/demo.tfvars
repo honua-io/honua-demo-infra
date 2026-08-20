@@ -53,9 +53,11 @@ enable_bedrock_ai = true
 # Amazon Location geocoding is ON for the demo (the server's compiled-in default is Nominatim).
 enable_amazon_location_geocoding = true
 
-# Redis is OFF. There is no ElastiCache cluster for this stack — the names the runbook's old import
-# commands referenced (honua-demo-redis, honua-demo-demo-redis, sg-0454e3341c5de3068) do not exist.
-enable_redis = false
+# Redis backs the public process job queue/result store and the distributed
+# fixed-window request budget. The managed geometry.buffer executor runs in the
+# serving Lambda; Batch remains disabled for this bounded public process.
+enable_redis    = true
+enable_gp_batch = false
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.

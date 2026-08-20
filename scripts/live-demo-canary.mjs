@@ -21,6 +21,8 @@ const expectedStacServerCommit = (process.env.HONUA_DEMO_EXPECTED_STAC_SERVER_CO
 const expectedStacSeedSha256 = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_SHA256 ?? "").trim();
 const expectedManifestSha256 = (process.env.HONUA_DEMO_EXPECTED_MANIFEST_SHA256 ?? "").trim();
 const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
+const gpApiKey = (process.env.HONUA_DEMO_GP_API_KEY ?? "").trim();
+const gpPollIntervalMs = Number(process.env.HONUA_DEMO_GP_POLL_INTERVAL_MS ?? 500);
 const results = [];
 
 async function main() {
@@ -140,6 +142,11 @@ async function main() {
     },
   );
 
+  const gpProcess = selectGovernedGpProcess(manifest);
+  const gp = gpProcess === null
+    ? null
+    : await probeGeometryBuffer(results, gpProcess);
+
   const wmsBindings = selectWmsBindings(manifest, wmsAdmission);
   const wmsRelease = manifest.releaseContracts?.wms;
   const wmsContractAdmission = wmsAdmission === "optional-live" ? "live" : wmsAdmission;
@@ -183,6 +190,7 @@ async function main() {
       canaryCollectionId: stacCanaryCollectionId,
       serviceId: stacCanary.service.id,
     },
+    gp,
     wms: {
       admission: wmsAdmission,
       contractAdmission: wmsContractAdmission,
@@ -205,6 +213,225 @@ async function main() {
     if (result.error) process.stdout.write(`  ${result.error}\n`);
   }
   if (receipt.summary.failed > 0) process.exitCode = 1;
+}
+
+export function selectGovernedGpProcess(manifest) {
+  const [major, minor] = String(manifest.schemaVersion ?? "0.0.0")
+    .split(".")
+    .map((value) => Number(value));
+  const required = major > 1 || (major === 1 && minor >= 3);
+  if (!Array.isArray(manifest.processes)) {
+    if (required) throw new Error("published demo manifest has no governed process inventory");
+    return null;
+  }
+
+  const matches = manifest.processes.filter((process) => process?.id === "geometry.buffer");
+  if (matches.length !== 1 || manifest.processes.length !== 1) {
+    throw new Error(
+      `published demo manifest must advertise only geometry.buffer; found ${manifest.processes.length} process(es) and ${matches.length} matching contract(s)`,
+    );
+  }
+
+  const process = matches[0];
+  if (process.execution?.path !== "/ogc/processes/processes/geometry.buffer/execution" ||
+      !process.execution?.modes?.includes("sync") || !process.execution?.modes?.includes("async")) {
+    throw new Error("geometry.buffer contract must advertise its exact sync + async execution path");
+  }
+  if (process.auth?.mode !== "demo-key" || process.auth?.header !== "X-API-Key") {
+    throw new Error("geometry.buffer contract must use the scoped demo-key X-API-Key profile");
+  }
+  if (process.requestBudget?.resetPolicy !== "fixed-window" ||
+      process.requestBudget?.requestsPerWindow !== 60 || process.requestBudget?.windowSeconds !== 60) {
+    throw new Error("geometry.buffer contract must carry the deployed 60/minute fixed-window budget");
+  }
+  if (!/^[0-9a-f]{64}$/u.test(process.canary?.expectedSha256 ?? "")) {
+    throw new Error("geometry.buffer contract must pin an exact canary output SHA-256");
+  }
+  return process;
+}
+
+async function probeGeometryBuffer(canaryResults, process) {
+  if (!gpApiKey) {
+    throw new Error("geometry.buffer canary requires HONUA_DEMO_GP_API_KEY for the scoped demo-process-execute key");
+  }
+  if (!Number.isFinite(gpPollIntervalMs) || gpPollIntervalMs < 10 || gpPollIntervalMs > timeoutMs) {
+    throw new Error("HONUA_DEMO_GP_POLL_INTERVAL_MS must be between 10 and HONUA_DEMO_TIMEOUT_MS");
+  }
+
+  const requestBody = JSON.stringify({ inputs: process.canary.inputs, response: "raw" });
+  const commonHeaders = {
+    accept: process.canary.expectedMediaType,
+    "content-type": "application/json",
+    [process.auth.header]: gpApiKey,
+  };
+  const sync = await probe(
+    canaryResults,
+    "geometry.buffer:sync",
+    process.execution.path,
+    { ...commonHeaders, prefer: process.execution.syncPreference },
+    [200],
+    { method: "POST", body: requestBody },
+  );
+  if (!sync.ok) throw new Error("geometry.buffer synchronous canary failed");
+  assertGpResponse(sync.result, sync.body, process, process.execution.syncPreference);
+
+  const asyncSubmit = await probe(
+    canaryResults,
+    "geometry.buffer:async-submit",
+    process.execution.path,
+    { ...commonHeaders, accept: "application/json", prefer: process.execution.asyncPreference },
+    [201],
+    { method: "POST", body: JSON.stringify({ inputs: process.canary.inputs, response: "document" }) },
+  );
+  if (!asyncSubmit.ok) throw new Error("geometry.buffer asynchronous submission failed");
+  if (asyncSubmit.result.preferenceApplied !== process.execution.asyncPreference) {
+    failResult(asyncSubmit.result, `missing Preference-Applied: ${process.execution.asyncPreference}`);
+    throw new Error("geometry.buffer asynchronous preference was not applied");
+  }
+
+  let submitDocument;
+  try {
+    submitDocument = JSON.parse(asyncSubmit.body.toString("utf8"));
+  } catch (error) {
+    failResult(asyncSubmit.result, `invalid async submission JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error("geometry.buffer asynchronous submission returned invalid JSON");
+  }
+  const jobId = submitDocument.jobID;
+  if (typeof jobId !== "string" || jobId.length === 0) {
+    failResult(asyncSubmit.result, "async submission has no jobID");
+    throw new Error("geometry.buffer asynchronous submission has no job identity");
+  }
+  asyncSubmit.result.semantic = { jobId };
+
+  const statusPath = process.lifecycle.statusPath.replace("{jobId}", encodeURIComponent(jobId));
+  const observedStatuses = [];
+  const maxAttempts = Math.max(1, Math.ceil(timeoutMs / gpPollIntervalMs));
+  let terminal = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const statusResponse = await probe(
+      canaryResults,
+      `geometry.buffer:async-status:${attempt}`,
+      statusPath,
+      { accept: "application/json", [process.auth.header]: gpApiKey },
+      [200],
+    );
+    if (!statusResponse.ok) throw new Error(`geometry.buffer status probe ${attempt} failed`);
+    let statusDocument;
+    try {
+      statusDocument = JSON.parse(statusResponse.body.toString("utf8"));
+    } catch (error) {
+      failResult(statusResponse.result, `invalid job status JSON: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error("geometry.buffer job status returned invalid JSON");
+    }
+    const status = statusDocument.status;
+    if (typeof status !== "string" || status.length === 0) {
+      failResult(statusResponse.result, "job status response has no status");
+      throw new Error("geometry.buffer job status has no state");
+    }
+    if (observedStatuses.at(-1) !== status) observedStatuses.push(status);
+    statusResponse.result.semantic = { jobId, status };
+    if (["successful", "failed", "dismissed"].includes(status)) {
+      terminal = status;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, gpPollIntervalMs));
+  }
+  if (terminal !== "successful") {
+    throw new Error(`geometry.buffer job ${jobId} ended as ${terminal ?? "non-terminal timeout"}`);
+  }
+
+  const resultsPath = process.lifecycle.resultsPath.replace("{jobId}", encodeURIComponent(jobId));
+  const jobResults = await probe(
+    canaryResults,
+    "geometry.buffer:async-results",
+    resultsPath,
+    { accept: "application/json", [process.auth.header]: gpApiKey },
+    [200],
+  );
+  if (!jobResults.ok) throw new Error("geometry.buffer results probe failed");
+  let resultsDocument;
+  try {
+    resultsDocument = JSON.parse(jobResults.body.toString("utf8"));
+  } catch (error) {
+    failResult(jobResults.result, `invalid job results JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error("geometry.buffer job results returned invalid JSON");
+  }
+  const output = resultsDocument[process.output.name];
+  if (!output || output.kind !== process.output.kind || output.type !== process.output.mediaType ||
+      typeof output.href !== "string") {
+    failResult(jobResults.result, `missing ${process.output.name} ${process.output.kind} artifact`);
+    throw new Error("geometry.buffer job results did not expose the governed artifact");
+  }
+  const artifact = await readGpArtifact(canaryResults, process, output.href);
+  const artifactSha256 = createHash("sha256").update(artifact).digest("hex");
+  if (artifactSha256 !== process.canary.expectedSha256) {
+    failResult(jobResults.result, `artifact SHA-256 ${artifactSha256} does not match pinned ${process.canary.expectedSha256}`);
+    throw new Error("geometry.buffer async artifact drifted from the pinned geometry");
+  }
+  jobResults.result.semantic = {
+    jobId,
+    resultPackageArtifactId: output.id ?? null,
+    outputName: process.output.name,
+    artifactSha256,
+    observedStatuses,
+  };
+
+  return {
+    processId: process.id,
+    authMode: process.auth.mode,
+    jobId,
+    outputName: process.output.name,
+    artifactId: output.id ?? null,
+    expectedSha256: process.canary.expectedSha256,
+    syncSha256: sync.result.sha256,
+    asyncSha256: artifactSha256,
+    observedStatuses,
+    requestBudget: process.requestBudget,
+  };
+}
+
+function assertGpResponse(result, body, process, preference) {
+  if (result.preferenceApplied !== preference) {
+    failResult(result, `missing Preference-Applied: ${preference}`);
+  } else if (!(result.contentType ?? "").toLowerCase().startsWith(process.canary.expectedMediaType)) {
+    failResult(result, `expected ${process.canary.expectedMediaType}, received ${result.contentType ?? "none"}`);
+  } else if (result.sha256 !== process.canary.expectedSha256) {
+    failResult(result, `geometry SHA-256 ${result.sha256} does not match pinned ${process.canary.expectedSha256}`);
+  } else if (result.rateLimit?.limit !== String(process.requestBudget.requestsPerWindow) ||
+      !result.rateLimit.remaining || !result.rateLimit.reset) {
+    failResult(result, "deployed response did not prove the governed fixed-window request budget");
+  }
+  if (!result.passed || body.length === 0) throw new Error("geometry.buffer synchronous response contract failed");
+  result.semantic = {
+    processId: process.id,
+    outputSha256: result.sha256,
+    requestBudget: process.requestBudget,
+  };
+}
+
+async function readGpArtifact(canaryResults, process, href) {
+  const dataUri = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/u.exec(href);
+  if (dataUri) {
+    if (dataUri[1] !== process.output.mediaType) {
+      throw new Error(`geometry.buffer artifact media type ${dataUri[1]} does not match ${process.output.mediaType}`);
+    }
+    return Buffer.from(dataUri[2], "base64");
+  }
+
+  const artifactUrl = new URL(href, baseUrl);
+  if (artifactUrl.origin !== new URL(baseUrl).origin) {
+    throw new Error("geometry.buffer artifact URL left the governed demo origin");
+  }
+  const artifactPath = `${artifactUrl.pathname}${artifactUrl.search}`;
+  const response = await probe(
+    canaryResults,
+    "geometry.buffer:async-artifact",
+    artifactPath,
+    { accept: process.output.mediaType, [process.auth.header]: gpApiKey },
+    [200],
+  );
+  if (!response.ok) throw new Error("geometry.buffer artifact content probe failed");
+  return response.body;
 }
 
 export function selectWmsBindings(manifest, admission) {
@@ -555,6 +782,13 @@ async function probe(results, name, urlPath, headers, expectedStatuses, requestO
     result.latencyMs = Math.round(performance.now() - started);
     result.bytes = body.byteLength;
     result.contentType = response.headers.get("content-type");
+    result.location = response.headers.get("location");
+    result.preferenceApplied = response.headers.get("preference-applied");
+    result.rateLimit = {
+      limit: response.headers.get("x-ratelimit-limit"),
+      remaining: response.headers.get("x-ratelimit-remaining"),
+      reset: response.headers.get("x-ratelimit-reset"),
+    };
     result.sha256 = createHash("sha256").update(body).digest("hex");
     result.passed = expectedStatuses.includes(response.status) && body.byteLength > 0;
     if (!result.passed) result.error = `expected HTTP ${expectedStatuses.join(" or ")} with a non-empty body`;
