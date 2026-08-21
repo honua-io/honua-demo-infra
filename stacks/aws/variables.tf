@@ -282,3 +282,51 @@ variable "stac_seed_metadata_environment" {
     error_message = "stac_seed_metadata_environment must be a non-empty Metadata v2 environment identifier."
   }
 }
+
+# ---------------------------------------------------------------------------
+# Feature streaming (streaming.tf) — the snapshot payload budget that keeps a
+# baseline deliverable through the buffered ~6 MB gateway response, and the
+# controlled-conformance mutation surface (off until a dedicated source is
+# provisioned). See streaming.tf for why the server default is not sufficient
+# here, and runbook/streaming-snapshot-conformance.md for the enablement
+# procedure.
+# ---------------------------------------------------------------------------
+
+variable "streaming_max_snapshot_bytes" {
+  description = "FeatureStreaming__MaxSnapshotBytes — byte budget for ONE baseline snapshot. Must stay below the gateway's buffered-response ceiling (~6 MB) WITH headroom, because snapshot-then-delta keeps appending delta frames to the same response. 2 MiB leaves ~4 MB of headroom; the server default (4 MiB) does not and can still produce a gateway-manufactured untyped 500."
+  type        = number
+  default     = 2097152
+
+  validation {
+    condition     = var.streaming_max_snapshot_bytes > 0 && var.streaming_max_snapshot_bytes <= 4194304
+    error_message = "streaming_max_snapshot_bytes must be positive and at most 4194304 (4 MiB, the server default) — a larger budget leaves no headroom under the ~6 MB buffered-response ceiling."
+  }
+}
+
+variable "streaming_conformance_enabled" {
+  description = "Enable the controlled-conformance mutation surface (honua-server#3038 REQ-005) so a scheduled SDK evidence run can drive one correlated mutation and observe it on every advertised transport. Off by default: turning it on without a dedicated conformance source lets a bounded write land in a real demo layer. Requires streaming_conformance_service_id/layer_id and an operator-issued credential for the admin-scoped ConformanceMutate policy."
+  type        = bool
+  default     = false
+}
+
+variable "streaming_conformance_service_id" {
+  description = "Service id of the DEDICATED conformance source. Required when streaming_conformance_enabled. Must be a small layer whose baseline completes — a truncated baseline is fail-closed and ends the stream, so a large layer can never stay open for the correlated mutation. Never point this at a layer the demo page serves."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = !var.streaming_conformance_enabled || trimspace(var.streaming_conformance_service_id) != ""
+    error_message = "streaming_conformance_service_id is required when streaming_conformance_enabled is true; a typo must fail the plan rather than silently resolve to a shared demo service."
+  }
+}
+
+variable "streaming_conformance_layer_id" {
+  description = "Layer id within streaming_conformance_service_id that controlled records are written to. The layer must carry the run-ownership columns the server writes (conformance_run_id, and conformance_label when labels are used)."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = !var.streaming_conformance_enabled || var.streaming_conformance_layer_id > 0
+    error_message = "streaming_conformance_layer_id must identify a real layer when streaming_conformance_enabled is true."
+  }
+}
