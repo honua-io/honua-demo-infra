@@ -141,23 +141,20 @@ activates it. Existing graph entities (the 11 `maui-*` layers) are preserved.
 ### Run it
 
 > **Do not derive the metadata environment from `server.deploymentEnvironment`.**
-> The manifest field reports `IWebHostEnvironment.EnvironmentName` (`Production` on
-> the demo), while the metadata graph independently reads `Metadata__Environment`,
-> then `Environment`, with a `default` fallback. Operator records say the successful
-> 2026-07-20/21 seed apply used `HONUA_SEED_ENV=Production`, and the live catalog
-> confirms those rows are active, but the manifest alone does not prove that mapping.
-> Before any repeat apply, inspect `Metadata__Environment` / `Environment` on the
-> serving Lambda version or query the active environment in `metadata_v2_current`.
+> Read-only database evidence captured for honua-server#3384 proves that the one
+> active Metadata v2 pointer is `Production:52`. The demo Terraform contract now
+> rejects any seed environment other than exact `Production`.
+>
+> **Live recovery block:** `honua.features` is missing while 222,124
+> `honua.feature_changes` rows remain. The managed seed must not be invoked until
+> the restore-versus-rebaseline decision in `stac-live-recovery-3384.md` is resolved.
 
-**[OPERATOR]** Set mandatory `SEED_ENV` to the env id the serving Lambda is configured with —
-this MUST match the server's `Metadata__Environment` / `Environment` setting (it defaults
-to `default`; confirm against the serving Lambda's environment variables or the active
-`metadata_v2_current` row — the capabilities manifest's host-environment field is not
-the metadata environment):
+**[OPERATOR]** Bind the demo to the exact active Metadata v2 environment:
 
 ```bash
 # Local / direct-psql target:
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+SEED_ENV=Production
+test "$SEED_ENV" = Production
 PGHOST=... PGPORT=5432 PGUSER=honua PGDATABASE=honua PGPASSWORD=... \
 HONUA_SEED_ENV="$SEED_ENV" HONUA_SEED_SCHEMA=honua \
   tests/seed/apply-demo-stac-seed.sh
@@ -180,7 +177,8 @@ surface and must not be used for managed seeding or receipt reads.
 
 ```bash
 # [OPERATOR] validate the repository pin, then invoke the allowlisted manager
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+SEED_ENV=Production
+test "$SEED_ENV" = Production
 seed_ref=1fc339a3692289e9bc4ec90ed1533c5eb22a995e
 seed_sha256=de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687
 curl --fail --location \
@@ -204,6 +202,8 @@ jq -e --arg sha "$seed_sha256" --arg env "$SEED_ENV" --arg commit "$seed_ref" \
   '.format == "honua.demo.stac-seed-attestation.v1" and
    .seedId == "demo-stac-imagery-v1" and .sourceSha256 == $sha and
    .serverCommit == $commit and .metadataEnvironment == $env and
+   .receiptRole == "honua_demo_seed_receipt" and
+   .receiptRoleReconciled == true and
    (.executionSha256 | test("^[0-9a-f]{64}$")) and .metadataRevision >= 1' \
   /tmp/demo-stac-seed-response.json
 ```
@@ -230,14 +230,11 @@ rejects a receipt unless its independently measured source URL/digest/commit mat
 checked-out manifest and its recorded metadata revision is still current.
 
 ```bash
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-# One-time repository settings from Terraform outputs and the same serving config:
+# One-time repository settings from Terraform outputs:
 gh variable set HONUA_DEMO_STAC_RECEIPT_ROLE_ARN \
   --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_github_role_arn)"
 gh variable set HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME \
   --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_function_name)"
-gh variable set HONUA_DEMO_STAC_METADATA_ENVIRONMENT \
-  --repo honua-io/honua-demo-infra --body "$SEED_ENV"
 
 # Set this from the successful deployment output, not from an untrusted public response.
 DEPLOYMENT_REVISION=<exact-40-character-runtime-sha>

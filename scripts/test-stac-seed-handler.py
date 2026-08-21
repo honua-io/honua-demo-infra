@@ -123,6 +123,8 @@ class StacSeedHandlerTests(unittest.TestCase):
         self.assertIn("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA honua", all_sql)
         self.assertIn("SELECT 1 FROM pg_proc", all_sql)
         self.assertIn("GRANT SELECT ON honua.demo_seed_revisions", all_sql)
+        self.assertEqual("honua_demo_seed_receipt", result["receiptRole"])
+        self.assertIs(True, result["receiptRoleReconciled"])
 
     def test_statement_splitter_preserves_exact_program_and_postgresql_quoting(self):
         script = (
@@ -153,6 +155,7 @@ class StacSeedHandlerTests(unittest.TestCase):
              patch.object(self.handler, "_connect", return_value=connection):
             receipt = self.handler._receipt({"operation": "read-demo-stac-seed-receipt"})
         self.assertEqual(7, receipt["currentRevision"])
+        self.assertEqual("honua_demo_seed_receipt", receipt["receiptRole"])
         self.assertEqual(1, len(connection.calls), "receipt surface must execute one repository-owned query")
 
 

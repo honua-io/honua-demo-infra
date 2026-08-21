@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,10 @@ const expectedStacSeedUrl = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_URL ?? ""
 const expectedStacServerCommit = (process.env.HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT ?? "").trim();
 const expectedStacSeedSha256 = (process.env.HONUA_DEMO_EXPECTED_STAC_SEED_SHA256 ?? "").trim();
 const expectedManifestSha256 = (process.env.HONUA_DEMO_EXPECTED_MANIFEST_SHA256 ?? "").trim();
+const requireStacSeedBinding = process.env.HONUA_DEMO_REQUIRE_STAC_SEED_BINDING === "true";
+const expectedStacMetadataEnvironment = (process.env.HONUA_DEMO_EXPECTED_STAC_METADATA_ENVIRONMENT ?? "").trim();
+const expectedStacMetadataRevisionText = (process.env.HONUA_DEMO_EXPECTED_STAC_METADATA_REVISION ?? "").trim();
+const expectedStacExecutionSha256 = (process.env.HONUA_DEMO_EXPECTED_STAC_EXECUTION_SHA256 ?? "").trim();
 const stacCanaryCollectionId = process.env.HONUA_DEMO_STAC_CANARY_COLLECTION_ID ?? "90810";
 const results = [];
 
@@ -34,6 +38,15 @@ async function main() {
     if (!expectedStacSeedUrl || !/^[0-9a-f]{40}$/u.test(expectedStacServerCommit) || !/^[0-9a-f]{64}$/u.test(expectedStacSeedSha256) || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)) {
       throw new Error("dispatch requires exact checked-out STAC seed URL, server commit, source digest, and manifest SHA-256 bindings");
     }
+  }
+  const expectedStacMetadataRevision = Number(expectedStacMetadataRevisionText);
+  if (requireStacSeedBinding && (
+    expectedStacMetadataEnvironment !== "Production"
+    || !Number.isSafeInteger(expectedStacMetadataRevision)
+    || expectedStacMetadataRevision < 1
+    || !/^[0-9a-f]{64}$/u.test(expectedStacExecutionSha256)
+  )) {
+    throw new Error("canary requires an active Production STAC seed revision and exact execution digest");
   }
 
   await probeLanding(results);
@@ -182,6 +195,9 @@ async function main() {
     stac: {
       canaryCollectionId: stacCanaryCollectionId,
       serviceId: stacCanary.service.id,
+      metadataEnvironment: expectedStacMetadataEnvironment || null,
+      metadataRevision: requireStacSeedBinding ? expectedStacMetadataRevision : null,
+      executionSha256: expectedStacExecutionSha256 || null,
     },
     wms: {
       admission: wmsAdmission,
@@ -534,10 +550,12 @@ async function probeRange(results, name, urlPath) { return probe(results, name, 
 
 async function probe(results, name, urlPath, headers, expectedStatuses, requestOptions = {}) {
   const started = performance.now();
+  const correlationId = `live-canary-${randomUUID()}`;
   const result = {
     name,
     method: requestOptions.method ?? "GET",
     url: `${baseUrl}${urlPath}`,
+    correlationId,
     passed: false,
     status: 0,
     latencyMs: 0,
@@ -547,7 +565,7 @@ async function probe(results, name, urlPath, headers, expectedStatuses, requestO
   try {
     const response = await fetch(result.url, {
       ...requestOptions,
-      headers: { ...(requestOptions.headers ?? {}), ...headers },
+      headers: { ...(requestOptions.headers ?? {}), ...headers, "x-correlation-id": correlationId },
       signal: AbortSignal.timeout(timeoutMs),
     });
     const body = Buffer.from(await response.arrayBuffer());

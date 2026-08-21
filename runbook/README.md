@@ -41,8 +41,13 @@ attempt and preserves both earlier operator paths and evidence.
 
 `db-recovery-and-migrations-092-105.md` governs the separate manual RDS
 recovery point and one-attempt, immutable, migrations-only 092-105 runner.
-It never toggles or invokes an application `$LATEST`, and it leaves candidate
-`:40`, live `:39`, and preflight helper `:3` unchanged.
+It never toggles or invokes an application `$LATEST`, and it requires the
+observed serving boundary `live -> :42` to remain unchanged.
+
+`stac-live-recovery-3384.md` records the live STAC 500 evidence and coordinates
+the migration, exact `Production` seed binding, query-only receipt, and canary.
+It stops before seeding because the missing `honua.features` relation has
+222,124 retained change rows and no reviewed relation-loss rebaseline exists.
 
 For the capability runbook, no separate probe/verification scripts were moved:
 its verification commands are inline `bash`/`curl` blocks within the markdown
