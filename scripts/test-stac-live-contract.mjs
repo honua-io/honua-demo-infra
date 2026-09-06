@@ -14,6 +14,9 @@ const collectionId = "90810";
 const stacServerCommit = "1fc339a3692289e9bc4ec90ed1533c5eb22a995e";
 const stacSeedUrl = `https://raw.githubusercontent.com/honua-io/honua-server/${stacServerCommit}/tests/seed/demo-stac-imagery-v1.sql`;
 const stacSeedSha256 = "d".repeat(64);
+const stacMetadataEnvironment = "Production";
+const stacMetadataRevision = 53;
+const stacExecutionSha256 = "e".repeat(64);
 
 test("STAC canary binds deployment revision and non-empty collection results", async () => {
   const harness = await createHarness(false);
@@ -26,6 +29,9 @@ test("STAC canary binds deployment revision and non-empty collection results", a
     assert.equal(receipt.deployment.revision, deploymentRevision);
     assert.equal(receipt.stac.canaryCollectionId, collectionId);
     assert.equal(receipt.stac.serviceId, "demo-stac");
+    assert.equal(receipt.stac.metadataEnvironment, stacMetadataEnvironment);
+    assert.equal(receipt.stac.metadataRevision, stacMetadataRevision);
+    assert.equal(receipt.stac.executionSha256, stacExecutionSha256);
     assert.equal(receipt.manifest.stacSeedUrl, stacSeedUrl);
     assert.equal(receipt.manifest.stacServerCommit, stacServerCommit);
     assert.equal(receipt.manifest.stacSeedSha256, stacSeedSha256);
@@ -33,8 +39,10 @@ test("STAC canary binds deployment revision and non-empty collection results", a
       const proof = receipt.results.find((entry) => entry.name === `demo-stac:stac:${collectionId}:${suffix}`);
       assert.equal(proof.semantic.collectionId, collectionId);
       assert.deepEqual(proof.semantic.itemIds, ["reef-scene-1"]);
+      assert.match(proof.correlationId, /^live-canary-[0-9a-f-]{36}$/u);
     }
     assert.deepEqual(harness.searchBodies, [{ collections: [collectionId], limit: 2 }]);
+    assert.equal(new Set(harness.stacCorrelationIds).size, 2);
   } finally {
     await harness.close();
   }
@@ -78,6 +86,26 @@ test("STAC dispatch binding rejects seed URL, commit, and manifest digest drift"
   }
 });
 
+test("STAC canary fails closed without the active Production seed revision binding", async (t) => {
+  for (const [name, override] of [
+    ["environment", { HONUA_DEMO_EXPECTED_STAC_METADATA_ENVIRONMENT: "default" }],
+    ["revision", { HONUA_DEMO_EXPECTED_STAC_METADATA_REVISION: "" }],
+    ["execution digest", { HONUA_DEMO_EXPECTED_STAC_EXECUTION_SHA256: "invalid" }],
+  ]) {
+    await t.test(name, async () => {
+      const harness = await createHarness(false);
+      try {
+        const result = await runCanary(harness.baseUrl, harness.evidencePath, override);
+        assert.notEqual(result.code, 0);
+        const receipt = JSON.parse(await readFile(harness.evidencePath, "utf8"));
+        assert.match(receipt.fatal, /active Production STAC seed revision/u);
+      } finally {
+        await harness.close();
+      }
+    });
+  }
+});
+
 test("fatal STAC advertisement failure preserves accumulated request evidence", async () => {
   const harness = await createHarness(false, false);
   try {
@@ -113,8 +141,13 @@ async function createHarness(emptySearch, advertiseStac = true, advertisedCollec
   const temp = await mkdtemp(path.join(os.tmpdir(), "honua-stac-canary-"));
   const evidencePath = path.join(temp, "receipt.json");
   const searchBodies = [];
+  const stacCorrelationIds = [];
   const server = http.createServer(async (request, response) => {
     const body = await readRequestBody(request);
+    if (request.url === `/stac/collections/${collectionId}/items?limit=2`
+        || (request.method === "POST" && request.url === "/stac/search")) {
+      stacCorrelationIds.push(request.headers["x-correlation-id"]);
+    }
     if (request.method === "POST" && request.url === "/stac/search") {
       searchBodies.push(JSON.parse(body));
     }
@@ -129,6 +162,7 @@ async function createHarness(emptySearch, advertiseStac = true, advertisedCollec
     baseUrl: `http://127.0.0.1:${port}`,
     evidencePath,
     searchBodies,
+    stacCorrelationIds,
     close: async () => {
       await new Promise((resolve) => server.close(resolve));
       await rm(temp, { recursive: true, force: true });
@@ -212,6 +246,10 @@ function runCanary(baseUrl, evidencePath, envOverride = {}) {
         HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: stacServerCommit,
         HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: stacSeedSha256,
         HONUA_DEMO_EXPECTED_MANIFEST_SHA256: createHash("sha256").update(manifestBytes).digest("hex"),
+        HONUA_DEMO_REQUIRE_STAC_SEED_BINDING: "true",
+        HONUA_DEMO_EXPECTED_STAC_METADATA_ENVIRONMENT: stacMetadataEnvironment,
+        HONUA_DEMO_EXPECTED_STAC_METADATA_REVISION: String(stacMetadataRevision),
+        HONUA_DEMO_EXPECTED_STAC_EXECUTION_SHA256: stacExecutionSha256,
         ...envOverride,
       },
       stdio: ["ignore", "pipe", "pipe"],

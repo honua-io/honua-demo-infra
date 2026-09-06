@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNBOOK = ROOT / "runbook" / "demo-honua-io-capability-runbook.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "live-canary.yml"
 IAC = ROOT / "stacks" / "aws" / "stac-seed-gate.tf"
+TFVARS = ROOT / "stacks" / "aws" / "demo.tfvars"
+HANDLER = ROOT / "stacks" / "aws" / "postgis-bootstrap" / "handler.py"
+RECOVERY_RUNBOOK = ROOT / "runbook" / "stac-live-recovery-3384.md"
 
 
 class StacRunbookContractTests(unittest.TestCase):
@@ -21,7 +24,8 @@ class StacRunbookContractTests(unittest.TestCase):
         self.assertIn("already-authorized break-glass", runbook)
         self.assertIn("effective database-administrator", runbook)
         self.assertIn("break-glass-sql", runbook)
-        self.assertIn(': "${SEED_ENV:?', runbook)
+        self.assertIn("SEED_ENV=Production", runbook)
+        self.assertIn('test "$SEED_ENV" = Production', runbook)
         self.assertIn("--expected-source-sha256", runbook)
 
     def test_dispatch_consumes_query_only_receipt(self) -> None:
@@ -31,16 +35,40 @@ class StacRunbookContractTests(unittest.TestCase):
         self.assertIn("managed-seed-receipt.json", workflow)
         self.assertIn("receipt.metadataRevision !== receipt.currentRevision", workflow)
         self.assertIn("HONUA_DEMO_STAC_RECEIPT_ROLE_ARN", workflow)
+        self.assertIn('EXPECTED_METADATA_ENVIRONMENT: Production', workflow)
+        self.assertIn('receiptRole: "honua_demo_seed_receipt"', workflow)
+        self.assertIn('HONUA_DEMO_REQUIRE_STAC_SEED_BINDING: "true"', workflow)
+        receipt_segment = workflow[
+            workflow.index("Require managed seed receipt binding") : workflow.index("Probe every published demo service family")
+        ]
+        self.assertNotIn("github.event_name == 'workflow_dispatch'", receipt_segment)
         self.assertNotIn("apply-demo-stac-seed", workflow)
 
     def test_iac_enforces_invocation_and_database_privilege_split(self) -> None:
         iac = IAC.read_text(encoding="utf-8")
+        tfvars = TFVARS.read_text(encoding="utf-8")
         self.assertIn("read-query-only-db-secret", iac)
         self.assertIn("aws_secretsmanager_secret.stac_seed_receipt_connection.arn", iac)
         self.assertIn("repo:honua-io/honua-demo-infra:ref:refs/heads/trunk", iac)
         self.assertIn("Resource = [aws_lambda_function.stac_seed_receipt.arn]", iac)
         github_policy = iac[iac.index('resource "aws_iam_role_policy" "github_stac_seed_receipt"') :]
         self.assertNotIn("stac_seed_manager.arn", github_policy)
+        self.assertIn('var.stac_seed_metadata_environment == "Production"', iac)
+        self.assertIn('stac_seed_metadata_environment = "Production"', tfvars)
+
+    def test_receipt_role_reconciliation_is_explicit(self) -> None:
+        handler = HANDLER.read_text(encoding="utf-8")
+        self.assertIn('"receiptRole": _RECEIPT_ROLE', handler)
+        self.assertIn('"receiptRoleReconciled": True', handler)
+
+    def test_live_recovery_stops_before_unsafe_rebaseline(self) -> None:
+        runbook = RECOVERY_RUNBOOK.read_text(encoding="utf-8")
+        self.assertIn("222,124 retained change rows", runbook)
+        self.assertIn("no complete relation-loss", runbook)
+        self.assertIn("rebaseline contract", runbook)
+        self.assertIn("Do not invoke the STAC seed manager yet", runbook)
+        self.assertIn("Do not bypass the seed guard", runbook)
+        self.assertIn("automated snapshots from", runbook)
 
     def test_lambdas_have_separate_functional_nat_and_database_egress(self) -> None:
         iac = IAC.read_text(encoding="utf-8")
