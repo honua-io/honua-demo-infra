@@ -27,6 +27,9 @@ on:
       - "scripts/test-wms-live-contract.mjs"
       - "scripts/client-compat-canary.mjs"
       - "stacks/aws/client-compat-seed.v1.json"
+      - "stacks/aws/demo.tfvars"
+      - "stacks/aws/postgis-bootstrap/handler.py"
+      - "stacks/aws/stac-seed-gate.tf"
       - ".github/workflows/live-canary.yml"
 
 permissions:
@@ -74,26 +77,22 @@ jobs:
           NODE
 
       - name: Require managed seed receipt binding
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           RECEIPT_ROLE_ARN: ${{ vars.HONUA_DEMO_STAC_RECEIPT_ROLE_ARN }}
           RECEIPT_FUNCTION_NAME: ${{ vars.HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME }}
-          METADATA_ENVIRONMENT: ${{ vars.HONUA_DEMO_STAC_METADATA_ENVIRONMENT }}
         shell: bash
         run: |
+          test "$GITHUB_REF" = "refs/heads/trunk"
           : "${RECEIPT_ROLE_ARN:?Set HONUA_DEMO_STAC_RECEIPT_ROLE_ARN from Terraform output}"
           : "${RECEIPT_FUNCTION_NAME:?Set HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME from Terraform output}"
-          : "${METADATA_ENVIRONMENT:?Set HONUA_DEMO_STAC_METADATA_ENVIRONMENT from serving Lambda configuration}"
 
       - name: Configure AWS credentials for query-only receipt
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.HONUA_DEMO_STAC_RECEIPT_ROLE_ARN }}
           aws-region: us-west-2
 
       - name: Read trusted in-VPC seed receipt
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           RECEIPT_FUNCTION_NAME: ${{ vars.HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME }}
         shell: bash
@@ -107,16 +106,16 @@ jobs:
             > .artifacts/live-demo-canary/managed-seed-invoke.json
 
       - name: Bind receipt to checked-out seed and active metadata revision
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        id: seed_receipt
         env:
           RECEIPT_PATH: .artifacts/live-demo-canary/managed-seed-receipt.json
           EXPECTED_SOURCE_URL: ${{ steps.contract.outputs.stac_seed_url }}
           EXPECTED_SOURCE_SHA256: ${{ steps.contract.outputs.stac_seed_sha256 }}
           EXPECTED_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
-          EXPECTED_METADATA_ENVIRONMENT: ${{ vars.HONUA_DEMO_STAC_METADATA_ENVIRONMENT }}
+          EXPECTED_METADATA_ENVIRONMENT: Production
         run: |
           node <<'NODE'
-          const { readFileSync } = require("node:fs");
+          const { appendFileSync, readFileSync } = require("node:fs");
           const receipt = JSON.parse(readFileSync(process.env.RECEIPT_PATH, "utf8"));
           const required = {
             format: "honua.demo.stac-seed-receipt.v1",
@@ -125,6 +124,7 @@ jobs:
             sourceSha256: process.env.EXPECTED_SOURCE_SHA256,
             serverCommit: process.env.EXPECTED_SERVER_COMMIT,
             metadataEnvironment: process.env.EXPECTED_METADATA_ENVIRONMENT,
+            receiptRole: "honua_demo_seed_receipt",
           };
           for (const [key, value] of Object.entries(required)) {
             if (receipt[key] !== value) throw new Error(`managed seed receipt ${key} mismatch`);
@@ -136,6 +136,9 @@ jobs:
               receipt.metadataRevision !== receipt.currentRevision) {
             throw new Error("managed seed receipt is not bound to the active metadata revision");
           }
+          appendFileSync(process.env.GITHUB_OUTPUT, `metadata_environment=${receipt.metadataEnvironment}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `metadata_revision=${receipt.metadataRevision}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `execution_sha256=${receipt.executionSha256}\n`);
           NODE
 
       - name: Probe every published demo service family
@@ -146,6 +149,10 @@ jobs:
           HONUA_DEMO_EXPECTED_STAC_SERVER_COMMIT: ${{ steps.contract.outputs.stac_seed_server_commit }}
           HONUA_DEMO_EXPECTED_STAC_SEED_SHA256: ${{ steps.contract.outputs.stac_seed_sha256 }}
           HONUA_DEMO_EXPECTED_MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
+          HONUA_DEMO_REQUIRE_STAC_SEED_BINDING: "true"
+          HONUA_DEMO_EXPECTED_STAC_METADATA_ENVIRONMENT: ${{ steps.seed_receipt.outputs.metadata_environment }}
+          HONUA_DEMO_EXPECTED_STAC_METADATA_REVISION: ${{ steps.seed_receipt.outputs.metadata_revision }}
+          HONUA_DEMO_EXPECTED_STAC_EXECUTION_SHA256: ${{ steps.seed_receipt.outputs.execution_sha256 }}
           HONUA_DEMO_WMS_ADMISSION: ${{ inputs.wms_admission || 'optional-live' }}
           HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}
           HONUA_DEMO_WMS_SERVER_COMMIT: ${{ vars.HONUA_DEMO_WMS_SERVER_COMMIT }}

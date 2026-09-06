@@ -385,6 +385,8 @@ def _managed_seed(event):
         "executionSha256": execution_sha256,
         "metadataEnvironment": environment,
         "metadataRevision": revision,
+        "receiptRole": _RECEIPT_ROLE,
+        "receiptRoleReconciled": True,
     }
 
 
@@ -419,6 +421,7 @@ def _receipt(event):
             "metadataEnvironment": row[5],
             "metadataRevision": int(row[6]),
             "currentRevision": int(row[7]),
+            "receiptRole": _RECEIPT_ROLE,
         }
     finally:
         connection.close()
