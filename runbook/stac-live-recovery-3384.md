@@ -261,3 +261,58 @@ The seed attestation must report:
 The trunk live canary then reads the query-only receipt. It passes only when
 the receipt's revision is still the active `Production` revision and both
 collection items and collection-bound POST search return non-empty results.
+
+## Execution record
+
+Each **[APPLY]** step is recorded here once it has run. The full outputs are on
+honua-io/honua-demo-infra#79. The evidence files live under
+`~/.honua-runtime-proof/stac-3384-restore/lane-proof-20260916T190724Z` on the
+executing workstation.
+
+The coordinator approved steps 2–3 of the procedure above (plan-summary steps
+3–4) at PR head `25678c7` before merge. The cutover therefore ran against the
+evidence directory holding the reviewed pre-cutover proof, not a
+merge-SHA-named directory. The one-attempt marker lives in that directory.
+
+### Snapshot copy: 2026-09-16T19:54:25Z, available 19:55:55Z
+
+- The source `rds:honua-demo-demo-postgres-2026-09-16-07-25` was copied to
+  `honua-demo-stac-3384-features-12cf791316b8`: a manual, encrypted copy of
+  `honua-demo-demo-postgres`, created 2026-09-16T19:55:38.923Z.
+- Tags: `HonuaRecovery=stac-3384` and
+  `FeaturesContentSha256=12cf791316b8739de47844f2dc1724879f4514570879cf4508ec32902297521e`.
+
+### Restore cutover (attempt 1): 2026-09-16T19:56:52Z to 19:57:07Z
+
+- One `cutover` invocation printed
+  `post-cutover proof: PASS sha256=2681a6dbfd7a4c208a19e597703a367e02bb01968cf6b3f0ed93fece49606c85`.
+- `honua.features` now holds 110,229 rows with content SHA-256
+  `12cf791316b8739de47844f2dc1724879f4514570879cf4508ec32902297521e`.
+- Its key set equals the journal net-live set
+  (`573a62ff64d5c8784566f95800cfcaba771fa247699bbfcf5ffd93ff6ec7a24c`).
+- The journal is unchanged at 222,124 rows. Replicas are 0.
+- The owned sequence is `honua.features_objectid_seq`, and the tracking trigger
+  is attached.
+
+| Evidence file | SHA-256 |
+|---|---|
+| `pre-cutover-proof.json` | `3b8e014e4396b9324479d7a8779ed05de2bb5b87f1902181ba6c4f786144c26c` |
+| `cutover-attempt.json` | `56d5cdc6500be72744ea99a2e53fb791682c80d60a992112b13d8a8f1cddc8be` |
+| `cutover-event.json` | `ee83e3bfd29adb1d87b638ea51b503ec71a22b5ea91ab37482ec43ab5dcc923a` |
+| `cutover-response.json` | `12aaa79db49ee3bdf2da947e946037a7c16d16def9184bcc44bc74ddf51e15c7` |
+| `post-cutover-proof.json` | `2681a6dbfd7a4c208a19e597703a367e02bb01968cf6b3f0ed93fece49606c85` |
+
+### Serving re-probe (read-only): 2026-09-16T19:57Z
+
+On serving `live -> :42`:
+
+- `GET /stac/collections/90810/items?limit=2` returned 500 before the cutover
+  and 200 after it. Correlation id
+  `00-6aaaf4a2544a91523aefd20e521f4193-61930eaee8c36cf8-00`; 2 of 4 matched.
+- `POST /stac/search` returned 500 before the cutover and 200 after it.
+  Correlation id `00-6aaaf4a3495a44a9196cc61b14c0f9ce-31df31ea296c7468-00`;
+  2 of 4 matched.
+- The unbound live canary passed 29/29.
+
+Steps 5 onward (main stack, migration runner, migrations 092-105, seed, and the
+receipt variables) have not run.
