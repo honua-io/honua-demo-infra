@@ -9,6 +9,13 @@
 
 data "aws_caller_identity" "stac_seed" {}
 
+check "stac_seed_targets_serving_metadata_environment" {
+  assert {
+    condition     = var.stac_seed_metadata_environment == "Production"
+    error_message = "The live demo serves Metadata v2 environment Production; refusing to seed any other environment."
+  }
+}
+
 locals {
   demo_services_contract     = jsondecode(file("${path.module}/../../manifest/demo-services.v1.json"))
   stac_seed_source_url       = local.demo_services_contract.sources.stacSeed

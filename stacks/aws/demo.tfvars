@@ -12,8 +12,7 @@
 #   source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)   # provides HONUA_ADMIN_PASSWORD
 #   export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
 #   terraform plan -var-file=demo.tfvars \
-#     -var "honua_image=<ECR image for the manifest-pinned server>" \
-#     -var "stac_seed_metadata_environment=<see below>"
+#     -var "honua_image=<ECR image for the manifest-pinned server>"
 #
 # The three values NOT in this file, and why:
 #
@@ -30,20 +29,15 @@
 #                                  THIS region (Lambda cannot pull from GHCR). Hard-coding it here
 #                                  would go stale exactly the way the old local file did.
 #
-#   stac_seed_metadata_environment Must be the exact Metadata v2 environment the deployed Lambda
-#                                  serves — read it from the active `metadata_v2_current` row, or
-#                                  from Metadata__Environment / Environment if either is set. Do NOT
-#                                  infer it from ASPNETCORE_ENVIRONMENT, and do not copy the
-#                                  "default" placeholder out of terraform.tfvars.example: the live
-#                                  Lambda (published version behind the `live` alias) sets neither
-#                                  Metadata__Environment nor ASPNETCORE_ENVIRONMENT, so the
-#                                  capability manifest's `deploymentEnvironment: Production` is just
-#                                  ASP.NET's default and is precisely the inference the variable's
-#                                  description forbids. Getting it wrong points the managed STAC seed
-#                                  at the wrong metadata environment.
+# `stac_seed_metadata_environment` is committed below because the live database
+# has one exact active Metadata v2 environment: `Production`. This value was
+# read directly from `honua.metadata_v2_current`; it is not inferred from
+# ASPNETCORE_ENVIRONMENT. The STAC seed gate also rejects any plan-time override,
+# so an operator cannot silently seed the unused `default` environment.
 
-region          = "us-west-2"
-route53_zone_id = "Z089181827C9GKIKHXUTT"
+region                         = "us-west-2"
+route53_zone_id                = "Z089181827C9GKIKHXUTT"
+stac_seed_metadata_environment = "Production"
 
 # Studio AI — the demo runs Bedrock-backed generation.
 enable_studio_ai  = true

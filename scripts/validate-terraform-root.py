@@ -120,10 +120,42 @@ def validate_negative_contracts(stack: Path) -> None:
     assert_invalid_contract(stack, wrong_type, "Invalid value for input variable")
 
 
+def validate_stac_environment_contract() -> None:
+    """Execute the actual input validation without providers, credentials or resources."""
+    variables = (STACK / "variables.tf").read_text(encoding="utf-8")
+    match = re.search(
+        r'^variable "stac_seed_metadata_environment" \{.*?^\}', variables,
+        re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        raise RuntimeError("STAC metadata environment input was not found")
+    with tempfile.TemporaryDirectory(prefix="honua-stac-environment-") as temporary:
+        root = Path(temporary)
+        (root / "main.tf").write_text(
+            match.group(0) + '\noutput "environment" { value = var.stac_seed_metadata_environment }\n',
+            encoding="utf-8",
+        )
+        run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=root)
+        for value in ("Production", "default", "production", "staging", ""):
+            result = subprocess.run(
+                ["terraform", "plan", "-input=false", "-no-color",
+                 f"-var=stac_seed_metadata_environment={value}"],
+                cwd=root, capture_output=True, text=True, check=False,
+            )
+            diagnostics = result.stdout + result.stderr
+            if value == "Production":
+                if result.returncode != 0:
+                    raise RuntimeError(f"valid STAC environment rejected:\n{diagnostics}")
+            elif result.returncode == 0 or "Invalid value for variable" not in diagnostics:
+                raise RuntimeError(f"STAC environment {value!r} was not rejected:\n{diagnostics}")
+            print(f"STAC environment {value!r}: expected plan exit {result.returncode}")
+
+
 def main() -> None:
     if not INTERFACE_STUB.is_dir():
         raise RuntimeError("checked-in honua module interface stub is missing")
     run(["terraform", "fmt", "-check", "-recursive", str(STACKS)])
+    validate_stac_environment_contract()
     with tempfile.TemporaryDirectory(prefix="honua-terraform-validate-") as temporary:
         validation_root = Path(temporary) / "repository"
         validation_stack = validation_root / "stacks" / "aws"
