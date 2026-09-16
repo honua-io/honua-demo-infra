@@ -44,10 +44,12 @@ recovery point and one-attempt, immutable, migrations-only 092-105 runner.
 It never toggles or invokes an application `$LATEST`, and it requires the
 observed serving boundary `live -> :42` to remain unchanged.
 
-`stac-live-recovery-3384.md` records the live STAC 500 evidence and coordinates
-the migration, exact `Production` seed binding, query-only receipt, and canary.
-It stops before seeding because the missing `honua.features` relation has
-222,124 retained change rows and no reviewed relation-loss rebaseline exists.
+`stac-live-recovery-3384.md` records the live STAC 500 evidence and the owner
+decision (RESTORE, operator ruling A 2026-09-16; rebaseline deferred to 2026.2).
+It proves the retained `public.features` relation against the change journal,
+moves it into `honua` with `scripts/stac-features-restore.py`, then coordinates
+migrations 092-105, the exact `Production` seed binding, the query-only receipt,
+and the canary.
 
 For the capability runbook, no separate probe/verification scripts were moved:
 its verification commands are inline `bash`/`curl` blocks within the markdown

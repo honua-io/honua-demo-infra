@@ -145,9 +145,10 @@ activates it. Existing graph entities (the 11 `maui-*` layers) are preserved.
 > active Metadata v2 pointer is `Production:52`. The demo Terraform contract now
 > rejects any seed environment other than exact `Production`.
 >
-> **Live recovery block:** `honua.features` is missing while 222,124
-> `honua.feature_changes` rows remain. The managed seed must not be invoked until
-> the restore-versus-rebaseline decision in `stac-live-recovery-3384.md` is resolved.
+> **Live recovery order:** `honua.features` is missing while 222,124
+> `honua.feature_changes` rows remain. The owner decision is RESTORE. The managed
+> seed must not be invoked until the restore cutover and migrations 092-105 in
+> `stac-live-recovery-3384.md` have passed their proofs.
 
 **[OPERATOR]** Bind the demo to the exact active Metadata v2 environment:
 

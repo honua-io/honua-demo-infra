@@ -3,7 +3,9 @@
 This procedure deploys and invokes a dedicated migrations-only artifact. It
 does not toggle the serving Lambda, use `$LATEST`, publish an application
 version, move `live`, or seed data. It is a prerequisite for, not a complete
-fix for, the live STAC recovery in `stac-live-recovery-3384.md`.
+fix for, the live STAC recovery in `stac-live-recovery-3384.md`. In that
+procedure the `honua.features` restore cutover runs first, then this runbook,
+then the seed.
 
 ## Immutable inputs
 
