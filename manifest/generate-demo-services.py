@@ -73,8 +73,14 @@ WMS_SERVICE_IDS = {"maui-flood-hazard", "maui-sea-level-rise"}
 # uses the origin with a one-unit planar buffer: it is tiny, deterministic, and
 # exercises the same GeoJSON -> WKB normalization and managed executor as the
 # SDK/Studio journey without reading a demo dataset or exposing a mutating tool.
+#
+# Digest is the raw application/geo+json Feature bytes from the managed
+# executor for POINT(0 0), SRID 4326, planar distance 1: NTS 2.6 default
+# buffer, GeoJSON writer dimension 3, no trailing newline. OGC API Processes
+# Requirement 25 selects sync by omitting Prefer; only async sends
+# Prefer: respond-async. respond-sync is not a preference.
 GEOMETRY_BUFFER_OUTPUT_SHA256 = (
-    "a5797d4b43e2d8af4ac8b3be5dbc31edf96a206ab960497b991e191e5a7b3997"
+    "4bcb97505a9938d4ddaee0238b51a549bca5e7983e3b96330c3888105197f5ed"
 )
 
 
@@ -91,7 +97,8 @@ def public_processes() -> list[dict]:
             "execution": {
                 "path": "/ogc/processes/processes/geometry.buffer/execution",
                 "modes": ["sync", "async"],
-                "syncPreference": "respond-sync",
+                # null: synchronous execution omits Prefer. Do not send respond-sync.
+                "syncPreference": None,
                 "asyncPreference": "respond-async",
                 "responseModes": ["document", "raw"],
                 "backend": "local",
@@ -158,6 +165,7 @@ def public_processes() -> list[dict]:
                     "distance": 1,
                     "geodesic": False,
                 },
+                "response": "raw",
                 "expectedMediaType": "application/geo+json",
                 "expectedSha256": GEOMETRY_BUFFER_OUTPUT_SHA256,
             },

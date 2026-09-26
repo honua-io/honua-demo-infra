@@ -220,8 +220,9 @@ wiring (`stacks/aws/demo-services-manifest.tf`) has been live and tracked in
   the shared Terraform state since 2026-07-31. The scheduled and explicit
   operator-dispatched public canary records the exact runtime revision, probes every declared service
   family, requires non-empty item and bounded POST search results tied to STAC
-  collection `90810`, and proves `geometry.buffer` sync plus durable async
-  status/results against the same pinned output digest. Its checked-out contract also binds
+  collection `90810`, and proves `geometry.buffer` sync (no `Prefer` header)
+  plus durable async (`Prefer: respond-async`) status/results against the same
+  pinned raw output digest. Its checked-out contract also binds
   the exact seed source SHA-256. A managed in-VPC executor independently hashes the
   source and rendered bytes it executes and writes a transactional marker; the explicit
   dispatch workflow reads that marker through a separate query-only Lambda/DB role.

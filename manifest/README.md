@@ -112,10 +112,16 @@ Top level:
 - Direct GeoJSON geometry only, SRID 4326, positive planar distance capped at
   one input-CRS unit. No layer/artifact references, custom code, geodesic mode,
   or mutating output is advertised.
-- Synchronous (`Prefer: respond-sync`) and durable asynchronous
-  (`Prefer: respond-async`) execution, with status/results paths. `DELETE` is
-  documented truthfully as active-job cancellation; the manifest does not
-  claim the full OGC dismiss conformance class for completed-job cleanup.
+- Synchronous execution omits `Prefer` (OGC API Processes Requirement 25).
+  Durable asynchronous execution alone sends `Prefer: respond-async`.
+  `respond-sync` is not a preference and must not be sent. `Preference-Applied`
+  is returned only when a supplied preference was honored. Status and results
+  paths are advertised. `DELETE` is documented truthfully as active-job
+  cancellation; the manifest does not claim the full OGC dismiss conformance
+  class for completed-job cleanup.
+- The canary pins `response: "raw"` so sync and async results are the same
+  GeoJSON bytes. `document` remains a supported response mode but is not the
+  pinned digest.
 - `X-API-Key` using a separately rotated `demo-process-execute` key with only
   the canonical `process:*:execute` grant. The key is never published in this manifest or in canary
   receipts.

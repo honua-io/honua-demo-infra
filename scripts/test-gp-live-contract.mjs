@@ -15,8 +15,9 @@ const deploymentRevision = "6ad71ac701ca709ec671afd09257217e8d17a149";
 const stacServerCommit = "1fc339a3692289e9bc4ec90ed1533c5eb22a995e";
 const stacCollectionId = "90810";
 const apiKey = "fixture-process-key";
+// Raw managed-executor Feature for POINT(0 0), SRID 4326, planar distance 1.
 const bufferOutput = Buffer.from(
-  '{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[1,0],[0,1],[-1,0],[0,-1],[1,0]]]},"properties":{"processId":"geometry.buffer","inputSrid":4326,"bufferDistance":1}}',
+  '{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[1.0,0.0],[0.9807852804032303,0.19509032201612872],[0.9238795325112865,0.3826834323650904],[0.8314696123025452,0.5555702330196022],[0.7071067811865474,0.7071067811865477],[0.5555702330196018,0.8314696123025455],[0.38268343236509,0.9238795325112866],[0.1950903220161283,0.9807852804032304],[0.0,1.0],[-0.19509032201612866,0.9807852804032303],[-0.38268343236509034,0.9238795325112865],[-0.5555702330196022,0.8314696123025452],[-0.7071067811865477,0.7071067811865475],[-0.8314696123025455,0.555570233019602],[-0.9238795325112868,0.38268343236508967],[-0.9807852804032304,0.19509032201612836],[-1.0,0.0],[-0.9807852804032304,-0.1950903220161286],[-0.9238795325112867,-0.3826834323650899],[-0.8314696123025453,-0.5555702330196022],[-0.7071067811865475,-0.7071067811865476],[-0.555570233019602,-0.8314696123025455],[-0.3826834323650897,-0.9238795325112867],[-0.1950903220161282,-0.9807852804032304],[0.0,-1.0],[0.19509032201612833,-0.9807852804032304],[0.38268343236508984,-0.9238795325112867],[0.5555702330196023,-0.8314696123025452],[0.7071067811865476,-0.7071067811865475],[0.8314696123025452,-0.5555702330196022],[0.9238795325112867,-0.3826834323650898],[0.9807852804032304,-0.19509032201612825],[1.0,0.0]]]},"properties":{"processId":"geometry.buffer","inputSrid":4326,"bufferDistance":1}}',
 );
 const bufferSha256 = createHash("sha256").update(bufferOutput).digest("hex");
 
@@ -25,6 +26,9 @@ test("generated manifest governs only the bounded geometry.buffer process", asyn
   const process = selectGovernedGpProcess(manifest);
   assert.equal(process.id, "geometry.buffer");
   assert.deepEqual(process.execution.modes, ["sync", "async"]);
+  assert.equal(process.execution.syncPreference, null);
+  assert.equal(process.execution.asyncPreference, "respond-async");
+  assert.equal(process.canary.response, "raw");
   assert.equal(process.execution.backend, "local");
   assert.equal(process.inputSchema.properties.srid.const, 4326);
   assert.equal(process.inputSchema.properties.distance.maximum, 1);
@@ -37,10 +41,8 @@ test("generated manifest governs only the bounded geometry.buffer process", asyn
     resetPolicy: "fixed-window",
     responseHeaders: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
   });
-  assert.equal(
-    process.canary.expectedSha256,
-    "a5797d4b43e2d8af4ac8b3be5dbc31edf96a206ab960497b991e191e5a7b3997",
-  );
+  assert.equal(process.canary.expectedSha256, bufferSha256);
+  assert.equal(bufferSha256, "4bcb97505a9938d4ddaee0238b51a549bca5e7983e3b96330c3888105197f5ed");
 });
 
 test("live canary proves sync and async geometry identity through one scoped key", async () => {
@@ -55,6 +57,11 @@ test("live canary proves sync and async geometry identity through one scoped key
     assert.equal(receipt.gp.syncSha256, bufferSha256);
     assert.equal(receipt.gp.asyncSha256, bufferSha256);
     assert.deepEqual(receipt.gp.observedStatuses, ["running", "successful"]);
+    const executions = harness.requests.filter((request) => request.path.endsWith("/execution"));
+    assert.equal(executions.length, 2);
+    assert.equal(executions[0].prefer, null);
+    assert.equal(executions[1].prefer, "respond-async");
+    assert.equal(executions.some((request) => request.prefer === "respond-sync"), false);
     assert.ok(harness.requests.every((request) =>
       !request.path.startsWith("/ogc/processes/") || request.apiKey === apiKey));
   } finally {
@@ -138,14 +145,7 @@ async function createHarness({ corruptSync = false } = {}) {
         request.url === "/ogc/processes/processes/geometry.buffer/execution") {
       if (request.headers["x-api-key"] !== apiKey) {
         send(401, { title: "Unauthorized" });
-      } else if (request.headers.prefer === "respond-sync") {
-        send(
-          200,
-          corruptSync ? Buffer.from("drift") : bufferOutput,
-          "application/geo+json",
-          { ...rateHeaders, "preference-applied": "respond-sync" },
-        );
-      } else {
+      } else if (request.headers.prefer === "respond-async") {
         send(
           201,
           { jobID: "gp-job-1", status: "accepted" },
@@ -156,19 +156,21 @@ async function createHarness({ corruptSync = false } = {}) {
             location: "/ogc/processes/jobs/gp-job-1",
           },
         );
+      } else if (request.headers.prefer) {
+        send(400, { title: "Unsupported preference" });
+      } else {
+        send(
+          200,
+          corruptSync ? Buffer.from("drift") : bufferOutput,
+          "application/geo+json",
+          rateHeaders,
+        );
       }
     } else if (request.method === "GET" && request.url === "/ogc/processes/jobs/gp-job-1") {
       statusReads += 1;
       send(200, { jobID: "gp-job-1", status: statusReads === 1 ? "running" : "successful" }, "application/json", rateHeaders);
     } else if (request.method === "GET" && request.url === "/ogc/processes/jobs/gp-job-1/results") {
-      send(200, {
-        outputFeatureLayer: {
-          id: "gp-job-1:artifact:1",
-          kind: "FeatureLayer",
-          href: `data:application/geo+json;base64,${bufferOutput.toString("base64")}`,
-          type: "application/geo+json",
-        },
-      }, "application/json", rateHeaders);
+      send(200, bufferOutput, "application/geo+json", rateHeaders);
     } else {
       send(404, { error: "missing" });
     }
@@ -192,7 +194,7 @@ function fixtureManifest() {
     execution: {
       path: "/ogc/processes/processes/geometry.buffer/execution",
       modes: ["sync", "async"],
-      syncPreference: "respond-sync",
+      syncPreference: null,
       asyncPreference: "respond-async",
     },
     auth: { mode: "demo-key", header: "X-API-Key" },
@@ -209,6 +211,7 @@ function fixtureManifest() {
     },
     canary: {
       inputs: { wkb: { type: "Point", coordinates: [0, 0] }, srid: 4326, distance: 1, geodesic: false },
+      response: "raw",
       expectedMediaType: "application/geo+json",
       expectedSha256: bufferSha256,
     },

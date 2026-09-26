@@ -234,8 +234,12 @@ export function selectGovernedGpProcess(manifest) {
 
   const process = matches[0];
   if (process.execution?.path !== "/ogc/processes/processes/geometry.buffer/execution" ||
-      !process.execution?.modes?.includes("sync") || !process.execution?.modes?.includes("async")) {
-    throw new Error("geometry.buffer contract must advertise its exact sync + async execution path");
+      !process.execution?.modes?.includes("sync") || !process.execution?.modes?.includes("async") ||
+      process.execution?.syncPreference !== null || process.execution?.asyncPreference !== "respond-async") {
+    throw new Error("geometry.buffer sync execution must omit Prefer; only async sends Prefer: respond-async");
+  }
+  if (process.canary?.response !== "raw") {
+    throw new Error("geometry.buffer canary must pin the raw GeoJSON response");
   }
   if (process.auth?.mode !== "demo-key" || process.auth?.header !== "X-API-Key") {
     throw new Error("geometry.buffer contract must use the scoped demo-key X-API-Key profile");
@@ -258,9 +262,11 @@ async function probeGeometryBuffer(canaryResults, process) {
     throw new Error("HONUA_DEMO_GP_POLL_INTERVAL_MS must be between 10 and HONUA_DEMO_TIMEOUT_MS");
   }
 
-  const requestBody = JSON.stringify({ inputs: process.canary.inputs, response: "raw" });
+  const requestBody = JSON.stringify({
+    inputs: process.canary.inputs,
+    response: process.canary.response,
+  });
   const commonHeaders = {
-    accept: process.canary.expectedMediaType,
     "content-type": "application/json",
     [process.auth.header]: gpApiKey,
   };
@@ -268,12 +274,12 @@ async function probeGeometryBuffer(canaryResults, process) {
     canaryResults,
     "geometry.buffer:sync",
     process.execution.path,
-    { ...commonHeaders, prefer: process.execution.syncPreference },
+    { ...commonHeaders, accept: process.canary.expectedMediaType },
     [200],
     { method: "POST", body: requestBody },
   );
   if (!sync.ok) throw new Error("geometry.buffer synchronous canary failed");
-  assertGpResponse(sync.result, sync.body, process, process.execution.syncPreference);
+  assertGpResponse(sync.result, sync.body, process);
 
   const asyncSubmit = await probe(
     canaryResults,
@@ -281,7 +287,7 @@ async function probeGeometryBuffer(canaryResults, process) {
     process.execution.path,
     { ...commonHeaders, accept: "application/json", prefer: process.execution.asyncPreference },
     [201],
-    { method: "POST", body: JSON.stringify({ inputs: process.canary.inputs, response: "document" }) },
+    { method: "POST", body: requestBody },
   );
   if (!asyncSubmit.ok) throw new Error("geometry.buffer asynchronous submission failed");
   if (asyncSubmit.result.preferenceApplied !== process.execution.asyncPreference) {
@@ -345,32 +351,21 @@ async function probeGeometryBuffer(canaryResults, process) {
     canaryResults,
     "geometry.buffer:async-results",
     resultsPath,
-    { accept: "application/json", [process.auth.header]: gpApiKey },
+    { accept: process.canary.expectedMediaType, [process.auth.header]: gpApiKey },
     [200],
   );
   if (!jobResults.ok) throw new Error("geometry.buffer results probe failed");
-  let resultsDocument;
-  try {
-    resultsDocument = JSON.parse(jobResults.body.toString("utf8"));
-  } catch (error) {
-    failResult(jobResults.result, `invalid job results JSON: ${error instanceof Error ? error.message : String(error)}`);
-    throw new Error("geometry.buffer job results returned invalid JSON");
+  if (!(jobResults.result.contentType ?? "").toLowerCase().startsWith(process.canary.expectedMediaType)) {
+    failResult(jobResults.result, `expected ${process.canary.expectedMediaType}, received ${jobResults.result.contentType ?? "none"}`);
+    throw new Error("geometry.buffer async results were not the pinned raw media type");
   }
-  const output = resultsDocument[process.output.name];
-  if (!output || output.kind !== process.output.kind || output.type !== process.output.mediaType ||
-      typeof output.href !== "string") {
-    failResult(jobResults.result, `missing ${process.output.name} ${process.output.kind} artifact`);
-    throw new Error("geometry.buffer job results did not expose the governed artifact");
-  }
-  const artifact = await readGpArtifact(canaryResults, process, output.href);
-  const artifactSha256 = createHash("sha256").update(artifact).digest("hex");
+  const artifactSha256 = jobResults.result.sha256;
   if (artifactSha256 !== process.canary.expectedSha256) {
     failResult(jobResults.result, `artifact SHA-256 ${artifactSha256} does not match pinned ${process.canary.expectedSha256}`);
     throw new Error("geometry.buffer async artifact drifted from the pinned geometry");
   }
   jobResults.result.semantic = {
     jobId,
-    resultPackageArtifactId: output.id ?? null,
     outputName: process.output.name,
     artifactSha256,
     observedStatuses,
@@ -381,7 +376,6 @@ async function probeGeometryBuffer(canaryResults, process) {
     authMode: process.auth.mode,
     jobId,
     outputName: process.output.name,
-    artifactId: output.id ?? null,
     expectedSha256: process.canary.expectedSha256,
     syncSha256: sync.result.sha256,
     asyncSha256: artifactSha256,
@@ -390,9 +384,9 @@ async function probeGeometryBuffer(canaryResults, process) {
   };
 }
 
-function assertGpResponse(result, body, process, preference) {
-  if (result.preferenceApplied !== preference) {
-    failResult(result, `missing Preference-Applied: ${preference}`);
+function assertGpResponse(result, body, process) {
+  if (result.preferenceApplied) {
+    failResult(result, `synchronous execution must omit Preference-Applied; received ${result.preferenceApplied}`);
   } else if (!(result.contentType ?? "").toLowerCase().startsWith(process.canary.expectedMediaType)) {
     failResult(result, `expected ${process.canary.expectedMediaType}, received ${result.contentType ?? "none"}`);
   } else if (result.sha256 !== process.canary.expectedSha256) {
@@ -407,31 +401,6 @@ function assertGpResponse(result, body, process, preference) {
     outputSha256: result.sha256,
     requestBudget: process.requestBudget,
   };
-}
-
-async function readGpArtifact(canaryResults, process, href) {
-  const dataUri = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/u.exec(href);
-  if (dataUri) {
-    if (dataUri[1] !== process.output.mediaType) {
-      throw new Error(`geometry.buffer artifact media type ${dataUri[1]} does not match ${process.output.mediaType}`);
-    }
-    return Buffer.from(dataUri[2], "base64");
-  }
-
-  const artifactUrl = new URL(href, baseUrl);
-  if (artifactUrl.origin !== new URL(baseUrl).origin) {
-    throw new Error("geometry.buffer artifact URL left the governed demo origin");
-  }
-  const artifactPath = `${artifactUrl.pathname}${artifactUrl.search}`;
-  const response = await probe(
-    canaryResults,
-    "geometry.buffer:async-artifact",
-    artifactPath,
-    { accept: process.output.mediaType, [process.auth.header]: gpApiKey },
-    [200],
-  );
-  if (!response.ok) throw new Error("geometry.buffer artifact content probe failed");
-  return response.body;
 }
 
 export function selectWmsBindings(manifest, admission) {
