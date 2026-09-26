@@ -47,7 +47,7 @@ a data-isolation feature for production deployments.
 | Lambda function | `arm64`, 2048 MiB RAM, no provisioned concurrency (native-CI-built Lambda AOT image) |
 | Lambda image | `*-lambda-aot` tag (AOT build); cold starts ~200–400 ms |
 | RDS PostgreSQL | `db.t4g.small`, version 15, 20 GB gp3, PostGIS + PostGIS Raster enabled |
-| ElastiCache | Off by default; `enable_redis = true` provisions `cache.t3.micro` in-VPC for the Production feature-change event store (see "Pro + AI demo drift") |
+| ElastiCache | Module default off; the committed demo preset enables a `cache.t3.micro` in-VPC for durable process jobs, distributed request budgets, and the Production feature-change event store |
 | API Gateway | HTTP API (`protocol_type = "HTTP"`) with `$default` stage |
 | ACM certificate | Auto-provisioned and DNS-validated for `demo.honua.io` |
 | Route53 A/AAAA records | `demo.honua.io` → CloudFront distribution (alias; → API Gateway custom domain and no AAAA while `route_demo_dns_to_cloudfront=false`) |
@@ -302,7 +302,7 @@ workstation and no `terraform import` step**.
 |---|---|---|
 | `enable_pro_license` | `secretsmanager:GetSecretValue` for the Lambda role on the **externally-managed** license secret; injects `Licensing__LicenseContentSecretRef` + `Licensing__TrustedKeys__honuademo2026q2`. Creates **no** secret and **no** secret version. | secret `honua-demo-demo/license-pro` (ARN default in `variables.tf`); keyId `honuademo2026q2` |
 | `enable_bedrock_ai` | least-privilege `bedrock:InvokeModel` (+ `…WithResponseStream`) on the Lambda role scoped to the Claude model's inference-profile + foundation-model ARNs; `WorkflowGeneration__*` env (provider=bedrock, region=us-west-2). Bedrock rides the fck-nat egress — the dedicated `bedrock-runtime` endpoint (live `vpce-003090af73dc835fe`, SG `sg-0ac55474b410c5d34`) was removed from config in the 2026-07-24 cost round; if it is in state the next apply destroys it, and if it is NOT in state it must be deleted by hand or it keeps billing (~$7.5/mo) as an orphan | model `us.anthropic.claude-sonnet-4-5-20250929-v1:0`; region `us-west-2` |
-| `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | cluster `honua-demo-redis`, SG `sg-0454e3341c5de3068` |
+| `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | enabled by `demo.tfvars`; immutable candidate evidence records the created cluster/SG identities after apply |
 
 #### The CIDR-egress gotcha (important)
 
@@ -339,12 +339,12 @@ $ aws ec2 describe-vpc-endpoints --vpc-endpoint-ids vpce-003090af73dc835fe
 InvalidVpcEndpointId.NotFound      # the "orphan still billing ~$7.5/mo" warning is also moot
 ```
 
-Only `honua-demo-demo/redis-connection` (the secret) survives, and `demo.tfvars`
-sets `enable_redis = false`, so nothing tries to create or adopt a cluster. There
-is **no import step before plan/apply** any more. Tracked in honua-demo-infra#11.
-
-If Redis is ever re-enabled for this stack it will be a **create**, not an import,
-and the CIDR-egress note above still applies to it.
+Only `honua-demo-demo/redis-connection` (the secret) survives. The 2026.1 demo
+preset now sets `enable_redis = true`, so the reviewed plan must show a **new**
+cluster/subnet group/security group, not imports of the obsolete identities
+above. There is no import step. The CIDR-egress note above applies to the new
+cluster. Candidate promotion remains blocked until that exact saved plan is
+applied and the live readiness + process canary receipts bind its outputs.
 
 ## Applying
 
@@ -468,20 +468,20 @@ most tile-burst traffic before it ever reaches the API Gateway throttles.
 | `HONUA_SERVE_STAC_DEMO` | `true` — STAC demo catalog enabled |
 | `MultiTenancy__Enabled` | `true` |
 | `MultiTenancy__DefaultTenantId` | `public` |
+| `RateLimiting__Enabled` | `true` — Redis-backed fixed-window limiting |
+| `RateLimiting__GlobalRequestsPerMinute` | `60` per tenant/user/API-key/IP partition |
+| `Geoprocessing__Executors__MaxArtifactBytes` | `1048576` (1 MiB public-demo ceiling) |
 | `HostValidation__AllowedHosts__1` | `demo.honua.io` |
 
-### Known limitation: /healthz/ready requires Redis in Production
+### Redis requirement: readiness and durable public process jobs
 
 honua-server hard-requires a durable distributed feature-change event store
-(Redis) whenever ASPNETCORE_ENVIRONMENT is Production. With `enable_redis =
-false` (the default), `/healthz/live` returns 200 and the API works normally,
-but **`/healthz/ready` always returns 503** ("Feature-change event storage
-unavailable"). Nothing probes readiness in the Lambda deployment path, so this
-is cosmetic for the demo — but don't wire `/healthz/ready` into external uptime
-checks until honua-server treats the event store as optional for single-node
-deployments. Set `enable_redis = true` (the live demo does) to provision the
-in-VPC ElastiCache cluster and clear the 503; see "Pro + AI demo drift" above
-for the CIDR-egress gotcha and the import sequence.
+(Redis) whenever ASPNETCORE_ENVIRONMENT is Production. The 2026.1 demo also
+needs Redis for durable OGC process status/results and one rate-limit window
+shared by every Lambda replica, so `demo.tfvars` explicitly enables it. The
+scheduled canary treats `/healthz/ready`, sync execution, and async job/result
+identity as one release gate. See "Pro + AI demo drift" above for the
+CIDR-egress gotcha; no legacy resource import is permitted.
 
 ## Lambda → RDS connection management
 

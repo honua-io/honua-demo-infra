@@ -24,6 +24,7 @@ on:
       - "manifest/**"
       - "scripts/live-demo-canary.mjs"
       - "scripts/test-stac-live-contract.mjs"
+      - "scripts/test-gp-live-contract.mjs"
       - "scripts/test-wms-live-contract.mjs"
       - "scripts/client-compat-canary.mjs"
       - "stacks/aws/client-compat-seed.v1.json"
@@ -150,6 +151,7 @@ jobs:
           HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST: ${{ vars.HONUA_DEMO_WMS_SERVER_IMAGE_DIGEST }}
           HONUA_DEMO_WMS_SERVER_COMMIT: ${{ vars.HONUA_DEMO_WMS_SERVER_COMMIT }}
           HONUA_DEMO_WMS_SERVER_ARCHITECTURE: ${{ vars.HONUA_DEMO_WMS_SERVER_ARCHITECTURE }}
+          HONUA_DEMO_GP_API_KEY: ${{ secrets.HONUA_DEMO_GP_API_KEY }}
         run: node scripts/live-demo-canary.mjs
 
       - name: Prove protected client-compat behavior
