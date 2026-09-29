@@ -9,21 +9,32 @@
 # reviewable, and the plan is reproducible by anyone with read access.
 #
 # HOW TO APPLY
-#   source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)   # provides HONUA_ADMIN_PASSWORD
-#   export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
+#   export TF_VAR_honua_admin_password="$(aws secretsmanager get-secret-value \
+#     --secret-id honua-demo-demo/admin-password --region us-west-2 \
+#     --query SecretString --output text)"
 #   terraform plan -var-file=demo.tfvars \
 #     -var "honua_image=<ECR image for the manifest-pinned server>" \
 #     -var "stac_seed_metadata_environment=<see below>"
 #
 # The three values NOT in this file, and why:
 #
-#   honua_admin_password           SECRET. Lives in `pass` under honua/terraform (honua-iac's
-#                                  scripts/lib/tf-secret-catalog.sh lists HONUA_ADMIN_PASSWORD as an
-#                                  essential secret). It must NOT be sourced from Secrets Manager:
-#                                  terraform OWNS that secret
-#                                  (module.honua.aws_secretsmanager_secret.admin_password), so the
-#                                  secret is an OUTPUT of this apply. Reading it back as an input
-#                                  would be circular.
+#   honua_admin_password           SECRET. Read the CURRENT value back from Secrets Manager:
+#                                    aws secretsmanager get-secret-value \
+#                                      --secret-id honua-demo-demo/admin-password --region us-west-2
+#                                  Yes, terraform OWNS that secret
+#                                  (module.honua.aws_secretsmanager_secret.admin_password), so it is
+#                                  an OUTPUT of this apply and feeding it back in is circular in
+#                                  principle. In practice it is the only source that exists and it is
+#                                  stable: the 2026-08-18 apply passed the value read this way and
+#                                  produced no change to the secret version, which is the check that
+#                                  it round-trips. Passing a DIFFERENT value silently rotates the
+#                                  admin password and the connection-encryption master key derived
+#                                  from it — so read it, never invent it.
+#                                  NOT in `pass`: honua-iac's scripts/lib/tf-secret-catalog.sh lists
+#                                  HONUA_ADMIN_PASSWORD as an essential secret, but no such entry
+#                                  exists in the operator password store today (it holds only
+#                                  honua/aws/demo). That catalog is the intended future home, not the
+#                                  current one — do not send someone to `pass` for this value.
 #
 #   honua_image                    Per-release, not per-environment. It must be the ECR image for the
 #                                  server sha pinned in honua-release's platform-manifest.yaml, in
