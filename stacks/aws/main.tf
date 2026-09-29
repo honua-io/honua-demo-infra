@@ -227,9 +227,10 @@ module "honua" {
   gp_batch_data_bucket_arn     = aws_s3_bucket.demo_data.arn
   gp_batch_data_bucket_enabled = true
 
-  # Demo-specific environment variables. The trailing merge folds in the
-  # StudioAiProxy__* block when enable_studio_ai is on (studio-ai.tf) — kept
-  # out of this literal so the Studio AI wiring stays self-contained there.
+  # Demo-specific environment variables. The trailing merges fold in the
+  # StudioAiProxy__* block when enable_studio_ai is on (studio-ai.tf) and the
+  # FeatureStreaming__* block (streaming.tf) — kept out of this literal so the
+  # Studio AI and feature-streaming wiring stay self-contained in their files.
   # local.request_secret_reference_environment (top of this file) adds the
   # Security__RequestSecretReferences__* allowlist for the `demo-rds` secret.
   additional_env = merge({
@@ -292,7 +293,7 @@ module "honua" {
     # in honua-site) — harmless for a public-data demo server.
     Cors__AllowedOrigins__2 = "http://localhost:8123"
     Cors__AllowCredentials  = "false"
-  }, local.studio_ai_environment, local.request_secret_reference_environment)
+  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment)
 
   tags = local.common_tags
 }
