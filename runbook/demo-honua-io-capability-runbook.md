@@ -50,8 +50,9 @@ The 2026-07-24 ops round supersedes the two remaining open items in the table be
   `Range: bytes=0-16383` → `206`. Real PMTiles clients (always ranged) unaffected.
 - `/api/scenes` → 200 (0.7s); `/rest/services`, `/stac/collections`,
   `/ogc/features/collections` all 200 post-deploy.
-- Redis remains **off** (`enable_redis = false`) until a demo image contains the
-  server-side `aws:secretsmanager:` Redis-ref fix (server#3011, PR #3021).
+- The 2026.1 candidate turns Redis **on** (`enable_redis = true`) now that the
+  server-side secret-reference fix has landed; it is required for readiness,
+  durable `geometry.buffer` jobs, and the cross-replica request budget.
 
 ## As-verified live state (2026-07-23, server#2948)
 
@@ -141,23 +142,21 @@ activates it. Existing graph entities (the 11 `maui-*` layers) are preserved.
 ### Run it
 
 > **Do not derive the metadata environment from `server.deploymentEnvironment`.**
-> The manifest field reports `IWebHostEnvironment.EnvironmentName` (`Production` on
-> the demo), while the metadata graph independently reads `Metadata__Environment`,
-> then `Environment`, with a `default` fallback. Operator records say the successful
-> 2026-07-20/21 seed apply used `HONUA_SEED_ENV=Production`, and the live catalog
-> confirms those rows are active, but the manifest alone does not prove that mapping.
-> Before any repeat apply, inspect `Metadata__Environment` / `Environment` on the
-> serving Lambda version or query the active environment in `metadata_v2_current`.
+> Read-only database evidence captured for honua-server#3384 proves that the one
+> active Metadata v2 pointer is `Production:52`. The demo Terraform contract now
+> rejects any seed environment other than exact `Production`.
+>
+> **Live recovery order:** `honua.features` is missing while 222,124
+> `honua.feature_changes` rows remain. The owner decision is RESTORE. The managed
+> seed must not be invoked until the restore cutover and migrations 092-105 in
+> `stac-live-recovery-3384.md` have passed their proofs.
 
-**[OPERATOR]** Set mandatory `SEED_ENV` to the env id the serving Lambda is configured with —
-this MUST match the server's `Metadata__Environment` / `Environment` setting (it defaults
-to `default`; confirm against the serving Lambda's environment variables or the active
-`metadata_v2_current` row — the capabilities manifest's host-environment field is not
-the metadata environment):
+**[OPERATOR]** Bind the demo to the exact active Metadata v2 environment:
 
 ```bash
 # Local / direct-psql target:
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+SEED_ENV=Production
+test "$SEED_ENV" = Production
 PGHOST=... PGPORT=5432 PGUSER=honua PGDATABASE=honua PGPASSWORD=... \
 HONUA_SEED_ENV="$SEED_ENV" HONUA_SEED_SCHEMA=honua \
   tests/seed/apply-demo-stac-seed.sh
@@ -180,7 +179,8 @@ surface and must not be used for managed seeding or receipt reads.
 
 ```bash
 # [OPERATOR] validate the repository pin, then invoke the allowlisted manager
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
+SEED_ENV=Production
+test "$SEED_ENV" = Production
 seed_ref=1fc339a3692289e9bc4ec90ed1533c5eb22a995e
 seed_sha256=de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687
 curl --fail --location \
@@ -204,6 +204,8 @@ jq -e --arg sha "$seed_sha256" --arg env "$SEED_ENV" --arg commit "$seed_ref" \
   '.format == "honua.demo.stac-seed-attestation.v1" and
    .seedId == "demo-stac-imagery-v1" and .sourceSha256 == $sha and
    .serverCommit == $commit and .metadataEnvironment == $env and
+   .receiptRole == "honua_demo_seed_receipt" and
+   .receiptRoleReconciled == true and
    (.executionSha256 | test("^[0-9a-f]{64}$")) and .metadataRevision >= 1' \
   /tmp/demo-stac-seed-response.json
 ```
@@ -230,14 +232,11 @@ rejects a receipt unless its independently measured source URL/digest/commit mat
 checked-out manifest and its recorded metadata revision is still current.
 
 ```bash
-: "${SEED_ENV:?Set SEED_ENV from the serving Lambda configuration or active metadata_v2_current row}"
-# One-time repository settings from Terraform outputs and the same serving config:
+# One-time repository settings from Terraform outputs:
 gh variable set HONUA_DEMO_STAC_RECEIPT_ROLE_ARN \
   --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_github_role_arn)"
 gh variable set HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME \
   --repo honua-io/honua-demo-infra --body "$(terraform -chdir=stacks/aws output -raw stac_seed_receipt_function_name)"
-gh variable set HONUA_DEMO_STAC_METADATA_ENVIRONMENT \
-  --repo honua-io/honua-demo-infra --body "$SEED_ENV"
 
 # Set this from the successful deployment output, not from an untrusted public response.
 DEPLOYMENT_REVISION=<exact-40-character-runtime-sha>
@@ -749,12 +748,11 @@ monthly cost" for the full tables):
    (72 reported DB connections). The small instance is the public-demo reliability
    floor; the lower Lambda cap supplies additional connection headroom.
 
-**Redis / ElastiCache stays as-is**: `enable_redis` remains `false` in Terraform
-(nothing applied to remove) — honua-server hard-requires a durable feature-change
-event store in Production, and the toggle stays available for when the server-side
-`aws:secretsmanager:` Redis-ref fix (server#3011 / PR #3021) ships in a deployed
-image. Do not delete the toggle to save the ~$9/mo — that breaks `/healthz/ready`
-the day Redis is wired.
+**Redis / ElastiCache is a 2026.1 candidate gate**: `enable_redis` is `true` in
+Terraform. The old resources named in historical notes no longer exist, so the
+saved plan must create a new cluster and must not import those identities. Do
+not promote until `/healthz/ready` and the sync + async `geometry.buffer`
+canary pass against the exact deployed candidate.
 
 **Budget tripwire**: `aws_budgets_budget` (`cost-controls.tf`) — monthly $150 limit,
 email alerts to `mike@honua.io` at 100% and 200% (i.e. $150 and $300), both actual

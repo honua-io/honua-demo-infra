@@ -13,8 +13,9 @@ honua-server backlog).
 > Applied-state notes beyond the runbook: geocoding infra (place index +
 > `geo.places` endpoint) is live and serving is on v35 — see
 > stacks/aws/vpc-endpoints.tf and honua-demo-infra#11 for the remaining
-> enablement items (Redis stays off pending honua-server#3011; geocoding
-> e2e pending the next image with the AOT config-binding fix).
+> enablement items. The 2026.1 candidate now enables Redis for readiness,
+> durable GP jobs, and distributed rate limits; the live apply/canary receipt
+> remains required before that state is described as deployed.
 
 ## Demo B (ops champion) runbooks
 
@@ -41,8 +42,15 @@ attempt and preserves both earlier operator paths and evidence.
 
 `db-recovery-and-migrations-092-105.md` governs the separate manual RDS
 recovery point and one-attempt, immutable, migrations-only 092-105 runner.
-It never toggles or invokes an application `$LATEST`, and it leaves candidate
-`:40`, live `:39`, and preflight helper `:3` unchanged.
+It never toggles or invokes an application `$LATEST`, and it requires the
+observed serving boundary `live -> :42` to remain unchanged.
+
+`stac-live-recovery-3384.md` records the live STAC 500 evidence and the owner
+decision (RESTORE, operator ruling A 2026-09-16; rebaseline deferred to 2026.2).
+It proves the retained `public.features` relation against the change journal,
+moves it into `honua` with `scripts/stac-features-restore.py`, then coordinates
+migrations 092-105, the exact `Production` seed binding, the query-only receipt,
+and the canary.
 
 For the capability runbook, no separate probe/verification scripts were moved:
 its verification commands are inline `bash`/`curl` blocks within the markdown
