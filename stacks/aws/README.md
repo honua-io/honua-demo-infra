@@ -47,7 +47,7 @@ a data-isolation feature for production deployments.
 | Lambda function | `arm64`, 2048 MiB RAM, no provisioned concurrency (native-CI-built Lambda AOT image) |
 | Lambda image | `*-lambda-aot` tag (AOT build); cold starts ~200–400 ms |
 | RDS PostgreSQL | `db.t4g.small`, version 15, 20 GB gp3, PostGIS + PostGIS Raster enabled |
-| ElastiCache | Off by default; `enable_redis = true` provisions `cache.t3.micro` in-VPC for the Production feature-change event store (see "Pro + AI demo drift") |
+| ElastiCache | Module default off; the committed demo preset enables a `cache.t3.micro` in-VPC for durable process jobs, distributed request budgets, and the Production feature-change event store |
 | API Gateway | HTTP API (`protocol_type = "HTTP"`) with `$default` stage |
 | ACM certificate | Auto-provisioned and DNS-validated for `demo.honua.io` |
 | Route53 A/AAAA records | `demo.honua.io` → CloudFront distribution (alias; → API Gateway custom domain and no AAAA while `route_demo_dns_to_cloudfront=false`) |
@@ -302,7 +302,7 @@ workstation and no `terraform import` step**.
 |---|---|---|
 | `enable_pro_license` | `secretsmanager:GetSecretValue` for the Lambda role on the **externally-managed** license secret; injects `Licensing__LicenseContentSecretRef` + `Licensing__TrustedKeys__honuademo2026q2`. Creates **no** secret and **no** secret version. | secret `honua-demo-demo/license-pro` (ARN default in `variables.tf`); keyId `honuademo2026q2` |
 | `enable_bedrock_ai` | least-privilege `bedrock:InvokeModel` (+ `…WithResponseStream`) on the Lambda role scoped to the Claude model's inference-profile + foundation-model ARNs; `WorkflowGeneration__*` env (provider=bedrock, region=us-west-2). Bedrock rides the fck-nat egress — the dedicated `bedrock-runtime` endpoint (live `vpce-003090af73dc835fe`, SG `sg-0ac55474b410c5d34`) was removed from config in the 2026-07-24 cost round; if it is in state the next apply destroys it, and if it is NOT in state it must be deleted by hand or it keeps billing (~$7.5/mo) as an orphan | model `us.anthropic.claude-sonnet-4-5-20250929-v1:0`; region `us-west-2` |
-| `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | cluster `honua-demo-redis`, SG `sg-0454e3341c5de3068` |
+| `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | enabled by `demo.tfvars`; immutable candidate evidence records the created cluster/SG identities after apply |
 
 #### The CIDR-egress gotcha (important)
 
@@ -325,51 +325,51 @@ deliberately different from the demo's `us-west-2`), with S3-native locking via
 checkout. (Earlier revisions of this README claimed state was inaccessible
 because the backend was commented out; that has not been true since #122.)
 
-Run the imports below so Terraform adopts the existing resources instead of
-trying to create duplicates. Run from this directory (`stacks/aws` in
-honua-demo-infra) with the toggles set in `terraform.tfvars`:
+**These imports are OBSOLETE (verified 2026-08-18).** The resources they adopt no
+longer exist, and the toggle that would recreate them is off:
 
-```bash
-# --- Pro license secret — NO IMPORT REQUIRED ------------------------------
-# The license secret is deliberately NOT managed by Terraform. The example
-# passes pro_license_secret_arn, so the module creates no secret and no secret
-# version for it and never reads the envelope — it only injects
-# Licensing__LicenseContentSecretRef and grants the Lambda role
-# GetSecretValue on that ARN. Nothing to import; nothing to keep in sync.
-# See "Pro licensing (adopt-by-ARN)" below.
-
-# --- Bedrock runtime VPC endpoint + its SG — OBSOLETE (2026-07-24) ---------
-# The endpoint was removed from config in the fck-nat cost round; there is no
-# longer a resource address to import to. If the live endpoint
-# vpce-003090af73dc835fe / SG sg-0ac55474b410c5d34 are still in state, the
-# next apply destroys them (intended); if they were never imported, delete
-# them by hand (aws ec2 delete-vpc-endpoints / delete-security-group) or they
-# keep billing as orphans.
-
-# --- Redis (item 4) — replication group, subnet group, SG, secret ----------
-terraform import 'module.honua.aws_elasticache_replication_group.redis[0]' honua-demo-redis
-terraform import 'module.honua.aws_elasticache_subnet_group.redis[0]'      honua-demo-demo-redis
-terraform import 'module.honua.aws_security_group.redis[0]'                sg-0454e3341c5de3068
-terraform import 'module.honua.aws_secretsmanager_secret.redis_connection[0]' honua-demo-demo/redis-connection
+```
+$ aws elasticache describe-replication-groups --replication-group-id honua-demo-redis
+ReplicationGroupNotFoundFault
+$ aws elasticache describe-cache-subnet-groups --cache-subnet-group-name honua-demo-demo-redis
+CacheSubnetGroupNotFoundFault
+$ aws ec2 describe-security-groups --group-ids sg-0454e3341c5de3068
+InvalidGroup.NotFound
+$ aws ec2 describe-vpc-endpoints --vpc-endpoint-ids vpce-003090af73dc835fe
+InvalidVpcEndpointId.NotFound      # the "orphan still billing ~$7.5/mo" warning is also moot
 ```
 
-Notes:
+Only `honua-demo-demo/redis-connection` (the secret) survives. The 2026.1 demo
+preset now sets `enable_redis = true`, so the reviewed plan must show a **new**
+cluster/subnet group/security group, not imports of the obsolete identities
+above. There is no import step. The CIDR-egress note above applies to the new
+cluster. Candidate promotion remains blocked until that exact saved plan is
+applied and the live readiness + process canary receipts bind its outputs.
 
-- **Lambda env vars + the IAM inline policies are not separately importable** —
-  they are attributes of resources Terraform already manages (the Lambda
-  function's `environment`, the role's inline `bedrock`/`secrets` policies).
-  Once the toggles are on and the imports above are in state, a `plan` should
-  show those as in-place updates (env keys merged, policy statements added),
-  which an operator reviews before applying. Expect the `random_password`
-  resources for the Redis auth token to want to generate on first apply if a
-  Redis cluster is imported that already has an auth token — supply the live
-  token via `redis_auth_token`/`redis_connection_string` (module variables) if
-  drift on the auth token must be avoided.
-- The module names the ElastiCache subnet group/replication group/SG from
-  `${name_prefix}-${environment}` (`honua-demo-demo-*`); the live cluster id in
-  the deploy record is `honua-demo-redis`. If the live names differ from what
-  the module would generate, import maps the live id into the module address
-  regardless — verify the `plan` shows no rename/replace after import.
+## Applying
+
+Non-secret configuration is committed as `stacks/aws/demo.tfvars`. Three inputs are
+deliberately not in it — one because it is secret, two because they are per-release
+or per-environment and would go stale in a file:
+
+```bash
+# 1. the one secret, from pass (honua-iac scripts/lib/tf-secret-catalog.sh)
+source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)
+export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
+
+# 2/3. the release image and the metadata environment
+terraform plan -var-file=demo.tfvars \
+  -var "honua_image=<ECR image for the manifest-pinned server sha, this region>" \
+  -var "stac_seed_metadata_environment=<active metadata_v2_current row>"
+```
+
+`honua_admin_password` must **not** be sourced from Secrets Manager: terraform owns
+that secret (`module.honua.aws_secretsmanager_secret.admin_password`), so it is an
+*output* of this apply and reading it back as an input is circular.
+
+Redeploying the server means **publishing a Lambda version and repointing the `live`
+alias** — the alias serves a published version whose environment is frozen, so
+editing `$LATEST` does not change what serves.
 
 #### Pro licensing (adopt-by-ARN)
 
@@ -468,20 +468,31 @@ most tile-burst traffic before it ever reaches the API Gateway throttles.
 | `HONUA_SERVE_STAC_DEMO` | `true` — STAC demo catalog enabled |
 | `MultiTenancy__Enabled` | `true` |
 | `MultiTenancy__DefaultTenantId` | `public` |
+| `RateLimiting__Enabled` | `true` — Redis-backed fixed-window limiting |
+| `RateLimiting__GlobalRequestsPerMinute` | `60` per tenant/user/API-key/IP partition |
+| `Geoprocessing__Executors__MaxArtifactBytes` | `1048576` (1 MiB public-demo ceiling) |
 | `HostValidation__AllowedHosts__1` | `demo.honua.io` |
+| `Security__RequestSecretReferences__AllowedSecretReferencePrefixes__0` | `aws:secretsmanager:<connection-string secret ARN>` (from `module.honua.db_connection_secret_arn`) |
+| `Security__RequestSecretReferences__AllowedSecretReferencePrefixes__1` | `aws:secretsmanager:<name_prefix>-<environment>/connection-string` |
 
-### Known limitation: /healthz/ready requires Redis in Production
+The two `Security__RequestSecretReferences__*` entries are the allowlist for
+request-supplied secret references (honua-server #5055). That server policy is
+deny-by-default and also applies when a secure connection resolves its stored
+`secretReference`, so the stack permits exactly the one secret the `demo-rds`
+connection points at, in both its ARN and its name form (see
+`SEED_MANIFEST.md` → "Server-side objects created via admin API"). Server
+images that predate the setting ignore both variables. Apply this before
+moving `honua_image` to an image that includes the setting.
+
+### Redis requirement: readiness and durable public process jobs
 
 honua-server hard-requires a durable distributed feature-change event store
-(Redis) whenever ASPNETCORE_ENVIRONMENT is Production. With `enable_redis =
-false` (the default), `/healthz/live` returns 200 and the API works normally,
-but **`/healthz/ready` always returns 503** ("Feature-change event storage
-unavailable"). Nothing probes readiness in the Lambda deployment path, so this
-is cosmetic for the demo — but don't wire `/healthz/ready` into external uptime
-checks until honua-server treats the event store as optional for single-node
-deployments. Set `enable_redis = true` (the live demo does) to provision the
-in-VPC ElastiCache cluster and clear the 503; see "Pro + AI demo drift" above
-for the CIDR-egress gotcha and the import sequence.
+(Redis) whenever ASPNETCORE_ENVIRONMENT is Production. The 2026.1 demo also
+needs Redis for durable OGC process status/results and one rate-limit window
+shared by every Lambda replica, so `demo.tfvars` explicitly enables it. The
+scheduled canary treats `/healthz/ready`, sync execution, and async job/result
+identity as one release gate. See "Pro + AI demo drift" above for the
+CIDR-egress gotcha; no legacy resource import is permitted.
 
 ## Lambda → RDS connection management
 

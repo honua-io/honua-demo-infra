@@ -25,6 +25,27 @@ locals {
   # also used for the NAT-instance security group and the in-VPC PostGIS
   # bootstrap (see nat-instance.tf / postgis-bootstrap.tf).
   vpc_cidr = "10.0.0.0/16"
+
+  # Allowlist for request-supplied secret references (honua-server #5055,
+  # SEC-2): Security:RequestSecretReferences is deny-by-default and also
+  # governs the reference stored on a secure connection when it is resolved at
+  # runtime. The `demo-rds` secure connection (SEED_MANIFEST.md) stores a
+  # reference to this stack's connection-string secret, and every demo service
+  # sits on it, so exactly that secret is permitted here and nothing else.
+  #
+  # Matching is a whole-reference ordinal prefix after the provider segment, so
+  # an ARN-form reference and a name-form reference share no prefix narrower
+  # than `aws:secretsmanager:` itself. Both forms of the ONE secret are listed
+  # because the form stored on `demo-rds` is not recorded in this repo:
+  #   __0  aws:secretsmanager:<full secret ARN>    (module output, no literal
+  #        account id or random suffix here)
+  #   __1  aws:secretsmanager:<name_prefix>-<environment>/connection-string
+  #        (the name the pinned module gives the secret)
+  # Both entries are inert on server images that predate the setting.
+  request_secret_reference_environment = {
+    Security__RequestSecretReferences__AllowedSecretReferencePrefixes__0 = "aws:secretsmanager:${module.honua.db_connection_secret_arn}"
+    Security__RequestSecretReferences__AllowedSecretReferencePrefixes__1 = "aws:secretsmanager:${var.name_prefix}-${var.environment}/connection-string"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -210,11 +231,21 @@ module "honua" {
   # StudioAiProxy__* block when enable_studio_ai is on (studio-ai.tf) and the
   # FeatureStreaming__* block (streaming.tf) — kept out of this literal so the
   # Studio AI and feature-streaming wiring stay self-contained in their files.
+  # local.request_secret_reference_environment (top of this file) adds the
+  # Security__RequestSecretReferences__* allowlist for the `demo-rds` secret.
   additional_env = merge({
     HONUA_SERVE_API_DOCS          = "true"
     HONUA_SERVE_STAC_DEMO         = "true"
     MultiTenancy__Enabled         = "true"
     MultiTenancy__DefaultTenantId = "public"
+    # The public process contract is authenticated with a separately rotated,
+    # process:*:execute-scoped demo key. Rate limiting partitions by that key and
+    # uses Redis so Lambda replicas share one fixed one-minute window.
+    RateLimiting__Enabled                      = "true"
+    RateLimiting__GlobalRequestsPerMinute      = "60"
+    RateLimiting__UseDistributedRateLimiting   = "true"
+    RateLimiting__IncludeHeaders               = "true"
+    Geoprocessing__Executors__MaxArtifactBytes = "1048576"
     # Allow the API Gateway custom domain as a valid host
     HostValidation__AllowedHosts__1 = "demo.honua.io"
 
@@ -262,7 +293,7 @@ module "honua" {
     # in honua-site) — harmless for a public-data demo server.
     Cors__AllowedOrigins__2 = "http://localhost:8123"
     Cors__AllowCredentials  = "false"
-  }, local.studio_ai_environment, local.feature_streaming_environment)
+  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment)
 
   tags = local.common_tags
 }

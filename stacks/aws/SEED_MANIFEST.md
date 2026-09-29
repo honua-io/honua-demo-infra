@@ -125,6 +125,21 @@ DB-side raster post-processing (postgis-bootstrap Lambda maintenance mode):
 
 - Secure connection `demo-rds` (SecretReference to the stack's
   connection-string secret) — id 4f468b76-9937-4835-9e64-ddc8012b30c1.
+  The server resolves that stored reference at runtime under its allowlist for
+  request-supplied secret references (honua-server #5055), which is
+  deny-by-default. `main.tf` (`local.request_secret_reference_environment`)
+  therefore sets `Security__RequestSecretReferences__AllowedSecretReferencePrefixes__0/__1`
+  to this one secret: `aws:secretsmanager:<secret ARN>` and
+  `aws:secretsmanager:<name_prefix>-<environment>/connection-string`. Matching
+  is a case-sensitive prefix of the stored text after the provider segment, so
+  the entry must have the same form as the stored reference. The stored string
+  was supplied by hand when the connection was registered and is not recorded
+  in this repo, and the admin API reports only the storage type, not the
+  reference; it lives in `data_connections.secret_ref` for the id above. If it
+  is neither of the two forms (for example a partial ARN without the random
+  suffix, or a different letter case in `secretsmanager`), add a matching entry
+  or re-register the connection with one of the permitted forms before moving
+  to a server image that includes the setting.
 - 10 demo-page services (maui-parcels, maui-zoning, maui-roads,
   maui-flood-hazard, maui-sea-level-rise, maui-place-names, maui-hillshade,
   maui-terrain, maui-imagery, maui-buildings), all with

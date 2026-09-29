@@ -82,7 +82,7 @@ Prerequisite for everything below. The image must contain honua-server
 
 Follow the existing image-redeploy procedure in
 `demo-honua-io-capability-runbook.md` (mirror GHCR → account ECR with a
-SHA-explicit tag, bump `honua_image` in `stacks/aws/terraform.tfvars`, apply,
+SHA-explicit tag, pass the new `honua_image` with `-var` as in the HOW TO APPLY header of `stacks/aws/demo.tfvars`, apply,
 and repoint the `live` alias).
 
 **Pair it with the out-of-band DbUp run** if the new image carries new
@@ -160,7 +160,7 @@ The layer must carry the run-ownership columns the server writes:
 through the in-VPC bootstrap Lambda the same way the other demo layers are
 seeded (see `stacks/aws/SEED_MANIFEST.md`).
 
-Then set, in `stacks/aws/terraform.tfvars`:
+Then set, in the committed `stacks/aws/demo.tfvars`:
 
 ```hcl
 streaming_conformance_enabled    = true

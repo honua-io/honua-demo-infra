@@ -42,6 +42,7 @@ The sdk-js consumer can now drift-check the stable published URL directly.
 | `stacks/aws/SEED_MANIFEST.md` — "Raster layers" table | `maui-hillshade` / `maui-imagery` ImageServer tile routes and `maui-terrain` Terrain-RGB route, sources, licenses |
 | `stacks/aws/SEED_MANIFEST.md` — "Basemap + glyphs" table | The `maui-basemap` PMTiles proxy service and the `/fonts/{fontstack}/{range}.pbf` glyph asset |
 | honua-server `tests/seed/demo-stac-imagery-v1.sql` at the **pinned ref in the repo README** ("Seed data" section raw URL) | The `demo-stac` STAC service and its collections (`90810` Maui Reef Watch, `90820` Maui Coastal Change): ids, names, titles, descriptions, licenses, bboxes |
+| `generate-demo-services.py` public-process allow-list | The single bounded `geometry.buffer` OGC API Processes contract, exact schema/auth/lifecycle/request-budget policy, and deterministic sync/async canary digest |
 
 The generator reads the pinned honua-server ref **from README.md** — bumping
 the seed fixture ref there is the single place that changes, and the drift
@@ -62,9 +63,11 @@ constants in the generator, not per-service hand-maintained data.
   repo's seeds.
 - **`maui_*_meta` raster availability stubs** — internal seed plumbing, not a
   demo service.
-- Anything requiring credentials, and all infra internals (bucket names, AWS
-  resource ids, connection ids) — by construction the generator never emits
-  them.
+- Credential **values**, and all infra internals (bucket names, AWS resource
+  ids, connection ids) — by construction the generator never emits them. The
+  public process descriptor names its scoped `demo-process-execute` credential
+  profile and header, but never the key; scheduled proof reads that key only
+  from the `HONUA_DEMO_GP_API_KEY` Actions secret.
 
 ## Protected client-compat descriptor
 
@@ -97,7 +100,34 @@ Top level:
 | `publishUrl` | string | The stable public URL above |
 | `sources` | object | Provenance: `seedManifest` (repo path), `stacSeed` (pinned raw URL), and `stacSeedSha256` (digest of those exact source bytes) |
 | `services` | array | One entry per publicly discoverable service (below) |
+| `processes` | array | Exact public process allow-list; 2026.1 contains only bounded, read-only `geometry.buffer` |
 | `assets` | object | Non-service public assets; currently `glyphs` (`path` template + `fontstacks`) |
+
+### Governed public process
+
+`processes[0]` is the only AI/SDK-safe public geoprocessing contract:
+
+- `geometry.buffer`, backed by the managed in-Lambda/local executor; AWS Batch
+  remains disabled for this bounded path.
+- Direct GeoJSON geometry only, SRID 4326, positive planar distance capped at
+  one input-CRS unit. No layer/artifact references, custom code, geodesic mode,
+  or mutating output is advertised.
+- Synchronous execution omits `Prefer` (OGC API Processes Requirement 25).
+  Durable asynchronous execution alone sends `Prefer: respond-async`.
+  `respond-sync` is not a preference and must not be sent. `Preference-Applied`
+  is returned only when a supplied preference was honored. Status and results
+  paths are advertised. `DELETE` is documented truthfully as active-job
+  cancellation; the manifest does not claim the full OGC dismiss conformance
+  class for completed-job cleanup.
+- The canary pins `response: "raw"` so sync and async results are the same
+  GeoJSON bytes. `document` remains a supported response mode but is not the
+  pinned digest.
+- `X-API-Key` using a separately rotated `demo-process-execute` key with only
+  the canonical `process:*:execute` grant. The key is never published in this manifest or in canary
+  receipts.
+- A Redis-backed, per-subject global fixed window of 60 requests/minute. The
+  canary requires the limit/remaining/reset response headers and binds both
+  sync and async output bytes to the checked-in SHA-256.
 
 Service entry (fields present depend on `type`):
 
