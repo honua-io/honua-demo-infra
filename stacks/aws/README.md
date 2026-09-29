@@ -472,6 +472,17 @@ most tile-burst traffic before it ever reaches the API Gateway throttles.
 | `RateLimiting__GlobalRequestsPerMinute` | `60` per tenant/user/API-key/IP partition |
 | `Geoprocessing__Executors__MaxArtifactBytes` | `1048576` (1 MiB public-demo ceiling) |
 | `HostValidation__AllowedHosts__1` | `demo.honua.io` |
+| `Security__RequestSecretReferences__AllowedSecretReferencePrefixes__0` | `aws:secretsmanager:<connection-string secret ARN>` (from `module.honua.db_connection_secret_arn`) |
+| `Security__RequestSecretReferences__AllowedSecretReferencePrefixes__1` | `aws:secretsmanager:<name_prefix>-<environment>/connection-string` |
+
+The two `Security__RequestSecretReferences__*` entries are the allowlist for
+request-supplied secret references (honua-server #5055). That server policy is
+deny-by-default and also applies when a secure connection resolves its stored
+`secretReference`, so the stack permits exactly the one secret the `demo-rds`
+connection points at, in both its ARN and its name form (see
+`SEED_MANIFEST.md` → "Server-side objects created via admin API"). Server
+images that predate the setting ignore both variables. Apply this before
+moving `honua_image` to an image that includes the setting.
 
 ### Redis requirement: readiness and durable public process jobs
 
