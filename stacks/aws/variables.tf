@@ -278,6 +278,11 @@ variable "stac_seed_metadata_environment" {
   type        = string
 
   validation {
+    condition     = var.stac_seed_metadata_environment == "Production"
+    error_message = "The live demo serves Metadata v2 environment Production; refusing to seed any other environment."
+  }
+
+  validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+$", var.stac_seed_metadata_environment))
     error_message = "stac_seed_metadata_environment must be a non-empty Metadata v2 environment identifier."
   }
