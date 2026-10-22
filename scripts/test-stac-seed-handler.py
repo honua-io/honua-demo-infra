@@ -33,6 +33,8 @@ class FakeConnection:
         self.calls.append((statement, parameters))
         if "SELECT revision FROM honua.metadata_v2_current" in statement:
             return [[7]]
+        if "to_regclass('honua.metadata_v2_current')" in statement:
+            return [["honua.metadata_v2_current"]]
         if "SELECT marker.seed_id" in statement:
             return self.receipt_rows
         return []
@@ -144,6 +146,56 @@ class StacSeedHandlerTests(unittest.TestCase):
     def test_managed_seed_rejects_caller_controlled_fields(self):
         with self.assertRaisesRegex(ValueError, "allowlisted operation"):
             self.handler._managed_seed({"operation": "apply-demo-stac-seed", "source": "SELECT 1"})
+
+    def test_receipt_role_only_operation_runs_no_seed_and_changes_no_revision(self):
+        connection = FakeConnection(statement_splitter=self.handler._split_postgresql_statements)
+        environment = {"RECEIPT_DB_SECRET_ARN": "receipt", "DB_SECRET_ARN": "admin",
+                       "OPERATION_MODE": "managed-stac-seed"}
+        with patch.dict(os.environ, environment, clear=True), \
+             patch.object(self.handler.urllib.request, "urlopen", side_effect=AssertionError("no seed download")), \
+             patch.object(self.handler, "_read_secret", return_value={
+                 "Username": "honua_demo_seed_receipt", "Password": "receipt-password"
+             }), \
+             patch.object(self.handler, "_connect", return_value=connection):
+            result = self.handler.handler({"operation": "provision-demo-stac-receipt-role"}, None)
+
+        all_sql = "\n".join(call[0] for call in connection.calls)
+        self.assertEqual("BEGIN", connection.calls[0][0])
+        self.assertEqual("COMMIT", connection.calls[-1][0])
+        self.assertIn("CREATE ROLE honua_demo_seed_receipt", all_sql)
+        self.assertIn("NOSUPERUSER NOCREATEDB NOCREATEROLE", all_sql)
+        self.assertIn("GRANT SELECT ON honua.demo_seed_revisions", all_sql)
+        self.assertIn("CREATE TABLE IF NOT EXISTS honua.demo_seed_revisions", all_sql)
+        self.assertNotIn("SELECT revision FROM honua.metadata_v2_current", all_sql)
+        for statement, _ in connection.calls:
+            self.assertFalse(
+                statement.strip().upper().startswith(("INSERT", "UPDATE", "DELETE", "TRUNCATE", "DROP")),
+                statement,
+            )
+        self.assertEqual("honua_demo_seed_receipt", result["receiptRole"])
+        self.assertIs(True, result["receiptRoleReconciled"])
+        self.assertIs(False, result["seedExecuted"])
+
+    def test_receipt_role_only_operation_rejects_caller_fields_and_missing_metadata(self):
+        with self.assertRaisesRegex(ValueError, "allowlisted operation"):
+            self.handler._provision_receipt_role(
+                {"operation": "provision-demo-stac-receipt-role", "statements": ["DROP TABLE x"]})
+
+        class NoMetadata(FakeConnection):
+            def run(self, statement, **parameters):
+                self.calls.append((statement, parameters))
+                if "to_regclass" in statement:
+                    return [[None]]
+                return []
+
+        connection = NoMetadata()
+        with patch.dict(os.environ, {"RECEIPT_DB_SECRET_ARN": "r", "DB_SECRET_ARN": "a"}, clear=True), \
+             patch.object(self.handler, "_read_secret", return_value={
+                 "Username": "honua_demo_seed_receipt", "Password": "p"}), \
+             patch.object(self.handler, "_connect", return_value=connection):
+            with self.assertRaisesRegex(RuntimeError, "refusing to provision"):
+                self.handler._provision_receipt_role({"operation": "provision-demo-stac-receipt-role"})
+        self.assertEqual("ROLLBACK", connection.calls[-1][0])
 
     def test_receipt_accepts_only_fixed_query_operation(self):
         with self.assertRaisesRegex(ValueError, "fixed query"):
