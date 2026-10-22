@@ -24,10 +24,9 @@
 #                                  secret is an OUTPUT of this apply. Reading it back as an input
 #                                  would be circular.
 #
-#   honua_image                    Per-release, not per-environment. It must be the ECR image for the
-#                                  server sha pinned in honua-release's platform-manifest.yaml, in
-#                                  THIS region (Lambda cannot pull from GHCR). Hard-coding it here
-#                                  would go stale exactly the way the old local file did.
+#   honua_image                    Now pinned below by digest for the rc cutover (it must be the ECR
+#                                  image for the server sha in THIS region; Lambda cannot pull from
+#                                  GHCR). Update it with every server pin, in the same change.
 #
 # `stac_seed_metadata_environment` is committed below because the live database
 # has one exact active Metadata v2 environment: `Production`. This value was
@@ -38,6 +37,11 @@
 region                         = "us-west-2"
 route53_zone_id                = "Z089181827C9GKIKHXUTT"
 stac_seed_metadata_environment = "Production"
+
+# The serving image: the amd64 Lambda AOT build of honua-server 199bce77fe99 mirrored
+# into this region's ECR (tag rc-2026.1-rc.1-lambda-aot-199bce7-amd64). The function
+# architecture is x86_64 in main.tf and must match. Digest-pinned; bump with the server pin.
+honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:24bb5279ece9dc55da46a69c4bbed5430a773490fcb11476c5ab615f7305e7d3"
 
 # Studio AI — the demo runs Bedrock-backed generation.
 enable_studio_ai  = true
@@ -50,8 +54,13 @@ enable_amazon_location_geocoding = true
 # Redis backs the public process job queue/result store and the distributed
 # fixed-window request budget. The managed geometry.buffer executor runs in the
 # serving Lambda; Batch remains disabled for this bounded public process.
-enable_redis    = true
-enable_gp_batch = false
+enable_redis = true
+# Keep the ElastiCache objects but do NOT inject ConnectionStrings__redis into the
+# Lambda for the 2026-10-22 rc cutover: honua-server#6500 (Lambda + Redis boot aborts
+# without Operations:SecretChannel:KeyRingCertificatePath) and #6487 (Redis-off admin
+# API keys are per process, a known gap). See redis.tf.
+wire_redis_connection = false
+enable_gp_batch       = false
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.
