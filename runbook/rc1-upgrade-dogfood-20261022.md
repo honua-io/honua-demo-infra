@@ -277,3 +277,16 @@ Follow the release repo's rule (release#282): never `docker pull/tag/push` (re-e
     aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-amd64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
 
 Architecture ruling (coordinator, 2026-10-22): the demo function moves to x86_64 to match the release's `awsLambdaArchitecture: x86_64` Lambda GA target. The `main.tf` change is a separate PR (`lambda_architectures = ["x86_64"]`, `gp_batch_cpu_architecture = "X86_64"`) and must merge before the section 5.5 apply. Consequences: (1) `honua_image` must be an amd64 image, an arm64 one fails at apply; (2) `update-function-code` in 9.3 step 3 must pass `--architectures x86_64` (the `$LATEST` architecture must be switched together with the image); (3) published `:42` stays arm64 and immutable, so the alias rollback to :42 still works; (4) the architecture switch is not undoable on `$LATEST` without another image swap, so a rollback never needs to touch `$LATEST`.
+
+## 10. Execution record (2026-10-22)
+
+### 10.1 Contract approval, recorded before the migration invoke
+
+- Time: 2026-10-22T11:19Z. Snapshot taken before any change: `rc1-pre-upgrade-20261022`, available, encrypted, PostgreSQL 15.17, created 2026-10-22T11:06:16Z.
+- Image: `585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:add1ed04c09de41da9d9fb7e631bd06b780143badee7c1fda9c8d9df036ea216` (tag `rc-2026.1-rc.1-lambda-aot-4709145-amd64`, revision 4709145cb5a4).
+- Gate probe: version 44 (same image, `HONUA_SKIP_MIGRATIONS=false`, timeout 900, no approval) invoked once on `staging` at 11:17:36Z with reserved concurrency 1. The gate refused cleanly before applying anything and printed the expected one-shot nonce. No data was changed by that invocation.
+- Computed approval nonce: `HONUA_APPROVE_CONTRACT_MIGRATIONS=cdbcc0afc96cae7f`.
+- The 12 pending ContractAnnotated scripts the nonce binds (the engine's list; my offline classifier run counted one more, `109_AdoptConfiguredGuardedSchema`, which is only included when `Database:Schema` is not the default):
+  `Honua.Postgres.Migrations.001_CreateRasterTables`, `094_CreateSavedMapCheckpointVersionRecovery`, `095_DeleteSavedMapOperationLogWithStudioDraft`, `102_WidenReplicaConflictTypeForDeleteDelete`, `106_CreateManagedUsersAndScimGroups`, `106_RetainAlertEvidenceAfterRuleDeletion`, `108_FixLongImportIndexNames`, `109_AddAlertDispatchClaimToken`, `111_AttachFeatureChangeTriggerToMetadataFeatures`, `111_PreserveImportOrdinateDimensions`, `115_AddDropImportStagingTable`, `124_AttachFeatureChangeTriggerToHonuaFeatures`.
+- Operator decision (coordinator, honua-release#376): approve the Contract set and exercise the customer path from the August snapshot; rollback is the snapshot, because image rollback to :42 is not guaranteed after Contract scripts run.
+- Journal before: pending 092-106 on the f897700 image (`before.json`). The rc plan is 52 scripts (092-133 plus raster 001-006).
