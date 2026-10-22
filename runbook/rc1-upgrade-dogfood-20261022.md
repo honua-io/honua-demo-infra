@@ -196,3 +196,57 @@ Database rollback (only if a Contract migration ran or data is corrupted; 30-60 
 - Cutover (5.5): alias repoint is atomic; the first request after it pays a 2-4 s cold start per execution environment (reserved concurrency 25). Estimate under 1 min of elevated latency, no hard downtime expected if `/healthz/ready` is 200 on the new version beforehand (smoke it through the `staging` alias first).
 - Image rollback: under 1 min. DB restore rollback: 30-60 min outage.
 - Whole window: about 60-90 min wall clock, 0-10 min user-visible impact for the expand-only case.
+
+## 9. Phase 2 approvals and prepared commands (coordinator message, 2026-10-22)
+
+Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` taken immediately before any change, no in-VPC host, no pg_dump; (b) migration path B (section 5.4) through the `staging` alias only, journal recorded before and after, abort if any pending migration is Contract; (c) Redis first; (d) rollback by alias repoint to :42, pre-staged; (e) set the two canary repo variables. Go-conditions: the coordinator sends the final rc image with a mirrored `lambda-aot-*-arm64` variant (verify the arm64 build exists for that sha in the account ECR before anything else); the dependents list in section 1 (maplibre quickstart layer `maui-buildings/FeatureServer/13` and the 12 services) is covered by the probe below.
+
+### 9.1 Journal is readable read-only (verified 2026-10-22 08:27 UTC)
+
+`GET /api/v1/admin/deploy/preflight?includeDiagnostics=true` with the admin key returns `migration.pendingScripts`, planned by the serving image against the live database, with no data change. Result for image f897700: lifecycle `skipped`, `upgradeRequired=true`, pending = `092_CreateSavedMapOperationLog` through `106_CreateManagedUsersAndScimGroups` (15 scripts), no executed-but-undiscovered scripts. This resolves risk R1: the live journal is exactly through 091 (104 names), none of 092-105 were ever applied. Contract classification appears as `migration.hasPendingContractScripts` / `pendingContractScripts` (omitted when false); `runbook/scripts/rc1-upgrade-probe.sh` exits 3 and prints ABORT if either is present. The same endpoint on the rc image (staging, skip=true) gives the full rc pending list and Contract flag BEFORE any migration runs.
+
+### 9.2 Hazard found: never invoke the existing staging version
+
+`staging -> :22` has `HONUA_SKIP_MIGRATIONS=false` (the other aliases and :42 have true). Invoking :22 would run migrations (its older image's set) against the live database. Do not invoke, warm, or probe `staging` until it has been repointed to a version this procedure publishes. API Gateway integrates `...:honua-demo-demo-honua:live`, so edits to `$LATEST` and to `staging` do not affect public traffic.
+
+### 9.3 Commands (nothing below has been run)
+
+    export AWS_PAGER=""; R=us-west-2; F=honua-demo-demo-honua; DATE=$(date -u +%Y%m%d)
+    IMG=585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:<final-arm64-lambda-aot-digest>
+    PROOF=$HOME/.honua-runtime-proof/rc1-upgrade-20261022; mkdir -p $PROOF
+    # 0 pre-stage rollback (do not run until needed) and baseline
+    ROLLBACK="aws lambda update-alias --function-name $F --name live --function-version 42 --region $R"
+    runbook/scripts/rc1-upgrade-probe.sh before $PROOF          # exit 0; records journal (15 pending) and counts
+    # 1 backup, immediately before any change
+    SNAP=rc1-pre-upgrade-$DATE
+    aws rds create-db-snapshot --region $R --db-instance-identifier honua-demo-demo-postgres --db-snapshot-identifier $SNAP --tags Key=Purpose,Value=rc1-upgrade-rollback
+    aws rds wait db-snapshot-available --region $R --db-snapshot-identifier $SNAP
+    # 2 Redis first: section 5.3 targeted apply
+    # 3 classification version: rc image, skip migrations TRUE, staging only
+    aws lambda get-function-configuration --function-name $F --region $R --query Environment --output json > $PROOF/latest-env.before.json   # contains secrets: keep out of the repo and the report
+    aws lambda update-function-code --function-name $F --image-uri "$IMG" --publish --region $R --query Version --output text    # records V1; waits via: aws lambda wait function-updated
+    # $LATEST environment already has HONUA_SKIP_MIGRATIONS per the terraform-applied config (verify it prints "true"); V1 is skip=true
+    aws lambda update-alias --function-name $F --name staging --function-version <V1> --region $R
+    # invoke staging directly with an API-Gateway-v2 style event for GET /api/v1/admin/deploy/preflight?includeDiagnostics=true and header X-API-Key
+    # record pendingScripts and Contract flags; if any Contract -> STOP, do not migrate, report.
+    # 4 migration version: same image, skip migrations FALSE, timeout 900, staging only
+    aws lambda update-function-configuration --function-name $F --region $R --timeout 900 --environment "$(python3 - <<PY ... set HONUA_SKIP_MIGRATIONS=false in $PROOF/latest-env.before.json ... PY)"
+    aws lambda wait function-updated --function-name $F --region $R
+    V2=$(aws lambda publish-version --function-name $F --region $R --query Version --output text)
+    aws lambda put-function-concurrency --function-name $F --reserved-concurrent-executions 1 --region $R
+    aws lambda update-alias --function-name $F --name staging --function-version $V2 --region $R
+    # invoke staging ONCE with GET /healthz/ready (synchronous, 900 s), save the response; then preflight on staging: pending must be empty
+    aws lambda put-function-concurrency --function-name $F --reserved-concurrent-executions 25 --region $R
+    # 5 restore $LATEST config (skip=true, timeout 60) from latest-env.before.json; repoint staging back to <V1> (skip=true) so no version with skip=false stays addressable
+    # 6 old image against migrated schema: runbook/scripts/rc1-upgrade-probe.sh after-migrate $PROOF  (live is still :42, expand-only check)
+    # 7 deploy per section 5.5 (terraform apply, digest-pinned); probe `after-deploy`; rollback if triggered: eval "$ROLLBACK"
+
+Notes: step 3-5 edit `$LATEST` of the serving function by hand; the next terraform apply overwrites `$LATEST` with its own desired state, which is what step 7 wants. Reserved concurrency of 1 is function-wide, so it also throttles public traffic served by :42 during the migration; keep that window to the single invocation, and if the migration needs longer than a few minutes, restore 25 and wait. Published versions V1/V2 stay in the function as inert history.
+
+### 9.4 Canary variables (approved)
+
+Set `HONUA_DEMO_STAC_RECEIPT_ROLE_ARN` and `HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME` from the `stac-seed-gate.tf` outputs (`terraform output`; the stack outputs, not state surgery), then dispatch `live-canary.yml` once before the change (needs `HONUA_DEMO_GP_API_KEY` secret and a 40-char `deployment_revision` = `f897700159e2791c9468c6ca85bb4e2a3a8d8433`) and again after with the rc commit, after updating `HONUA_CLIENT_COMPAT_SERVER_COMMIT` and `HONUA_CLIENT_COMPAT_SERVER_IMAGE`. If the outputs do not exist in the applied state (the stac-seed-gate resources are part of the unapplied backlog), say so and report instead of inventing values.
+
+### 9.5 Pre-existing inconsistency noticed
+
+Live `maui-sea-level-rise` returns 1537 features (matches the 2026-09-16 recovery table for layer 5) but the manifest promises `featureCount: 3`. The before-probe records the live number; the canary may flag this independently of the upgrade.
