@@ -318,3 +318,18 @@ Findings filed: honua-server#6496 (skip=true boot aborts on the raster schema fl
 - Redis is provisioned but not wired (honua-server#6500, #6487). `redis.tf` owns the ElastiCache objects and `wire_redis_connection = false` keeps `ConnectionStrings__redis` out of the function environment. Do not re-pin the honua-iac module to get a toggle: the current honua-iac trunk replaces `random_password.db` and updates the RDS instance in this stack's plan.
 - Known trims: `http://localhost:8123` is no longer in the app CORS allowlist (the edge policy in cloudfront.tf still has it). With Redis unwired the environment is 3932 of 4096 bytes, so `Cors__AllowedOrigins__2` (50 bytes) would fit; it is left out of the Redis PR so that PR changes nothing on the serving function. Add it in its own reviewed change if local demo.html verification is still wanted.
 - Before applying any plan, check that `aws_lambda_alias.live` does not point at a `skip=false` version: the module's `function_version` follows the latest published version, so a manual publish (for example a migration run) changes what an apply promotes. Publish a clean version first, as was done here (version 51).
+
+## 12. Open items at close (2026-10-22)
+
+State: demo.honua.io serves honua-server 199bce77fe99 (`live` = version 51, x86_64, Redis provisioned but unwired); Terraform and live agree (#87 applied 18:48Z). Migrations through 135 are applied. Rollback target is still `live` -> :42 (image only; the snapshots `rc1-pre-upgrade-20261022` and `rc1-pre-cutover-20261022` exist).
+
+**The demo live canary stays red by decision** until the operator schedules a reseed that is re-pinned to the running server. The OIDC trust is fixed (#88); what remains is that the `honua_demo_seed_receipt` database role and a `demo_seed_revisions` row do not exist, so the receipt Lambda fails with `28P01`. The role-only operation (`provision-demo-stac-receipt-role`, #89) is merged but NOT applied or invoked. Steps when scheduled, each a separate authorization:
+
+1. Re-pin `manifest.sources.stacSeed` and `stacSeedSha256` to the running server commit (199bce77fe99) and regenerate the manifest (`python3 manifest/generate-demo-services.py`); merge.
+2. `terraform apply` from `stacks/aws` (re-plan first; the serving function must not change, `live` must stay on its current version) so the seed-manager Lambda carries the role-only operation and the new pin.
+3. Snapshot: `aws rds create-db-snapshot --db-instance-identifier honua-demo-demo-postgres --db-snapshot-identifier rc1-pre-seedrole-<date>`, wait until available.
+4. Optional, role only: invoke `honua-demo-demo-stac-seed-manager` with `{"operation":"provision-demo-stac-receipt-role"}`. This creates the query-only role and an empty `honua.demo_seed_revisions`; the canary then fails with a missing receipt instead of an authentication error.
+5. Reseed decision (live data change; moves the active Production metadata revision): invoke the same function with `{"operation":"apply-demo-stac-seed"}` once, then `scripts/stac-features-restore.py prove post-seed`, then dispatch `live-canary.yml` on trunk with `deployment_revision` = the running commit. Expect the receipt bound to the new revision.
+6. Set `HONUA_CLIENT_COMPAT_SERVER_COMMIT` and `HONUA_CLIENT_COMPAT_SERVER_IMAGE` to the running server before expecting the client-compat step of the canary to pass.
+
+Other recorded open items: honua-server#6500 (Lambda + Redis boot) and #6487 (Redis-off per-process admin keys); `http://localhost:8123` is out of the app CORS allowlist (about 50 bytes would fit, 3982 of 4096); `gh-tf-test` holds AdministratorAccess; the live manifest at https://demo.honua.io/demo-services.v1.json should be re-checked against trunk after any manifest change.
