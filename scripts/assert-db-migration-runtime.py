@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "stacks" / "aws-db-migration-runner" / "runner"
-ARCHIVE_BASE64_SHA256 = "7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o="
+ARCHIVE_BASE64_SHA256 = "/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw="
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
 RUNNER_NAME = "honua-demo-demo-db-migration-092-105"

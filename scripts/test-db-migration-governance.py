@@ -46,7 +46,7 @@ class Tests(unittest.TestCase):
  def test_result_receipt_rejects_hostile_drift(self):
   spec=importlib.util.spec_from_file_location("migration_result",ROOT/"scripts/assert-db-migration-result.py"); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
   manifest=json.loads((ROOT/"stacks/aws-db-migration-runner/runner/migration-manifest.v1.json").read_text())
-  runtime={"qualifiedArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-092-105:1","version":"1","codeSha256":"7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o="}
+  runtime={"qualifiedArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-092-105:1","version":"1","codeSha256":"/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw="}
   metadata={"StatusCode":200,"ExecutedVersion":"1"}; payload=module.expected_payload()
   snapshot={"DBSnapshotIdentifier":"honua-demo-pre-092-105-e0ee6b49e116","DBSnapshotArn":"arn:aws:rds:us-west-2:585192672263:snapshot:honua-demo-pre-092-105-e0ee6b49e116","DBInstanceIdentifier":"honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","Status":"available","SnapshotType":"manual","Engine":"postgres","EngineVersion":"15.17","Encrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}
   with tempfile.TemporaryDirectory() as d:

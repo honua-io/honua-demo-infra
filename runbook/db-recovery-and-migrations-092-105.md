@@ -17,8 +17,8 @@ then the seed.
 - Database: `honua-demo-demo-postgres`, PostgreSQL `15.17`, encrypted, status `available`
 - Pending set: ordered 092-105, all `Expand`, digest `e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7`
 - Recovery point: `honua-demo-pre-092-105-e0ee6b49e116`
-- Runner ZIP SHA-256: `ec7b6775eb02cf37a73bd7053e6da2a524be343b7785e6384b43b3a708b2c79a`
-- Expected AWS `Configuration.CodeSha256`: `7HtndesCzzenO9cFPm2ipSS+NDt3heY4S0Ozpwiyx5o=`
+- Runner ZIP SHA-256: `ff32a65ebd2f2f7efce184229492e1ffd629f22d1f040a0c6c2e6bd693f358dc`
+- Expected AWS `Configuration.CodeSha256`: `/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw=`
 - Exact ordered 104-name pre-092 journal SHA-256: `8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4`
 
 ## Phase 1: deploy the runner
