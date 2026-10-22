@@ -103,7 +103,7 @@ Details that matter when changing this:
   the rest, including `Range` and `Origin`.
 - **Edge CORS**: a response-headers policy stamps the demo's CORS headers
   (origins `https://honua.io`, `https://www.honua.io`, `http://localhost:8123`
-  — mirror of `Cors__AllowedOrigins__*` in main.tf) on the cached behaviors,
+  — `localhost:8123` is edge-only since the app allowlist in main.tf dropped it for the Lambda env budget) on the cached behaviors,
   because cached responses are shared across requesting origins. This also
   masks honua-server#1627 (missing CORS headers on error responses) for the
   tile routes.
@@ -466,8 +466,8 @@ most tile-burst traffic before it ever reaches the API Gateway throttles.
 |---|---|
 | `HONUA_SERVE_API_DOCS` | `true` — OpenAPI docs served at `/api-docs` |
 | `HONUA_SERVE_STAC_DEMO` | `true` — STAC demo catalog enabled |
-| `MultiTenancy__Enabled` | `true` |
-| `MultiTenancy__DefaultTenantId` | `public` |
+| `MultiTenancy__Enabled` | `true` (server default; not emitted, Lambda 4096-byte env budget, see main.tf) |
+| `MultiTenancy__DefaultTenantId` | `public` (server default; not emitted) |
 | `RateLimiting__Enabled` | `true` — Redis-backed fixed-window limiting |
 | `RateLimiting__GlobalRequestsPerMinute` | `60` per tenant/user/API-key/IP partition |
 | `Geoprocessing__Executors__MaxArtifactBytes` | `1048576` (1 MiB public-demo ceiling) |

@@ -33,7 +33,7 @@ resource "terraform_data" "postgis_bootstrap_build" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["python", "-c"]
+    interpreter = ["python3", "-c"]
     command     = <<-EOT
       import pathlib, shutil, subprocess, sys, urllib.request
       root = pathlib.Path(r"${local.postgis_bootstrap_dir}")

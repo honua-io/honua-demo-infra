@@ -73,13 +73,19 @@ locals {
   # in ASP.NET Core double-underscore env-var form. The `bedrock` kind needs
   # no Endpoint and no ApiKey; MaxTokens (4096) and TimeoutSeconds (120) stay
   # at the server defaults.
-  studio_ai_environment = var.enable_studio_ai ? {
-    StudioAiProxy__Enabled                    = "true"
-    StudioAiProxy__DefaultProvider            = "bedrock"
-    StudioAiProxy__Providers__bedrock__Kind   = "bedrock"
-    StudioAiProxy__Providers__bedrock__Model  = var.studio_ai_model
+  #
+  # Region is emitted only when it differs from the server's own default for a
+  # bedrock provider (StudioAiProxyConfiguration.DefaultBedrockRegion,
+  # us-west-2). The Lambda environment is capped at 4096 bytes (see the budget
+  # note in main.tf), so a value equal to the default is not spent there.
+  studio_ai_environment = var.enable_studio_ai ? merge({
+    StudioAiProxy__Enabled                   = "true"
+    StudioAiProxy__DefaultProvider           = "bedrock"
+    StudioAiProxy__Providers__bedrock__Kind  = "bedrock"
+    StudioAiProxy__Providers__bedrock__Model = var.studio_ai_model
+    }, var.studio_ai_region == "us-west-2" ? {} : {
     StudioAiProxy__Providers__bedrock__Region = var.studio_ai_region
-  } : {}
+  }) : {}
 }
 
 # Least-privilege Bedrock invoke grant for the Studio AI proxy. Deliberately a
