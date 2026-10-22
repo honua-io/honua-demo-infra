@@ -282,7 +282,7 @@ Architecture ruling (coordinator, 2026-10-22): the demo function moves to x86_64
 
 ### 10.1 Contract approval, recorded before the migration invoke
 
-- Time: 2026-10-22T11:19Z. Snapshot taken before any change: `rc1-pre-upgrade-20261022`, available, encrypted, PostgreSQL 15.17, created 2026-10-22T11:06:16Z.
+- Time: 2026-10-22T11:18Z (migration invoke started 11:18:33Z). Snapshot taken before any change: `rc1-pre-upgrade-20261022`, available, encrypted, PostgreSQL 15.17, created 2026-10-22T11:06:16Z.
 - Image: `585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:add1ed04c09de41da9d9fb7e631bd06b780143badee7c1fda9c8d9df036ea216` (tag `rc-2026.1-rc.1-lambda-aot-4709145-amd64`, revision 4709145cb5a4).
 - Gate probe: version 44 (same image, `HONUA_SKIP_MIGRATIONS=false`, timeout 900, no approval) invoked once on `staging` at 11:17:36Z with reserved concurrency 1. The gate refused cleanly before applying anything and printed the expected one-shot nonce. No data was changed by that invocation.
 - Computed approval nonce: `HONUA_APPROVE_CONTRACT_MIGRATIONS=cdbcc0afc96cae7f`.
@@ -290,3 +290,24 @@ Architecture ruling (coordinator, 2026-10-22): the demo function moves to x86_64
   `Honua.Postgres.Migrations.001_CreateRasterTables`, `094_CreateSavedMapCheckpointVersionRecovery`, `095_DeleteSavedMapOperationLogWithStudioDraft`, `102_WidenReplicaConflictTypeForDeleteDelete`, `106_CreateManagedUsersAndScimGroups`, `106_RetainAlertEvidenceAfterRuleDeletion`, `108_FixLongImportIndexNames`, `109_AddAlertDispatchClaimToken`, `111_AttachFeatureChangeTriggerToMetadataFeatures`, `111_PreserveImportOrdinateDimensions`, `115_AddDropImportStagingTable`, `124_AttachFeatureChangeTriggerToHonuaFeatures`.
 - Operator decision (coordinator, honua-release#376): approve the Contract set and exercise the customer path from the August snapshot; rollback is the snapshot, because image rollback to :42 is not guaranteed after Contract scripts run.
 - Journal before: pending 092-106 on the f897700 image (`before.json`). The rc plan is 52 scripts (092-133 plus raster 001-006).
+
+### 10.2 Outcome (2026-10-22, up to 11:40Z): database migrated, rc image NOT cut over
+
+| Step | Result |
+|---|---|
+| Mirror | `rc-2026.1-rc.1-lambda-aot-4709145-amd64` in us-west-2 ECR, digest `sha256:add1ed04c09de41da9d9fb7e631bd06b780143badee7c1fda9c8d9df036ea216`, config and layers equal to the GHCR source |
+| Snapshot | `rc1-pre-upgrade-20261022`, available, created 11:06:16Z |
+| skip=true boot of the rc | refused: raster root not journaled, runtime aborted (honua-server#6496) |
+| Gate probe | version 44, skip=false, no approval: refused cleanly with the nonce above, nothing applied |
+| Migration | version 45 (skip=false, nonce set), one invoke on `staging`, reserved concurrency 1, 11:18:33Z to 11:18:53Z (SQL about 3 s); 52 scripts applied; reserved concurrency back to 25 at 11:19Z |
+| Journal after | preflight on the rc: `succeeded`, no pending scripts, ready |
+| Old image on migrated schema | `live` still :42 (f897700): healthy, seven layer counts unchanged, all families 200 (`after-migrate-old-image.json`) |
+| Redis | created (cache.t3.micro replication group, secret, security group); not wired into the function |
+| Terraform full apply | failed before changing the function: (1) Lambda environment is 4467 bytes against the 4096-byte limit with the committed stack (Redis + request-secret allowlist + streaming + rate limiting); (2) the postgis bootstrap `local-exec` calls `python`, which is absent on this host. Nothing in AWS changed from that apply. |
+| rc candidates on `staging` | A/B (Redis on): boot aborts, `Operations:SecretChannel:KeyRingCertificatePath` required (honua-server#6500). C/D (Redis off, name-form and ARN-form allowlists): boots, `/healthz/ready` 200, but every FeatureServer and OGC items read returns 500: the storage-mapped reader does not resolve the connection `SecretRef` (honua-server#6499). Acceptance (all layers answer) fails. |
+| Cutover | NOT done. `live` is :42, dev :18, staging :43 (inert). |
+| Final state check | `final-live-check` 11:38Z: health 200/200, counts equal baseline, all probe families 200. `$LATEST` environment restored to the pre-upgrade env (image and x86_64 architecture remain until the next apply). |
+
+Rollback status: no rollback was performed because the live function was never moved and the old image serves the migrated schema. The snapshot restore path (section 5.7) is available if the operator wants the database back at its 11:06Z state; that loses any writes since then.
+
+Findings filed: honua-server#6496 (skip=true boot aborts on the raster schema floor), #6499 (SecretRef connections 500), #6500 (Lambda + Redis needs the key-ring certificate). Stack findings for this repo: the committed environment exceeds the 4 KB Lambda limit (needs about 371 bytes cut; trims verified equal to server defaults are `RateLimiting__IncludeHeaders`, `MultiTenancy__DefaultTenantId`, `FileStorage__AwsS3__ForcePathStyle`, `Cors__AllowCredentials`, `Limits__Connections__RequestTimeout`), and `postgis-bootstrap.tf` needs `python3` instead of `python`.
