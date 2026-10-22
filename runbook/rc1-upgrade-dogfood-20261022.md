@@ -250,3 +250,30 @@ Set `HONUA_DEMO_STAC_RECEIPT_ROLE_ARN` and `HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAM
 ### 9.5 Pre-existing inconsistency noticed
 
 Live `maui-sea-level-rise` returns 1537 features (matches the 2026-09-16 recovery table for layer 5) but the manifest promises `featureCount: 3`. The before-probe records the live number; the canary may flag this independently of the upgrade.
+
+### 9.6 Canary variables: source values exist (read-only check, 2026-10-22)
+
+The applied terraform state already contains the stac-seed-gate resources (`aws_iam_role.github_stac_seed_receipt`, `aws_lambda_function.stac_seed_receipt`, ...) and `terraform output` returns both values (names/ARNs, not secrets):
+
+- `stac_seed_receipt_github_role_arn` -> repo variable `HONUA_DEMO_STAC_RECEIPT_ROLE_ARN` (`arn:aws:iam::585192672263:role/honua-demo-demo-github-stac-receipt`)
+- `stac_seed_receipt_function_name` -> repo variable `HONUA_DEMO_STAC_RECEIPT_FUNCTION_NAME` (`honua-demo-demo-stac-seed-receipt`)
+
+Set with `gh variable set <NAME> -R honua-io/honua-demo-infra --body <value>`. Whether the role's trust policy admits this repo's trunk is verified by the first dispatched canary run, not assumed.
+
+### 9.7 ECR mirror command for the final image (not run)
+
+Follow the release repo's rule (release#282): never `docker pull/tag/push` (re-encodes the config); copy manifest bytes with `crane copy`. Pin crane v0.22.1 (sha256 `0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0`, linux x86_64 tarball from google/go-containerregistry); crane and skopeo are not installed on this host, docker is.
+
+    SHA=<40-char rc server commit>; S7=${SHA:0:7}; REL=2026.1-rc.<N>
+    SRC=ghcr.io/honua-io/honua-server@sha256:<single-platform arm64 lambda-aot digest from the nightly/release build>
+    # 1 verify the source is a SINGLE-platform arm64 manifest and carries the right commit
+    docker buildx imagetools inspect --raw "$SRC" | jq -e 'has("manifests")|not'
+    crane config "$SRC" | jq -er '.architecture'     # must be arm64
+    # 2 does an arm64 lambda-aot variant exist for the sha at all? check before anything else
+    aws ecr describe-images --repository-name honua-server --region us-west-2 --query "imageDetails[?contains(to_string(imageTags),'$S7')].imageTags" --output json
+    # 3 mirror by bytes, then compare config + layers to the source (as e2e-cloud-aws.yml does)
+    aws ecr get-login-password --region us-west-2 | crane auth login --username AWS --password-stdin 585192672263.dkr.ecr.us-west-2.amazonaws.com
+    crane copy "$SRC" 585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server:rc-$REL-lambda-aot-$S7-arm64
+    aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-arm64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
+
+Architecture trap: the release repo's Lambda GA pin (`e2e-cloud-aws.yml`, release#282) requires `awsLambdaArchitecture: x86_64`/amd64, but the demo function is arm64 (`lambda_architectures = ["arm64"]`, main.tf comment "keep this aligned with the release manifest's awsLambdaArchitecture pin"). If the final sha only has an amd64 Lambda AOT image, it cannot run on this function as configured. Options: obtain an arm64 build, or change the function architecture to x86_64 (a reviewed `main.tf` change and a cold, non-reversible-in-place move for :42 history; the old :42 stays arm64). Report this to the coordinator rather than choosing.
