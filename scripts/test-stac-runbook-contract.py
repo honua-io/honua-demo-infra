@@ -62,7 +62,7 @@ class StacRunbookContractTests(unittest.TestCase):
         tfvars = TFVARS.read_text(encoding="utf-8")
         self.assertIn("read-query-only-db-secret", iac)
         self.assertIn("aws_secretsmanager_secret.stac_seed_receipt_connection.arn", iac)
-        self.assertIn("repo:honua-io/honua-demo-infra:ref:refs/heads/trunk", iac)
+        self.assertIn("repo:honua-io@217718039/honua-demo-infra@1310514636:ref:refs/heads/trunk", iac)
         self.assertIn("Resource = [aws_lambda_function.stac_seed_receipt.arn]", iac)
         github_policy = iac[iac.index('resource "aws_iam_role_policy" "github_stac_seed_receipt"') :]
         self.assertNotIn("stac_seed_manager.arn", github_policy)
