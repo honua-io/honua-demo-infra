@@ -65,11 +65,14 @@ module "honua" {
   environment = var.environment
 
   # Lambda container — use the AOT image variant for fast cold starts.
-  # The certified Lambda AOT artifact is built on CI's native arm64 runner.
-  # Function and image architecture must match, so keep this aligned with the
-  # release manifest's awsLambdaArchitecture pin.
+  # The certified Lambda AOT artifact is the x86_64 (amd64) build: the release
+  # manifest pins awsLambdaArchitecture: x86_64 for the 2026.1 Lambda GA target
+  # (honua-release#282), and the demo runs the certified architecture (operator
+  # ruling, honua-release#376). Function and image architecture must match, so
+  # honua_image MUST be an amd64 image; an arm64 image fails at apply. Published
+  # versions are immutable, so :42 (arm64) stays a valid rollback target.
   image                = var.honua_image
-  lambda_architectures = ["arm64"]
+  lambda_architectures = ["x86_64"]
   lambda_memory_size   = var.lambda_memory_size
 
   # No provisioned concurrency: cold starts are acceptable for a demo.
@@ -217,13 +220,13 @@ module "honua" {
 
   # GP over AWS Batch (Fargate Spot) — off unless var.enable_gp_batch is set.
   # Scales to zero between jobs; pay only for the seconds a job's container runs.
-  # Match the arm64 Lambda image because gp_batch_image defaults to reusing it.
+  # Match the x86_64 Lambda image because gp_batch_image defaults to reusing it.
   # Callers that supply a different worker image must keep its architecture in
   # sync here. The GP job role gets read/write on the demo data bucket so
   # imports can stage to S3 the same way the Lambda does.
   enable_gp_batch              = var.enable_gp_batch
   gp_batch_image               = var.gp_batch_image
-  gp_batch_cpu_architecture    = "ARM64"
+  gp_batch_cpu_architecture    = "X86_64"
   gp_batch_data_bucket_arn     = aws_s3_bucket.demo_data.arn
   gp_batch_data_bucket_enabled = true
 

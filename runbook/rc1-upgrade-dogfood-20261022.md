@@ -224,7 +224,7 @@ Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` ta
     # 2 Redis first: section 5.3 targeted apply
     # 3 classification version: rc image, skip migrations TRUE, staging only
     aws lambda get-function-configuration --function-name $F --region $R --query Environment --output json > $PROOF/latest-env.before.json   # contains secrets: keep out of the repo and the report
-    aws lambda update-function-code --function-name $F --image-uri "$IMG" --publish --region $R --query Version --output text    # records V1; waits via: aws lambda wait function-updated
+    aws lambda update-function-code --function-name $F --image-uri "$IMG" --architectures x86_64 --publish --region $R --query Version --output text    # records V1; waits via: aws lambda wait function-updated
     # $LATEST environment already has HONUA_SKIP_MIGRATIONS per the terraform-applied config (verify it prints "true"); V1 is skip=true
     aws lambda update-alias --function-name $F --name staging --function-version <V1> --region $R
     # invoke staging directly with an API-Gateway-v2 style event for GET /api/v1/admin/deploy/preflight?includeDiagnostics=true and header X-API-Key
@@ -264,16 +264,16 @@ Set with `gh variable set <NAME> -R honua-io/honua-demo-infra --body <value>`. W
 
 Follow the release repo's rule (release#282): never `docker pull/tag/push` (re-encodes the config); copy manifest bytes with `crane copy`. Pin crane v0.22.1 (sha256 `0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0`, linux x86_64 tarball from google/go-containerregistry); crane and skopeo are not installed on this host, docker is.
 
-    SHA=<40-char rc server commit>; S7=${SHA:0:7}; REL=2026.1-rc.<N>
-    SRC=ghcr.io/honua-io/honua-server@sha256:<single-platform arm64 lambda-aot digest from the nightly/release build>
-    # 1 verify the source is a SINGLE-platform arm64 manifest and carries the right commit
+    SHA=<40-char rc server commit>; S7=${SHA:0:7}; REL=2026.1-rc.1
+    SRC=ghcr.io/honua-io/honua-server@sha256:<single-platform amd64 lambda-aot digest for the pinned sha>
+    # 1 verify the source is a SINGLE-platform amd64 manifest and carries the right commit
     docker buildx imagetools inspect --raw "$SRC" | jq -e 'has("manifests")|not'
-    crane config "$SRC" | jq -er '.architecture'     # must be arm64
-    # 2 does an arm64 lambda-aot variant exist for the sha at all? check before anything else
+    crane config "$SRC" | jq -er '.architecture'     # must be amd64
+    # 2 does an amd64 lambda-aot variant exist for the sha at all? check before anything else
     aws ecr describe-images --repository-name honua-server --region us-west-2 --query "imageDetails[?contains(to_string(imageTags),'$S7')].imageTags" --output json
     # 3 mirror by bytes, then compare config + layers to the source (as e2e-cloud-aws.yml does)
     aws ecr get-login-password --region us-west-2 | crane auth login --username AWS --password-stdin 585192672263.dkr.ecr.us-west-2.amazonaws.com
-    crane copy "$SRC" 585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server:rc-$REL-lambda-aot-$S7-arm64
-    aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-arm64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
+    crane copy "$SRC" 585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server:rc-$REL-lambda-aot-$S7-amd64
+    aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-amd64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
 
-Architecture trap: the release repo's Lambda GA pin (`e2e-cloud-aws.yml`, release#282) requires `awsLambdaArchitecture: x86_64`/amd64, but the demo function is arm64 (`lambda_architectures = ["arm64"]`, main.tf comment "keep this aligned with the release manifest's awsLambdaArchitecture pin"). If the final sha only has an amd64 Lambda AOT image, it cannot run on this function as configured. Options: obtain an arm64 build, or change the function architecture to x86_64 (a reviewed `main.tf` change and a cold, non-reversible-in-place move for :42 history; the old :42 stays arm64). Report this to the coordinator rather than choosing.
+Architecture ruling (coordinator, 2026-10-22): the demo function moves to x86_64 to match the release's `awsLambdaArchitecture: x86_64` Lambda GA target. The `main.tf` change is a separate PR (`lambda_architectures = ["x86_64"]`, `gp_batch_cpu_architecture = "X86_64"`) and must merge before the section 5.5 apply. Consequences: (1) `honua_image` must be an amd64 image, an arm64 one fails at apply; (2) `update-function-code` in 9.3 steps 3 and 4 must pass `--architectures x86_64` (the `$LATEST` architecture must be switched together with the image); (3) published `:42` stays arm64 and immutable, so the alias rollback to :42 still works; (4) the architecture switch is not undoable on `$LATEST` without another image swap, so a rollback never needs to touch `$LATEST`.
