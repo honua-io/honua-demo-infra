@@ -237,17 +237,26 @@ module "honua" {
   # local.request_secret_reference_environment (top of this file) adds the
   # Security__RequestSecretReferences__* allowlist for the `demo-rds` secret.
   additional_env = merge({
-    HONUA_SERVE_API_DOCS          = "true"
-    HONUA_SERVE_STAC_DEMO         = "true"
-    MultiTenancy__Enabled         = "true"
-    MultiTenancy__DefaultTenantId = "public"
+    HONUA_SERVE_API_DOCS  = "true"
+    HONUA_SERVE_STAC_DEMO = "true"
+    # Lambda environment budget: AWS rejects a function whose variables exceed
+    # 4096 bytes (JSON-serialized keys + values, about 6 bytes of framing per
+    # variable). The full demo set measured 4467 bytes and could not be
+    # applied. Settings whose value equals the server's compiled-in default are
+    # therefore NOT emitted; they are listed here so nobody re-adds them
+    # (defaults checked at honua-server 4709145):
+    #   MultiTenancy__Enabled=true, MultiTenancy__DefaultTenantId=public,
+    #   RateLimiting__IncludeHeaders=true, RateLimiting__UseDistributedRateLimiting=true,
+    #   FileStorage__AwsS3__ForcePathStyle=false, Cors__AllowCredentials=false,
+    #   Limits__Connections__RequestTimeout=00:01:00,
+    #   StudioAiProxy__Providers__bedrock__Region=us-west-2 (studio-ai.tf).
+    # Re-check this list when bumping the server pin and before adding any
+    # variable: keep the planned total under 4096 (scripts/check-lambda-env-budget.py).
     # The public process contract is authenticated with a separately rotated,
     # process:*:execute-scoped demo key. Rate limiting partitions by that key and
     # uses Redis so Lambda replicas share one fixed one-minute window.
     RateLimiting__Enabled                      = "true"
     RateLimiting__GlobalRequestsPerMinute      = "60"
-    RateLimiting__UseDistributedRateLimiting   = "true"
-    RateLimiting__IncludeHeaders               = "true"
     Geoprocessing__Executors__MaxArtifactBytes = "1048576"
     # Allow the API Gateway custom domain as a valid host
     HostValidation__AllowedHosts__1 = "demo.honua.io"
@@ -272,30 +281,28 @@ module "honua" {
     # uploads and the PMTiles range proxy both resolve against this bucket.
     # Credentials are intentionally omitted so the AWS SDK falls back to the
     # Lambda execution role.
-    FileStorage__Provider              = "AwsS3"
-    FileStorage__AwsS3__BucketName     = local.data_bucket_name
-    FileStorage__AwsS3__Region         = var.region
-    FileStorage__AwsS3__ForcePathStyle = "false"
+    FileStorage__Provider          = "AwsS3"
+    FileStorage__AwsS3__BucketName = local.data_bucket_name
+    FileStorage__AwsS3__Region     = var.region
     # The demo contract serves the basemap at /api/v1/tiles/pmtiles/maui-basemap,
     # i.e. the artifact lives at the bucket root. "/" normalizes to an empty
     # publish prefix so the proxy accepts root-level artifact keys.
     FileStorage__PMTilesPublish__KeyPrefix = "/"
 
-    # Request budget pairs with lambda_timeout_seconds above. Raise both to
-    # 10 minutes temporarily for bulk synchronous re-seeds (county parcels
-    # needs it); steady-state keep them tight so orphaned tile queries get
-    # cancelled instead of starving PostgreSQL for minutes after a burst.
-    Limits__Connections__RequestTimeout = "00:01:00"
+    # Request budget pairs with lambda_timeout_seconds above (60 s, which is
+    # also the server default for Limits__Connections__RequestTimeout, so
+    # steady state emits nothing). For bulk synchronous re-seeds (county
+    # parcels needs it) raise both to 10 minutes temporarily by adding
+    # Limits__Connections__RequestTimeout = "00:10:00" here.
 
     # Application-level CORS so https://honua.io/demo.html can call
     # /rest/*, /ogc/*, and /api/v1/tiles/* (the /fonts route gets its CORS
     # header from the API Gateway integration mapping in seed-data.tf).
     Cors__AllowedOrigins__0 = "https://honua.io"
     Cors__AllowedOrigins__1 = "https://www.honua.io"
-    # Local demo.html development/verification (python -m http.server 8123
-    # in honua-site) — harmless for a public-data demo server.
-    Cors__AllowedOrigins__2 = "http://localhost:8123"
-    Cors__AllowCredentials  = "false"
+    # http://localhost:8123 (local demo.html verification) was dropped to fit
+    # the Lambda environment budget; add Cors__AllowedOrigins__2 back only for a
+    # verification window, after checking the byte budget.
   }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment)
 
   tags = local.common_tags

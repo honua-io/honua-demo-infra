@@ -112,8 +112,8 @@ DB-side raster post-processing (postgis-bootstrap Lambda maintenance mode):
 - `seed-data.tf`: data bucket + public `fonts/` prefix + bucket CORS, Lambda
   role S3 policy, API Gateway /fonts proxy route.
 - `main.tf`: FileStorage S3 env, app CORS allowlist (https://honua.io,
-  https://www.honua.io, http://localhost:8123 for site verification),
-  `Limits__Connections__RequestTimeout=00:10:00` and
+  https://www.honua.io; localhost:8123 was dropped for the Lambda env budget),
+  `Limits__Connections__RequestTimeout` (raise to 00:10:00 only for bulk imports) and
   `lambda_timeout_seconds=600` for bulk synchronous imports.
 - `postgis-bootstrap/handler.py`: optional
   `{"operation":"break-glass-sql", "statements":[...], "query":...}`
