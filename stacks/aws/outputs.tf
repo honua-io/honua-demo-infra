@@ -106,7 +106,7 @@ output "pro_license_secret_arn" {
 
 output "redis_connection_secret_arn" {
   description = "ARN of the Secrets Manager secret holding the Redis connection string (null unless enable_redis)."
-  value       = module.honua.redis_connection_secret_arn
+  value       = var.wire_redis_connection ? module.honua.redis_connection_secret_arn : try(aws_secretsmanager_secret.redis_connection_unwired[0].arn, null)
   sensitive   = true
 }
 

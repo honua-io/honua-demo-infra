@@ -100,6 +100,12 @@ variable "enable_redis" {
   default     = false
 }
 
+variable "wire_redis_connection" {
+  description = "Inject the Redis connection string into the serving Lambda. false keeps the ElastiCache objects (owned by redis.tf) but leaves ConnectionStrings__redis out of the function environment; the demo sets false for the 2026-10-22 rc cutover (honua-server#6500, #6487). Only meaningful with enable_redis."
+  type        = bool
+  default     = true
+}
+
 variable "redis_node_type" {
   description = "ElastiCache node type. The live demo runs cache.t3.micro."
   type        = string

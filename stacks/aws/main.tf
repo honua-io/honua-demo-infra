@@ -145,7 +145,9 @@ module "honua" {
   # this VPC; the module already does the right thing because redis_create wires
   # redis_egress_cidrs = [vpc_cidr]. The connection string lands in a dedicated
   # Secrets Manager secret and is injected as ConnectionStrings__redis.
-  redis_enabled   = var.enable_redis
+  # wire_redis_connection=false hands the Redis objects to redis.tf and keeps the
+  # module from injecting ConnectionStrings__redis (honua-server#6500/#6487).
+  redis_enabled   = var.enable_redis && var.wire_redis_connection
   redis_node_type = var.redis_node_type
   redis_port      = 6379
 
