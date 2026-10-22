@@ -7,7 +7,7 @@ if [[ $# -lt 3 || $# -gt 4 ]]; then
 fi
 readonly PHASE="$1" MERGED_SHA="$2" EVIDENCE_DIR="$3" STACK="stacks/aws-db-migration-runner"
 readonly CANONICAL_ARCHIVE="$STACK/db-migration-runner.zip"
-readonly ARCHIVE_SHA256="ec7b6775eb02cf37a73bd7053e6da2a524be343b7785e6384b43b3a708b2c79a"
+readonly ARCHIVE_SHA256="ff32a65ebd2f2f7efce184229492e1ffd629f22d1f040a0c6c2e6bd693f358dc"
 [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
 readonly ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
