@@ -218,6 +218,99 @@ def _break_glass(event):
         connection.close()
 
 
+_SEED_REVISIONS_DDL = """
+CREATE TABLE IF NOT EXISTS honua.demo_seed_revisions (
+    seed_id text PRIMARY KEY,
+    server_commit text,
+    source_url text,
+    source_sha256 text NOT NULL,
+    execution_sha256 text,
+    metadata_environment text NOT NULL,
+    metadata_revision bigint NOT NULL,
+    applied_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS server_commit text;
+ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS source_url text;
+ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS execution_sha256 text;
+"""
+
+
+def _receipt_role_sql(receipt_password):
+    """Idempotent SQL that creates/reconciles the query-only receipt role.
+
+    Shared by the managed seed and the role-only operation so both leave the role in
+    exactly the same state. receipt_password is an already-quoted SQL literal.
+    """
+    return f"""
+DO $role$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}') THEN
+        CREATE ROLE {_RECEIPT_ROLE};
+    END IF;
+END
+$role$;
+ALTER ROLE {_RECEIPT_ROLE} WITH LOGIN PASSWORD {receipt_password}
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+DO $memberships$
+DECLARE granted_role record;
+BEGIN
+    FOR granted_role IN
+        SELECT parent.rolname
+          FROM pg_auth_members membership
+          JOIN pg_roles member ON member.oid = membership.member
+          JOIN pg_roles parent ON parent.oid = membership.roleid
+         WHERE member.rolname = '{_RECEIPT_ROLE}'
+    LOOP
+        EXECUTE format('REVOKE %I FROM {_RECEIPT_ROLE}', granted_role.rolname);
+    END LOOP;
+END
+$memberships$;
+DO $database$
+BEGIN
+    EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
+    -- PostgreSQL's default PUBLIC TEMP privilege cannot be denied to one
+    -- role while PUBLIC retains it. Remove any direct privilege here; the
+    -- Lambda executes one fixed query and accepts no caller SQL, so a temp
+    -- schema cannot be used as an escalation path through this surface.
+    EXECUTE format('REVOKE CREATE, TEMPORARY ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO {_RECEIPT_ROLE}', current_database());
+END
+$database$;
+REVOKE ALL ON SCHEMA public FROM {_RECEIPT_ROLE};
+REVOKE ALL ON SCHEMA honua FROM {_RECEIPT_ROLE};
+GRANT USAGE ON SCHEMA honua TO {_RECEIPT_ROLE};
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA honua FROM {_RECEIPT_ROLE};
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA honua FROM {_RECEIPT_ROLE};
+REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA honua FROM {_RECEIPT_ROLE};
+ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON TABLES FROM {_RECEIPT_ROLE};
+ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON SEQUENCES FROM {_RECEIPT_ROLE};
+ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON FUNCTIONS FROM {_RECEIPT_ROLE};
+REVOKE ALL ON honua.demo_seed_revisions, honua.metadata_v2_current FROM {_RECEIPT_ROLE};
+GRANT SELECT ON honua.demo_seed_revisions, honua.metadata_v2_current TO {_RECEIPT_ROLE};
+DO $privileges$
+BEGIN
+    IF EXISTS (
+           SELECT 1 FROM pg_class
+            WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+       ) OR EXISTS (
+           SELECT 1 FROM pg_namespace
+            WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+       ) OR EXISTS (
+           SELECT 1 FROM pg_proc
+            WHERE proowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+       ) OR EXISTS (
+           SELECT 1 FROM pg_database
+            WHERE datdba = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
+       ) OR has_schema_privilege('{_RECEIPT_ROLE}', 'honua', 'CREATE')
+       OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.demo_seed_revisions', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.metadata_v2_current', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') THEN
+        RAISE EXCEPTION 'receipt database role is not query-only or owns database objects';
+    END IF;
+END
+$privileges$;
+"""
+
+
 def _managed_seed(event):
     if event != {"operation": "apply-demo-stac-seed"}:
         raise ValueError("managed seed accepts only the allowlisted operation")
@@ -257,24 +350,7 @@ def _managed_seed(event):
             if len(rows) != 1:
                 raise RuntimeError("managed seed did not activate exactly one metadata revision")
             revision = int(rows[0][0])
-            _run_sql_script(
-                connection,
-                """
-                CREATE TABLE IF NOT EXISTS honua.demo_seed_revisions (
-                    seed_id text PRIMARY KEY,
-                    server_commit text,
-                    source_url text,
-                    source_sha256 text NOT NULL,
-                    execution_sha256 text,
-                    metadata_environment text NOT NULL,
-                    metadata_revision bigint NOT NULL,
-                    applied_at timestamptz NOT NULL DEFAULT now()
-                );
-                ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS server_commit text;
-                ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS source_url text;
-                ALTER TABLE honua.demo_seed_revisions ADD COLUMN IF NOT EXISTS execution_sha256 text;
-                """
-            )
+            _run_sql_script(connection, _SEED_REVISIONS_DDL)
             connection.run(
                 """
                 INSERT INTO honua.demo_seed_revisions
@@ -298,77 +374,7 @@ def _managed_seed(event):
                 environment=environment,
                 revision=revision,
             )
-            _run_sql_script(
-                connection,
-                f"""
-                DO $role$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}') THEN
-                        CREATE ROLE {_RECEIPT_ROLE};
-                    END IF;
-                END
-                $role$;
-                ALTER ROLE {_RECEIPT_ROLE} WITH LOGIN PASSWORD {receipt_password}
-                    NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
-                DO $memberships$
-                DECLARE granted_role record;
-                BEGIN
-                    FOR granted_role IN
-                        SELECT parent.rolname
-                          FROM pg_auth_members membership
-                          JOIN pg_roles member ON member.oid = membership.member
-                          JOIN pg_roles parent ON parent.oid = membership.roleid
-                         WHERE member.rolname = '{_RECEIPT_ROLE}'
-                    LOOP
-                        EXECUTE format('REVOKE %I FROM {_RECEIPT_ROLE}', granted_role.rolname);
-                    END LOOP;
-                END
-                $memberships$;
-                DO $database$
-                BEGIN
-                    EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
-                    -- PostgreSQL's default PUBLIC TEMP privilege cannot be denied to one
-                    -- role while PUBLIC retains it. Remove any direct privilege here; the
-                    -- Lambda executes one fixed query and accepts no caller SQL, so a temp
-                    -- schema cannot be used as an escalation path through this surface.
-                    EXECUTE format('REVOKE CREATE, TEMPORARY ON DATABASE %I FROM {_RECEIPT_ROLE}', current_database());
-                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO {_RECEIPT_ROLE}', current_database());
-                END
-                $database$;
-                REVOKE ALL ON SCHEMA public FROM {_RECEIPT_ROLE};
-                REVOKE ALL ON SCHEMA honua FROM {_RECEIPT_ROLE};
-                GRANT USAGE ON SCHEMA honua TO {_RECEIPT_ROLE};
-                REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA honua FROM {_RECEIPT_ROLE};
-                REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA honua FROM {_RECEIPT_ROLE};
-                REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA honua FROM {_RECEIPT_ROLE};
-                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON TABLES FROM {_RECEIPT_ROLE};
-                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON SEQUENCES FROM {_RECEIPT_ROLE};
-                ALTER DEFAULT PRIVILEGES IN SCHEMA honua REVOKE ALL ON FUNCTIONS FROM {_RECEIPT_ROLE};
-                REVOKE ALL ON honua.demo_seed_revisions, honua.metadata_v2_current FROM {_RECEIPT_ROLE};
-                GRANT SELECT ON honua.demo_seed_revisions, honua.metadata_v2_current TO {_RECEIPT_ROLE};
-                DO $privileges$
-                BEGIN
-                    IF EXISTS (
-                           SELECT 1 FROM pg_class
-                            WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
-                       ) OR EXISTS (
-                           SELECT 1 FROM pg_namespace
-                            WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
-                       ) OR EXISTS (
-                           SELECT 1 FROM pg_proc
-                            WHERE proowner = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
-                       ) OR EXISTS (
-                           SELECT 1 FROM pg_database
-                            WHERE datdba = (SELECT oid FROM pg_roles WHERE rolname = '{_RECEIPT_ROLE}')
-                       ) OR has_schema_privilege('{_RECEIPT_ROLE}', 'honua', 'CREATE')
-                       OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.demo_seed_revisions', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-                       OR has_table_privilege('{_RECEIPT_ROLE}', 'honua.metadata_v2_current', 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') THEN
-                        RAISE EXCEPTION 'receipt database role is not query-only or owns database objects';
-                    END IF;
-                END
-                $privileges$;
-                """
-            )
+            _run_sql_script(connection, _receipt_role_sql(receipt_password))
             connection.run("COMMIT")
         except Exception:
             connection.run("ROLLBACK")
@@ -387,6 +393,43 @@ def _managed_seed(event):
         "metadataRevision": revision,
         "receiptRole": _RECEIPT_ROLE,
         "receiptRoleReconciled": True,
+    }
+
+
+def _provision_receipt_role(event):
+    """Create/reconcile the query-only receipt role and nothing else.
+
+    No seed SQL is executed, no metadata revision is read or changed, and no seed
+    row is written. The only DDL beyond the role is the empty honua.demo_seed_revisions
+    table (CREATE TABLE IF NOT EXISTS, no rows) that the role's SELECT grant needs.
+    """
+    if event != {"operation": "provision-demo-stac-receipt-role"}:
+        raise ValueError("receipt role provisioning accepts only the allowlisted operation")
+
+    receipt_params = _read_secret(os.environ["RECEIPT_DB_SECRET_ARN"])
+    if receipt_params.get("Username") != _RECEIPT_ROLE:
+        raise ValueError("receipt secret is not bound to the allowlisted database role")
+    receipt_password = _sql_literal(receipt_params["Password"])
+    connection = _connect(os.environ["DB_SECRET_ARN"])
+    try:
+        connection.run("BEGIN")
+        try:
+            if not connection.run("SELECT to_regclass('honua.metadata_v2_current')")[0][0]:
+                raise RuntimeError("honua.metadata_v2_current is absent; refusing to provision the receipt role")
+            _run_sql_script(connection, _SEED_REVISIONS_DDL)
+            _run_sql_script(connection, _receipt_role_sql(receipt_password))
+            connection.run("COMMIT")
+        except Exception:
+            connection.run("ROLLBACK")
+            raise
+    finally:
+        connection.close()
+
+    return {
+        "format": "honua.demo.stac-receipt-role.v1",
+        "receiptRole": _RECEIPT_ROLE,
+        "receiptRoleReconciled": True,
+        "seedExecuted": False,
     }
 
 
@@ -432,6 +475,8 @@ def handler(event, context):
     if mode == "break-glass-bootstrap":
         return _break_glass(event or {})
     if mode == "managed-stac-seed":
+        if (event or {}).get("operation") == "provision-demo-stac-receipt-role":
+            return _provision_receipt_role(event or {})
         return _managed_seed(event or {})
     if mode == "stac-seed-receipt":
         return _receipt(event or {})

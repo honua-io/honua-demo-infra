@@ -316,3 +316,16 @@ On serving `live -> :42`:
 
 Steps 5 onward (main stack, migration runner, migrations 092-105, seed, and the
 receipt variables) have not run.
+
+## Receipt role only (no reseed)
+
+`honua-demo-demo-stac-seed-manager` also accepts the single allowlisted operation
+`{"operation": "provision-demo-stac-receipt-role"}`. It creates or reconciles the
+query-only `honua_demo_seed_receipt` role to the secret
+`RECEIPT_DB_SECRET_ARN` with exactly the SQL the full seed uses, plus
+`CREATE TABLE IF NOT EXISTS honua.demo_seed_revisions` (no rows), and nothing else:
+no seed SQL, no download, no metadata revision read or change, no seed row. It is
+idempotent and refuses if `honua.metadata_v2_current` is absent. The live canary
+still needs a seed row (`demo_seed_revisions`) before it can bind a receipt, so
+this operation alone moves the canary from an authentication failure to a missing
+receipt, not to green. Take a manual RDS snapshot first, as for any database change.
