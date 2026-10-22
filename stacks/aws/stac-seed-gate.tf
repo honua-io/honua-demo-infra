@@ -255,7 +255,13 @@ resource "aws_iam_role" "github_stac_seed_receipt" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:honua-io/honua-demo-infra:ref:refs/heads/trunk"
+          # This repository's Actions OIDC subject is customized to immutable IDs
+          # (gh api repos/honua-io/honua-demo-infra/actions/oidc/customization/sub:
+          # use_immutable_subject=true, sub_claim_prefix below), so the token's sub is
+          # NOT the name-based repo:honua-io/honua-demo-infra:... form. The name-based
+          # condition never matched and made live-canary fail at "Could not assume role
+          # with OIDC" (run 39830259515). If the repository is recreated these IDs change.
+          "token.actions.githubusercontent.com:sub" = "repo:honua-io@217718039/honua-demo-infra@1310514636:ref:refs/heads/trunk"
         }
       }
     }]
