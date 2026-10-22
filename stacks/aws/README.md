@@ -44,7 +44,7 @@ a data-isolation feature for production deployments.
 | Resource | Sizing / configuration |
 |---|---|
 | CloudFront distribution | Tile caching at the edge — see "CDN layer" below |
-| Lambda function | `arm64`, 2048 MiB RAM, no provisioned concurrency (native-CI-built Lambda AOT image) |
+| Lambda function | `x86_64`, 2048 MiB RAM, no provisioned concurrency (certified amd64 Lambda AOT image, release#282) |
 | Lambda image | `*-lambda-aot` tag (AOT build); cold starts ~200–400 ms |
 | RDS PostgreSQL | `db.t4g.small`, version 15, 20 GB gp3, PostGIS + PostGIS Raster enabled |
 | ElastiCache | Module default off; the committed demo preset enables a `cache.t3.micro` in-VPC for durable process jobs, distributed request budgets, and the Production feature-change event store |

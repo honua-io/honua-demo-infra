@@ -66,7 +66,7 @@ Commands run (read-only, `-lock=false`, plan files kept out of the repo):
     terraform plan -input=false -lock=false -var-file=demo.tfvars -var "honua_image=$ECR@sha256:d97baf44...b7522" # baseline, current image
     terraform plan -input=false -lock=false -var-file=demo.tfvars -var "honua_image=$ECR:nightly-lambda-aot-7a29ce0-arm64"  # placeholder
 
-Both plans: **7 to add, 9 to change, 1 to replace (destroy)**, identical resource set. The only image-attributable difference is `aws_lambda_function.this.image_uri` and the new `version` the `live` alias follows. Placeholder note: the newest nightly in this account's ECR is `nightly-lambda-aot-7a29ce0-arm64` (2026-08-12), which is OLDER than the running rc.2 f897700 image, so it is a stand-in only. The newest image of any kind is the running one. The rc image must be mirrored to this ECR (arm64, `*-lambda-aot-*`) before Phase 2.
+Both plans: **7 to add, 9 to change, 1 to replace (destroy)**, identical resource set. The only image-attributable difference is `aws_lambda_function.this.image_uri` and the new `version` the `live` alias follows. Placeholder note: the newest nightly in this account's ECR is `nightly-lambda-aot-7a29ce0-arm64` (2026-08-12), which is OLDER than the running rc.2 f897700 image, so it is a stand-in only. The newest image of any kind is the running one. The rc image must be mirrored to this ECR (amd64 after the 9.7 ruling, `*-lambda-aot-*`) before Phase 2.
 
 Create (7): ElastiCache replication group + subnet group + security group for Redis, `random_password.redis_auth`, secret `honua-demo-demo/redis-connection` and its version.
 Change (9): `aws_lambda_function.this` (image + environment), `aws_lambda_alias.live` (new version, description reset), `aws_iam_policy.lambda_secrets`, `aws_security_group.lambda` (Redis egress), RDS parameter group (`rds.force_ssl` apply_method pending-reboot to immediate, no value change), `aws_lambda_function` postgis_bootstrap / stac_seed_manager / stac_seed_receipt (code hash), `aws_s3_object.demo_services_manifest` (publishes v1.3.0).
@@ -80,7 +80,7 @@ All commands from `stacks/aws` unless noted. `export AWS_PAGER=""; R=us-west-2; 
 
 ### 5.0 Preconditions (stop if any fails)
 
-1. Coordinator "go" with the final image reference. Mirror it to ECR if needed (`docker buildx imagetools create` or `aws ecr batch-get-image`/`put-image` from the source repo) and record the digest: `IMG=$ECR@sha256:<digest>`. Verify `aws ecr describe-images --repository-name honua-server --image-ids imageDigest=<digest>` and that the manifest is `linux/arm64`.
+1. Coordinator "go" with the final image reference. Mirror it to ECR if needed (`docker buildx imagetools create` or `aws ecr batch-get-image`/`put-image` from the source repo) and record the digest: `IMG=$ECR@sha256:<digest>`. Verify `aws ecr describe-images --repository-name honua-server --image-ids imageDigest=<digest>` and that the manifest is `linux/amd64`.
 2. `git -C . pull --ff-only` at trunk, clean tree, `terraform version` 1.13.5+ (1.15.8 for the runner option).
 3. Baseline capture (before):
 
@@ -199,7 +199,7 @@ Database rollback (only if a Contract migration ran or data is corrupted; 30-60 
 
 ## 9. Phase 2 approvals and prepared commands (coordinator message, 2026-10-22)
 
-Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` taken immediately before any change, no in-VPC host, no pg_dump; (b) migration path B (section 5.4) through the `staging` alias only, journal recorded before and after, abort if any pending migration is Contract; (c) Redis first; (d) rollback by alias repoint to :42, pre-staged; (e) set the two canary repo variables. Go-conditions: the coordinator sends the final rc image with a mirrored `lambda-aot-*-arm64` variant (verify the arm64 build exists for that sha in the account ECR before anything else); the dependents list in section 1 (maplibre quickstart layer `maui-buildings/FeatureServer/13` and the 12 services) is covered by the probe below.
+Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` taken immediately before any change, no in-VPC host, no pg_dump; (b) migration path B (section 5.4) through the `staging` alias only, journal recorded before and after, abort if any pending migration is Contract; (c) Redis first; (d) rollback by alias repoint to :42, pre-staged; (e) set the two canary repo variables. Go-conditions: the coordinator sends the final rc image with a mirrored `lambda-aot-*-amd64` variant after the 9.7 ruling (verify the amd64 build exists for that sha in the account ECR before anything else); the dependents list in section 1 (maplibre quickstart layer `maui-buildings/FeatureServer/13` and the 12 services) is covered by the probe below.
 
 ### 9.1 Journal is readable read-only (verified 2026-10-22 08:27 UTC)
 
@@ -212,7 +212,7 @@ Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` ta
 ### 9.3 Commands (nothing below has been run)
 
     export AWS_PAGER=""; R=us-west-2; F=honua-demo-demo-honua; DATE=$(date -u +%Y%m%d)
-    IMG=585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:<final-arm64-lambda-aot-digest>
+    IMG=585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:<final-amd64-lambda-aot-digest>
     PROOF=$HOME/.honua-runtime-proof/rc1-upgrade-20261022; mkdir -p $PROOF
     # 0 pre-stage rollback (do not run until needed) and baseline
     ROLLBACK="aws lambda update-alias --function-name $F --name live --function-version 42 --region $R"
@@ -224,7 +224,7 @@ Approved: (a) backup is an RDS manual snapshot named `rc1-pre-upgrade-<date>` ta
     # 2 Redis first: section 5.3 targeted apply
     # 3 classification version: rc image, skip migrations TRUE, staging only
     aws lambda get-function-configuration --function-name $F --region $R --query Environment --output json > $PROOF/latest-env.before.json   # contains secrets: keep out of the repo and the report
-    aws lambda update-function-code --function-name $F --image-uri "$IMG" --publish --region $R --query Version --output text    # records V1; waits via: aws lambda wait function-updated
+    aws lambda update-function-code --function-name $F --image-uri "$IMG" --architectures x86_64 --publish --region $R --query Version --output text    # records V1; waits via: aws lambda wait function-updated
     # $LATEST environment already has HONUA_SKIP_MIGRATIONS per the terraform-applied config (verify it prints "true"); V1 is skip=true
     aws lambda update-alias --function-name $F --name staging --function-version <V1> --region $R
     # invoke staging directly with an API-Gateway-v2 style event for GET /api/v1/admin/deploy/preflight?includeDiagnostics=true and header X-API-Key
@@ -264,16 +264,16 @@ Set with `gh variable set <NAME> -R honua-io/honua-demo-infra --body <value>`. W
 
 Follow the release repo's rule (release#282): never `docker pull/tag/push` (re-encodes the config); copy manifest bytes with `crane copy`. Pin crane v0.22.1 (sha256 `0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0`, linux x86_64 tarball from google/go-containerregistry); crane and skopeo are not installed on this host, docker is.
 
-    SHA=<40-char rc server commit>; S7=${SHA:0:7}; REL=2026.1-rc.<N>
-    SRC=ghcr.io/honua-io/honua-server@sha256:<single-platform arm64 lambda-aot digest from the nightly/release build>
-    # 1 verify the source is a SINGLE-platform arm64 manifest and carries the right commit
+    SHA=<40-char rc server commit>; S7=${SHA:0:7}; REL=2026.1-rc.1
+    SRC=ghcr.io/honua-io/honua-server@sha256:<single-platform amd64 lambda-aot digest for the pinned sha>
+    # 1 verify the source is a SINGLE-platform amd64 manifest and carries the right commit
     docker buildx imagetools inspect --raw "$SRC" | jq -e 'has("manifests")|not'
-    crane config "$SRC" | jq -er '.architecture'     # must be arm64
-    # 2 does an arm64 lambda-aot variant exist for the sha at all? check before anything else
+    crane config "$SRC" | jq -er '.architecture'     # must be amd64
+    # 2 does an amd64 lambda-aot variant exist for the sha at all? check before anything else
     aws ecr describe-images --repository-name honua-server --region us-west-2 --query "imageDetails[?contains(to_string(imageTags),'$S7')].imageTags" --output json
     # 3 mirror by bytes, then compare config + layers to the source (as e2e-cloud-aws.yml does)
     aws ecr get-login-password --region us-west-2 | crane auth login --username AWS --password-stdin 585192672263.dkr.ecr.us-west-2.amazonaws.com
-    crane copy "$SRC" 585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server:rc-$REL-lambda-aot-$S7-arm64
-    aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-arm64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
+    crane copy "$SRC" 585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server:rc-$REL-lambda-aot-$S7-amd64
+    aws ecr describe-images --repository-name honua-server --region us-west-2 --image-ids imageTag=rc-$REL-lambda-aot-$S7-amd64 --query 'imageDetails[0].imageDigest' --output text   # this digest is IMG
 
-Architecture trap: the release repo's Lambda GA pin (`e2e-cloud-aws.yml`, release#282) requires `awsLambdaArchitecture: x86_64`/amd64, but the demo function is arm64 (`lambda_architectures = ["arm64"]`, main.tf comment "keep this aligned with the release manifest's awsLambdaArchitecture pin"). If the final sha only has an amd64 Lambda AOT image, it cannot run on this function as configured. Options: obtain an arm64 build, or change the function architecture to x86_64 (a reviewed `main.tf` change and a cold, non-reversible-in-place move for :42 history; the old :42 stays arm64). Report this to the coordinator rather than choosing.
+Architecture ruling (coordinator, 2026-10-22): the demo function moves to x86_64 to match the release's `awsLambdaArchitecture: x86_64` Lambda GA target. The `main.tf` change is a separate PR (`lambda_architectures = ["x86_64"]`, `gp_batch_cpu_architecture = "X86_64"`) and must merge before the section 5.5 apply. Consequences: (1) `honua_image` must be an amd64 image, an arm64 one fails at apply; (2) `update-function-code` in 9.3 step 3 must pass `--architectures x86_64` (the `$LATEST` architecture must be switched together with the image); (3) published `:42` stays arm64 and immutable, so the alias rollback to :42 still works; (4) the architecture switch is not undoable on `$LATEST` without another image swap, so a rollback never needs to touch `$LATEST`.
