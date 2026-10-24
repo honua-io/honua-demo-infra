@@ -55,12 +55,15 @@ enable_amazon_location_geocoding = true
 # fixed-window request budget. The managed geometry.buffer executor runs in the
 # serving Lambda; Batch remains disabled for this bounded public process.
 enable_redis = true
-# Keep the ElastiCache objects but do NOT inject ConnectionStrings__redis into the
-# Lambda for the 2026-10-22 rc cutover: honua-server#6500 (Lambda + Redis boot aborts
-# without Operations:SecretChannel:KeyRingCertificatePath) and #6487 (Redis-off admin
-# API keys are per process, a known gap). See redis.tf.
-wire_redis_connection = false
-enable_gp_batch       = false
+# Redis is WIRED into the serving Lambda since 2026-10-24 (ConnectionStrings__redis +
+# the operation key-ring certificate reference, honua-server#6500). The key-ring
+# PKCS#12 lives in the operator-owned secret below (created per
+# runbook/exports-redis-prereq.md; never managed by Terraform, never delete it:
+# it is the only key that can read the Redis key ring). This closes #6487 too.
+# Wiring unblocks MapServer/ImageServer exports, OGC process execution and jobs.
+wire_redis_connection                     = true
+operation_key_ring_certificate_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/operation-key-ring-GDtfsQ"
+enable_gp_batch                           = false
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.
