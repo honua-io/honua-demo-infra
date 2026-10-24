@@ -2,8 +2,10 @@
 # Phase-A Honua Demo Environment — demo.honua.io
 #
 # Lambda container (AOT) + API Gateway HTTP API + RDS db.t4g.small + PostGIS.
-# Optional Pro+AI demo add-ons, all gated off by default (see README → "Pro +
-# AI demo drift"): a Secrets-Manager-delivered Pro license (enable_pro_license),
+# Licensing runs DISABLED (licensing_mode = "Disabled", shipped 2026.1: every
+# entitlement active, no envelope). Optional Pro+AI demo add-ons, all gated off
+# by default (see README → "Pro + AI demo drift"): a Secrets-Manager-delivered
+# Pro license (enable_pro_license, off on the demo since 2026-10-24),
 # a least-privilege Bedrock InvokeModel grant + WorkflowGeneration env for the
 # AI studio (enable_bedrock_ai; Bedrock is reached via the fck-nat egress in
 # nat-instance.tf), and an in-VPC ElastiCache Redis (enable_redis) for
@@ -53,12 +55,19 @@ locals {
 # ---------------------------------------------------------------------------
 
 module "honua" {
-  # Pinned to honua-io/honua-iac trunk at the commit this stack was extracted
-  # from (honua-iac#126). honua-iac is a PRIVATE repo, so `terraform init`
+  # Pinned to honua-io/honua-iac trunk e02ed05 (honua-iac#192, 2026-09-12): the
+  # oldest module revision with the licensing_mode input. It moves the previous
+  # pin (7abdb07, extraction commit honua-iac#126) only by Licensing__Mode, an
+  # admin-password character-class validation, an empty additional_allowed_hosts
+  # input and a GP-Batch env entry (Batch is off here). The current trunk is NOT
+  # used: it replaces random_password.db (and so the RDS password and the
+  # connection-string secret), adds RDS SG rules and a runtime-settings secret,
+  # and makes the whole Lambda environment unknown at plan time (2026-10-24
+  # review, see the PR). honua-iac is a PRIVATE repo, so `terraform init`
   # needs git credentials that can fetch it — see README.md → "Module source
   # (private repo auth)". Bump the ref deliberately (and re-run the drift
   # plan) when picking up module changes; do not float on a branch.
-  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=7abdb07c85c7a389a9c3cc97583e534f6c636a3b"
+  source = "git::https://github.com/honua-io/honua-iac.git//infrastructure/terraform/modules/aws-serverless?ref=e02ed058bdb65d3a054feec2da8451ede395771f"
 
   # Identity
   name_prefix = var.name_prefix
@@ -147,6 +156,9 @@ module "honua" {
   # Secrets Manager secret and is injected as ConnectionStrings__redis.
   # wire_redis_connection=false hands the Redis objects to redis.tf and keeps the
   # module from injecting ConnectionStrings__redis (honua-server#6500/#6487).
+  # Wiring it back (MapServer/ImageServer exports need Redis-coordinated temp
+  # storage quotas) also needs operation_key_ring_certificate_secret_arn; the
+  # steps and the ready-to-flip diff are in runbook/exports-redis-prereq.md.
   redis_enabled   = var.enable_redis && var.wire_redis_connection
   redis_node_type = var.redis_node_type
   redis_port      = 6379
@@ -170,6 +182,11 @@ module "honua" {
   # quietly doing nothing in tfvars is precisely the failure mode this wiring
   # exists to prevent. To use Terraform-managed content instead, set
   # pro_license_secret_arn = "" and supply pro_license_content.
+  # licensing_mode = "Disabled" is the shipped 2026.1 contract and the demo's
+  # setting (demo.tfvars): the module emits Licensing__Mode=Disabled and, with
+  # enable_pro_license = false, no Licensing__LicenseContentSecretRef /
+  # Licensing__TrustedKeys__* and no GetSecretValue grant on the envelope.
+  licensing_mode                 = var.licensing_mode
   enable_pro_license             = var.enable_pro_license
   pro_license_secret_arn         = var.pro_license_secret_arn
   pro_license_content            = var.pro_license_content
@@ -305,7 +322,7 @@ module "honua" {
     # http://localhost:8123 (local demo.html verification) was dropped to fit
     # the Lambda environment budget; add Cors__AllowedOrigins__2 back only for a
     # verification window, after checking the byte budget.
-  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment)
+  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment, local.operation_key_ring_environment)
 
   tags = local.common_tags
 }

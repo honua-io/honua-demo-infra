@@ -64,4 +64,5 @@ enable_gp_batch       = false
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.
-enable_pro_license = true
+enable_pro_license = false
+licensing_mode     = "Disabled"

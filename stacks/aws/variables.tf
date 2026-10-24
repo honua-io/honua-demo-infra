@@ -106,6 +106,30 @@ variable "wire_redis_connection" {
   default     = true
 }
 
+# Redis operation key-ring certificate (honua-server#6500). A Redis-connected
+# Production server composes the durable operation secret channel and refuses
+# to start without this certificate. Lambda cannot mount a file, so the server
+# resolves Operations__SecretChannel__KeyRingCertificatePkcs12 =
+# aws:secretsmanager:<arn> at startup (StartupConfigurationHelpers.
+# EnsureKeyRingCertificateMaterializedAsync, present in rc.1 199bce7). The
+# secret is OPERATOR-OWNED and never in Terraform state: see
+# runbook/exports-redis-prereq.md for how to create it.
+variable "operation_key_ring_certificate_secret_arn" {
+  description = "ARN of the EXISTING operator-owned Secrets Manager secret holding the Redis operation key-ring PKCS#12 bundle (base64 PKCS#12, or JSON {\"pkcs12\":\"<base64>\",\"password\":\"...\"}). Required when enable_redis and wire_redis_connection are both true; injected into the Lambda only as an aws:secretsmanager: reference, never as a value. Empty while Redis is unwired."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.operation_key_ring_certificate_secret_arn == "" || can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$", var.operation_key_ring_certificate_secret_arn))
+    error_message = "operation_key_ring_certificate_secret_arn must be empty or a Secrets Manager secret ARN."
+  }
+
+  validation {
+    condition     = !(var.enable_redis && var.wire_redis_connection) || var.operation_key_ring_certificate_secret_arn != ""
+    error_message = "Wiring Redis into the Lambda (enable_redis && wire_redis_connection) requires operation_key_ring_certificate_secret_arn: the server refuses to start a Redis-connected Production instance without the key-ring certificate (honua-server#6500). See runbook/exports-redis-prereq.md."
+  }
+}
+
 variable "redis_node_type" {
   description = "ElastiCache node type. The live demo runs cache.t3.micro."
   type        = string
@@ -128,8 +152,24 @@ variable "redis_node_type" {
 # honua-demo-demo/license-signing-key and must never be read by this config.
 # ---------------------------------------------------------------------------
 
+# Licensing deployment mode (2026.1 ships Licensing__Mode=Disabled: no license
+# envelope, no validation, no metering, every entitlement active). The module
+# declares it explicitly because the server's own default (Enabled) with no
+# license source resolves to Community. enable_pro_license = true forces
+# Enabled in the module regardless of this value.
+variable "licensing_mode" {
+  description = "Licensing deployment mode declared to the server as Licensing__Mode (\"Disabled\" or \"Enabled\"). The demo runs Disabled, matching shipped 2026.1. Ignored (forced to Enabled) when enable_pro_license is true."
+  type        = string
+  default     = "Disabled"
+
+  validation {
+    condition     = contains(["Disabled", "Enabled"], var.licensing_mode)
+    error_message = "licensing_mode must be \"Disabled\" or \"Enabled\"."
+  }
+}
+
 variable "enable_pro_license" {
-  description = "Deliver the signed Pro license to the demo Lambda via Secrets Manager. When off the server runs Community. The envelope itself is staged out-of-band and adopted via pro_license_secret_arn, so enabling Pro needs no secret material in tfvars."
+  description = "Deliver the signed Pro license to the demo Lambda via Secrets Manager (forces Licensing__Mode=Enabled). When off the server runs with licensing_mode (Disabled for the demo: all entitlements active), not Community. The envelope itself is staged out-of-band and adopted via pro_license_secret_arn, so enabling Pro needs no secret material in tfvars."
   type        = bool
   default     = false
 }

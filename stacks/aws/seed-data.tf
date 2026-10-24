@@ -84,6 +84,22 @@ resource "aws_s3_bucket_policy" "demo_data_fonts_public" {
         Principal = "*"
         Action    = "s3:GetObject"
         Resource  = "${aws_s3_bucket.demo_data.arn}/manifest/*"
+      },
+      {
+        # PMTiles archives at the bucket root, read by the demo.honua.io
+        # CloudFront distribution through Origin Access Control
+        # (cloudfront.tf, /api/v1/tiles/pmtiles/*). Scoped to the explicit
+        # archive keys and to this one distribution; not public.
+        Sid       = "CloudFrontReadPMTilesArchives"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = [for key in local.pmtiles_edge_archives : "${aws_s3_bucket.demo_data.arn}/${key}"]
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.demo.arn
+          }
+        }
       }
     ]
   })

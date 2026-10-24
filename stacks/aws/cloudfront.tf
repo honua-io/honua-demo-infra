@@ -9,6 +9,10 @@
 #     PMTiles range proxy (CloudFront caches range GETs natively).
 #   - NO cache on everything else (queries, OData, admin, healthz) — the
 #     default behavior passes through with all headers and query strings.
+#   - /api/v1/tiles/pmtiles/* is served straight from the demo data bucket
+#     (S3 origin + OAC), not through the Lambda: the archives are static
+#     objects at the bucket root, so the basemap does not depend on the
+#     server's PMTiles range proxy (2026-10-24, rc.1 proxy 404s).
 #
 # The origin is the *regional execute-api endpoint*, NOT demo.honua.io —
 # the Route53 record for demo.honua.io is repointed at this distribution, so
@@ -47,6 +51,9 @@ locals {
   #   /rest/services/{id}/ImageServer/tile/{l}/{r}/{c}    GeoServices image tiles
   #   /fonts/{fontstack}/{range}.pbf                      SDF glyphs (S3 proxy)
   #   /terrain/{datasetId}/...                            Terrain-RGB tiles
+  # NOTE: /api/v1/tiles/pmtiles/* is matched FIRST by its own S3-origin
+  # behavior (see pmtiles_* below); this /api/v1/tiles/* entry only catches
+  # the remaining /api/v1/tiles routes, which still go to the Lambda.
   cached_path_patterns = [
     "/api/v1/tiles/*",
     "/ogc/tiles/*",
@@ -54,6 +61,37 @@ locals {
     "/rest/services/*/ImageServer/tile/*",
     "/fonts/*",
     "/terrain/*",
+  ]
+
+  # PMTiles archives served from S3 at the edge (2026-10-24). The public URL
+  # contract is unchanged: /api/v1/tiles/pmtiles/<id> (demo-services.v1.json
+  # and every honua.io page use it). The viewer-request function below strips
+  # the prefix so CloudFront fetches s3://<bucket>/<id>; the objects live at
+  # the bucket root (SEED_MANIFEST.md, FileStorage__PMTilesPublish__KeyPrefix
+  # = "/"). This list is the allowlist for BOTH the edge function (unknown ids
+  # get a 404 at the edge, never reach S3) and the bucket-policy statement that
+  # lets this distribution read the objects (seed-data.tf). Adding an archive
+  # means uploading it to the bucket root and adding its key here.
+  pmtiles_path_pattern = "/api/v1/tiles/pmtiles/*"
+  pmtiles_uri_prefix   = "/api/v1/tiles/pmtiles/"
+  pmtiles_edge_archives = [
+    "maui-basemap",
+    "maui-buildings-static",
+    "maui-hillshade-static",
+    "maui-imagery-static",
+    "maui-parcels-static",
+    "maui-roads-static",
+    "maui-terrain-static",
+    "maui-zoning-static",
+  ]
+  pmtiles_s3_origin_id = "honua-demo-data-s3"
+
+  # Origins allowed on the cached tile behaviors (demo_cors and the PMTiles
+  # edge function). localhost:8123 is edge-only (see main.tf CORS budget note).
+  tile_cors_origins = [
+    "https://honua.io",
+    "https://www.honua.io",
+    "http://localhost:8123",
   ]
 
   # Route53 alias target for demo.honua.io (consumed by main.tf):
@@ -219,11 +257,7 @@ resource "aws_cloudfront_response_headers_policy" "demo_cors" {
     access_control_allow_credentials = false
 
     access_control_allow_origins {
-      items = [
-        "https://honua.io",
-        "https://www.honua.io",
-        "http://localhost:8123",
-      ]
+      items = local.tile_cors_origins
     }
 
     access_control_allow_methods {
@@ -369,13 +403,114 @@ resource "aws_cloudfront_function" "forwarded_host" {
 }
 
 # ---------------------------------------------------------------------------
+# PMTiles from S3 (2026-10-24). Static archives never needed the Lambda hop:
+# CloudFront reads them from the data bucket through Origin Access Control,
+# caches byte ranges natively (a Range GET to an S3 origin is answered 206 and
+# the fetched ranges are cached), and stamps the same tile CORS policy and
+# 24 h TTL as the other tile routes. The server's /api/v1/tiles/pmtiles proxy
+# is no longer on the request path for these ids.
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudfront_origin_access_control" "demo_data" {
+  name                              = "${var.name_prefix}-${var.environment}-demo-data"
+  description                       = "Edge read access to the PMTiles archives in the demo data bucket"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# Same 24 h TTL contract as aws_cloudfront_cache_policy.tiles (min_ttl pinned,
+# see there), but nothing from the viewer reaches S3: no query strings (an S3
+# subresource such as ?acl or ?tagging would turn a GetObject into a different,
+# denied API call), no headers, no cookies. Range is not a cache-key header:
+# CloudFront handles ranges against S3 origins itself. No Accept-Encoding
+# normalisation either: archives are served byte-exact (compress = false on
+# the behavior) so Content-Range offsets stay valid.
+resource "aws_cloudfront_cache_policy" "pmtiles_s3" {
+  name    = "${var.name_prefix}-${var.environment}-pmtiles-s3-24h"
+  comment = "24h TTL for static PMTiles archives served from S3"
+
+  min_ttl     = 86400
+  default_ttl = 86400
+  max_ttl     = 86400
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_gzip   = false
+    enable_accept_encoding_brotli = false
+
+    cookies_config {
+      cookie_behavior = "none"
+    }
+
+    headers_config {
+      header_behavior = "none"
+    }
+
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
+# Viewer-request rewrite: /api/v1/tiles/pmtiles/<id> -> /<id> for the ids in
+# local.pmtiles_edge_archives; anything else is a 404 at the edge. CORS
+# preflights are answered here too (an S3 origin does not see the viewer's
+# Origin header, and the archive objects themselves need no preflight for a
+# single-range GET, which is CORS-safelisted). The allowed origins mirror
+# aws_cloudfront_response_headers_policy.demo_cors, which still stamps CORS
+# and Cache-Control on the actual GET/HEAD responses.
+# scripts/test-edge-pmtiles-rewrite.mjs runs this code.
+resource "aws_cloudfront_function" "pmtiles_rewrite" {
+  name    = "${var.name_prefix}-${var.environment}-pmtiles-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Map /api/v1/tiles/pmtiles/<id> to the S3 object key <id> for the static demo archives"
+  publish = true
+  code    = <<-EOT
+    var PREFIX = ${jsonencode(local.pmtiles_uri_prefix)};
+    var ARCHIVES = ${jsonencode(local.pmtiles_edge_archives)};
+    var CORS_ORIGINS = ${jsonencode(local.tile_cors_origins)};
+    function handler(event) {
+      var request = event.request;
+      if (request.method === 'OPTIONS') {
+        var headers = {
+          'access-control-allow-methods': { value: 'GET, HEAD, OPTIONS' },
+          'access-control-allow-headers': { value: 'Range, If-Range, If-None-Match, If-Modified-Since, Content-Type, Authorization, X-API-Key, X-Correlation-ID' },
+          'access-control-max-age': { value: '300' },
+          'vary': { value: 'Origin' }
+        };
+        var origin = request.headers.origin && request.headers.origin.value;
+        if (origin && CORS_ORIGINS.indexOf(origin) !== -1) {
+          headers['access-control-allow-origin'] = { value: origin };
+        }
+        return { statusCode: 204, statusDescription: 'No Content', headers: headers };
+      }
+      var id = request.uri.indexOf(PREFIX) === 0 ? request.uri.substring(PREFIX.length) : '';
+      if (ARCHIVES.indexOf(id) === -1) {
+        return {
+          statusCode: 404,
+          statusDescription: 'Not Found',
+          headers: {
+            'content-type': { value: 'application/json' },
+            'cache-control': { value: 'no-store' }
+          },
+          body: { encoding: 'text', data: '{"error":"unknown PMTiles archive"}' }
+        };
+      }
+      request.uri = '/' + id;
+      request.querystring = {};
+      return request;
+    }
+  EOT
+}
+
+# ---------------------------------------------------------------------------
 # Distribution
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudfront_distribution" "demo" {
   #checkov:skip=CKV_AWS_68: WAF cannot attach to an HTTP API Gateway origin; API GW throttling (burst_limit/rate_limit in main.tf) provides rate limiting for this public read-only demo CDN.
   #checkov:skip=CKV2_AWS_47: No WAF WebACL attached (see CKV_AWS_68 rationale); Log4j AMR rule inapplicable to a CDN fronting a read-only tile/glyph API.
-  #checkov:skip=CKV_AWS_310: Single-origin demo CDN; a failover origin would duplicate infra cost for a $23/mo demo environment with no SLA requirement.
+  #checkov:skip=CKV_AWS_310: Demo CDN (API Gateway origin + an S3 origin for static PMTiles); a failover origin would duplicate infra cost for a $23/mo demo environment with no SLA requirement.
   #checkov:skip=CKV_AWS_86: Access logging omitted for a $23/mo public read-only demo CDN; traffic analysis is available via CloudFront real-time metrics.
   #checkov:skip=CKV_AWS_305: No default root object — the distribution proxies an API, not a static website; the root path is handled by the default_cache_behavior passthrough to API Gateway.
   #checkov:skip=CKV_AWS_374: Geo restriction disabled intentionally; the demo is a public world-readable showcase for honua.io/demo.html with no geographic access policy.
@@ -410,6 +545,40 @@ resource "aws_cloudfront_distribution" "demo" {
       # API Gateway gives up at 30 s; don't hold edge connections longer.
       origin_read_timeout      = 30
       origin_keepalive_timeout = 5
+    }
+  }
+
+  # Demo data bucket (PMTiles archives only; reached through OAC).
+  origin {
+    origin_id                = local.pmtiles_s3_origin_id
+    domain_name              = aws_s3_bucket.demo_data.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.demo_data.id
+
+    origin_shield {
+      enabled              = true
+      origin_shield_region = "us-west-2"
+    }
+  }
+
+  # PMTiles archives from S3. MUST stay ahead of the /api/v1/tiles/* entry in
+  # the dynamic block below: CloudFront evaluates ordered behaviors in order,
+  # and the first match wins.
+  ordered_cache_behavior {
+    path_pattern     = local.pmtiles_path_pattern
+    target_origin_id = local.pmtiles_s3_origin_id
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD"]
+
+    cache_policy_id            = aws_cloudfront_cache_policy.pmtiles_s3.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.demo_cors.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.pmtiles_rewrite.arn
     }
   }
 

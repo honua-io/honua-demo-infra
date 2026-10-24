@@ -94,6 +94,11 @@ output "gp_job_definition_arns" {
 # Pro + AI demo add-ons (see README → "Pro + AI demo drift")
 # ---------------------------------------------------------------------------
 
+output "licensing_mode" {
+  description = "Licensing__Mode declared to the demo Lambda. \"Disabled\" (the demo and shipped 2026.1): no license, no metering, every entitlement active."
+  value       = module.honua.licensing_mode
+}
+
 output "pro_license_enabled" {
   description = "Whether the demo Lambda is configured to load a signed Pro license from Secrets Manager."
   value       = module.honua.pro_license_enabled

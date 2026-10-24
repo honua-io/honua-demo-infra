@@ -84,7 +84,8 @@ jobs:
           TF_VAR_route53_zone_id: ${{ vars.HONUA_DEMO_ROUTE53_ZONE_ID }}
           TF_VAR_enable_redis: "true"
           TF_VAR_enable_bedrock_ai: "true"
-          TF_VAR_enable_pro_license: "true"
+          TF_VAR_enable_pro_license: "false"
+          TF_VAR_licensing_mode: "Disabled"
         run: |
           set +e
           terraform plan -input=false -no-color -lock-timeout=60s -detailed-exitcode
