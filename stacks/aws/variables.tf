@@ -106,6 +106,30 @@ variable "wire_redis_connection" {
   default     = true
 }
 
+# Redis operation key-ring certificate (honua-server#6500). A Redis-connected
+# Production server composes the durable operation secret channel and refuses
+# to start without this certificate. Lambda cannot mount a file, so the server
+# resolves Operations__SecretChannel__KeyRingCertificatePkcs12 =
+# aws:secretsmanager:<arn> at startup (StartupConfigurationHelpers.
+# EnsureKeyRingCertificateMaterializedAsync, present in rc.1 199bce7). The
+# secret is OPERATOR-OWNED and never in Terraform state: see
+# runbook/exports-redis-prereq.md for how to create it.
+variable "operation_key_ring_certificate_secret_arn" {
+  description = "ARN of the EXISTING operator-owned Secrets Manager secret holding the Redis operation key-ring PKCS#12 bundle (base64 PKCS#12, or JSON {\"pkcs12\":\"<base64>\",\"password\":\"...\"}). Required when enable_redis and wire_redis_connection are both true; injected into the Lambda only as an aws:secretsmanager: reference, never as a value. Empty while Redis is unwired."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.operation_key_ring_certificate_secret_arn == "" || can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$", var.operation_key_ring_certificate_secret_arn))
+    error_message = "operation_key_ring_certificate_secret_arn must be empty or a Secrets Manager secret ARN."
+  }
+
+  validation {
+    condition     = !(var.enable_redis && var.wire_redis_connection) || var.operation_key_ring_certificate_secret_arn != ""
+    error_message = "Wiring Redis into the Lambda (enable_redis && wire_redis_connection) requires operation_key_ring_certificate_secret_arn: the server refuses to start a Redis-connected Production instance without the key-ring certificate (honua-server#6500). See runbook/exports-redis-prereq.md."
+  }
+}
+
 variable "redis_node_type" {
   description = "ElastiCache node type. The live demo runs cache.t3.micro."
   type        = string

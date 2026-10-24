@@ -156,6 +156,9 @@ module "honua" {
   # Secrets Manager secret and is injected as ConnectionStrings__redis.
   # wire_redis_connection=false hands the Redis objects to redis.tf and keeps the
   # module from injecting ConnectionStrings__redis (honua-server#6500/#6487).
+  # Wiring it back (MapServer/ImageServer exports need Redis-coordinated temp
+  # storage quotas) also needs operation_key_ring_certificate_secret_arn; the
+  # steps and the ready-to-flip diff are in runbook/exports-redis-prereq.md.
   redis_enabled   = var.enable_redis && var.wire_redis_connection
   redis_node_type = var.redis_node_type
   redis_port      = 6379
@@ -319,7 +322,7 @@ module "honua" {
     # http://localhost:8123 (local demo.html verification) was dropped to fit
     # the Lambda environment budget; add Cors__AllowedOrigins__2 back only for a
     # verification window, after checking the byte budget.
-  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment)
+  }, local.studio_ai_environment, local.feature_streaming_environment, local.request_secret_reference_environment, local.operation_key_ring_environment)
 
   tags = local.common_tags
 }

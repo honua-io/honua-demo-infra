@@ -27,6 +27,40 @@
 # honua-demo-demo-redis.
 ###############################################################################
 
+# ---------------------------------------------------------------------------
+# Operation key-ring certificate delivery for the WIRED case (honua-server#6500).
+# Inert while wire_redis_connection = false (the demo today): no env var, no
+# IAM grant. When Redis is wired the Lambda receives only the secret
+# reference; the server resolves it with the function role at startup and
+# writes the PKCS#12 to a private temp file. The secret is operator-owned and
+# created out of band (runbook/exports-redis-prereq.md); Terraform never reads
+# it. ~140 bytes of the 4096-byte Lambda environment budget.
+# ---------------------------------------------------------------------------
+
+locals {
+  redis_wired = var.enable_redis && var.wire_redis_connection
+  operation_key_ring_environment = local.redis_wired ? {
+    Operations__SecretChannel__KeyRingCertificatePkcs12 = "aws:secretsmanager:${var.operation_key_ring_certificate_secret_arn}"
+  } : {}
+}
+
+resource "aws_iam_role_policy" "lambda_operation_key_ring" {
+  count = local.redis_wired ? 1 : 0
+  name  = "${var.name_prefix}-${var.environment}-operation-key-ring"
+  role  = local.honua_lambda_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [var.operation_key_ring_certificate_secret_arn]
+      }
+    ]
+  })
+}
+
 locals {
   redis_unwired  = var.enable_redis && !var.wire_redis_connection
   redis_name     = "${var.name_prefix}-${var.environment}"
