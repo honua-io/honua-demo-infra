@@ -1,9 +1,28 @@
 # Exports need Redis: key-ring certificate prerequisite (demo.honua.io)
 
-Status 2026-10-24: **blocked on one operator-created secret.** Nothing in this
-file has been applied. The rest of the stack (PMTiles, licensing, CORS, pool caps) was
-applied the same day (`foss4g-demo-apply-20261024.md`), so step 4's expected plan now
-contains only the Redis flip.
+Status 2026-10-24 22:00Z: **applied.** Steps 1–2 were run by the coordinator on the
+operator's go ("do 1 2 and 3"): the certificate was generated offline (CN
+`honua-demo-operation-key-ring`, RSA 3072, valid to 2036-10-21) and stored as the
+operator-owned secret `honua-demo-demo/operation-key-ring` (us-west-2; no `pass` store exists
+on the host, so Secrets Manager holds the only copy; never delete it). Step 3 is honua-demo-infra
+#98 (merged), step 4 planned exactly as predicted (`1 to add, 5 to change, 0 to destroy`, env
+budget 4065 of 4096), step 6 applied: `live` alias 52 → 53. The outcome and the probes are in
+`foss4g-demo-apply-20261024.md` ("Second apply round"). Two things to know for next time:
+
+- For about 45 s after the apply every cold start died with
+  `Unhandled exception. System.InvalidOperationException: AWS Secrets Manager request failed
+  with status code 400` from `StartupConfigurationHelpers.ResolveKeyRingMaterialAsync`
+  (`INIT_REPORT … Status: error`), and `/healthz/ready` answered 500. That is the new
+  `aws_iam_role_policy.lambda_operation_key_ring` propagating; it cleared on its own with no
+  further init errors. Expect it; do not roll back inside the first minute.
+- Redis unblocks exports, the distributed request budget, admin API keys across processes and
+  `jobs.runner` as a dependency, but **not** managed OGC API Processes execution on Lambda: the
+  server now refuses with `503 capability-unavailable`, `missingDependency: long-lived-host`
+  ("Managed geoprocessing on this host would be queued for a background loop that stops when the
+  invocation ends"). That needs a long-lived host or a Batch workload with the managed profile
+  (`enable_gp_batch`), which is a separate decision.
+
+The text below is the procedure as it was before the apply, kept for the next cell.
 
 ## Why exports are empty
 
