@@ -194,11 +194,14 @@ def _break_glass(event):
     connection = _connect(os.environ["DB_SECRET_ARN"])
     try:
         if not event:
-            for extension in ("postgis", "postgis_raster"):
+            # Order matters: h3_postgis depends on h3 and postgis. Honua's H3
+            # aggregation (analytics.h3) probes pg_extension for 'h3' and answers
+            # 501 until it exists; RDS for PostgreSQL 15.4+ ships h3-pg.
+            for extension in ("postgis", "postgis_raster", "h3", "h3_postgis"):
                 connection.run(f"CREATE EXTENSION IF NOT EXISTS {extension}")
             rows = connection.run(
                 "SELECT extname, extversion FROM pg_extension "
-                "WHERE extname LIKE 'postgis%' ORDER BY extname"
+                "WHERE extname LIKE 'postgis%' OR extname LIKE 'h3%' ORDER BY extname"
             )
             return {"extensions": [{"name": row[0], "version": row[1]} for row in rows]}
 
