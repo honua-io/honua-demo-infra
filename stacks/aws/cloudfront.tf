@@ -234,6 +234,15 @@ resource "aws_cloudfront_response_headers_policy" "demo_cors_api" {
         "If-Range",
         "If-None-Match",
         "If-Modified-Since",
+        # Browser writes and OGC API Processes need these (2026-10-24 rehearsal):
+        # OData PATCH/DELETE send If-Match for optimistic concurrency, OData
+        # clients send OData-Version/OData-MaxVersion, and Processes clients send
+        # Prefer: respond-async. Without them the preflight fails and the browser
+        # reports "Failed to fetch".
+        "If-Match",
+        "Prefer",
+        "OData-Version",
+        "OData-MaxVersion",
       ]
     }
 
@@ -275,6 +284,15 @@ resource "aws_cloudfront_response_headers_policy" "demo_cors" {
         "If-Range",
         "If-None-Match",
         "If-Modified-Since",
+        # Browser writes and OGC API Processes need these (2026-10-24 rehearsal):
+        # OData PATCH/DELETE send If-Match for optimistic concurrency, OData
+        # clients send OData-Version/OData-MaxVersion, and Processes clients send
+        # Prefer: respond-async. Without them the preflight fails and the browser
+        # reports "Failed to fetch".
+        "If-Match",
+        "Prefer",
+        "OData-Version",
+        "OData-MaxVersion",
       ]
     }
 
