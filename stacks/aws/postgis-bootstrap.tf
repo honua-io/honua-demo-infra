@@ -5,9 +5,9 @@
 # the server's startup migrations run. The module's `enable_postgis`
 # local-exec needs psql plus a network path to the (private, no-NAT) RDS
 # instance, which the apply host does not have. Instead, a tiny Python Lambda
-# inside the VPC enables postgis + postgis_raster as the RDS master user.
+# inside the VPC enables postgis, postgis_raster, h3 and h3_postgis as the RDS master user.
 # Terraform invokes it exactly once after the database is created
-# (idempotent: CREATE EXTENSION IF NOT EXISTS).
+# (idempotent: CREATE EXTENSION IF NOT EXISTS), and again whenever handler.py changes.
 #
 # Build prerequisites on the apply host: python3 + pip (replaces the module's
 # psql + network-path requirement). The pure-Python pg8000 driver is vendored
@@ -174,6 +174,12 @@ resource "aws_lambda_function" "postgis_bootstrap" {
 resource "aws_lambda_invocation" "postgis_bootstrap" {
   function_name = aws_lambda_function.postgis_bootstrap.function_name
   input         = jsonencode({})
+
+  # Re-run the (idempotent) bootstrap whenever the handler changes, e.g. when
+  # the extension list grows; a new input is not needed for that.
+  triggers = {
+    source_code_hash = aws_lambda_function.postgis_bootstrap.source_code_hash
+  }
 
   depends_on = [
     module.honua,
