@@ -55,6 +55,12 @@ jobs:
         # headers entirely. Pin that header set here (honua-release#87).
         run: node --test scripts/test-edge-root-response.mjs
 
+      - name: Validate PMTiles edge rewrite contract
+        # /api/v1/tiles/pmtiles/<id> is served from S3 by a CloudFront
+        # viewer-request function in stacks/aws/cloudfront.tf; pin its id
+        # allowlist, key mapping and preflight CORS.
+        run: node --test scripts/test-edge-pmtiles-rewrite.mjs
+
       - name: Validate in-VPC STAC seed renderer
         run: |
           python3 scripts/test-render-demo-stac-seed.py

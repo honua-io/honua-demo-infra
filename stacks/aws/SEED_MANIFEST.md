@@ -103,7 +103,7 @@ DB-side raster post-processing (postgis-bootstrap Lambda maintenance mode):
 
 | Artifact | Key | Source | Serving |
 |---|---|---|---|
-| Protomaps basemap | `maui-basemap` (7.1 MB) | `pmtiles extract https://build.protomaps.com/20260610.pmtiles --bbox=-157.40,20.45,-155.95,21.25` (go-pmtiles docker; Maui Nui extract replaces the 5.2 MB Maui-only one) | /api/v1/tiles/pmtiles/maui-basemap (range proxy; ContentType `application/vnd.pmtiles`, S3 metadata `operation=publish`, `FileStorage__PMTilesPublish__KeyPrefix=/`) — ODbL © OpenStreetMap contributors, Protomaps |
+| Protomaps basemap | `maui-basemap` (7.1 MB) | `pmtiles extract https://build.protomaps.com/20260610.pmtiles --bbox=-157.40,20.45,-155.95,21.25` (go-pmtiles docker; Maui Nui extract replaces the 5.2 MB Maui-only one) | /api/v1/tiles/pmtiles/maui-basemap (served from S3 by CloudFront since 2026-10-24, see cloudfront.tf; previously the server range proxy; ContentType `application/vnd.pmtiles`, S3 metadata `operation=publish`, `FileStorage__PMTilesPublish__KeyPrefix=/`) — ODbL © OpenStreetMap contributors, Protomaps |
 | Noto Sans Regular SDF glyphs | `fonts/NotoSansRegular/{range}.pbf` (256 files) | github.com/openmaptiles/fonts v2.0 (OFL 1.1) | API Gateway route `GET /fonts/{proxy+}` → S3 public `fonts/` prefix (space-free stack name; APIGW HTTP proxy rejects %20 segments) |
 | Staging | `staging-nui/*.fgb` (and legacy `staging/*.fgb`) | intermediate import sources | can be deleted after seeding |
 

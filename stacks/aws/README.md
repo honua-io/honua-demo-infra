@@ -68,7 +68,8 @@ behaviors split the traffic:
 
 | Routes | Behavior |
 |---|---|
-| `/api/v1/tiles/*` (PMTiles range proxy), `/ogc/tiles/*`, `/rest/services/*/MapServer/tile/*`, `/rest/services/*/ImageServer/tile/*`, `/fonts/*`, `/terrain/*` | Cached 24 h **enforced via `min_ttl`** (range requests cached natively); edge CORS response-headers policy; viewer `Cache-Control: public, max-age=86400, stale-while-revalidate=86400` |
+| `/api/v1/tiles/pmtiles/*` (static PMTiles archives) | **S3 origin** (`honua-demo-data-…`, Origin Access Control), not the Lambda. A viewer-request function maps `/api/v1/tiles/pmtiles/<id>` to the bucket-root key `<id>` for the ids in `local.pmtiles_edge_archives` (others 404 at the edge) and answers CORS preflights. Range GETs pass through and are cached (206). Same 24 h TTL and tile CORS/`Cache-Control` policy as the row below; no query strings or headers reach S3. Must stay ahead of `/api/v1/tiles/*`. |
+| `/api/v1/tiles/*` (other tile routes), `/ogc/tiles/*`, `/rest/services/*/MapServer/tile/*`, `/rest/services/*/ImageServer/tile/*`, `/fonts/*`, `/terrain/*` | Cached 24 h **enforced via `min_ttl`** (range requests cached natively); edge CORS response-headers policy; viewer `Cache-Control: public, max-age=86400, stale-while-revalidate=86400` |
 | Everything else (queries, OData, admin, `/healthz`) | Pass-through, no caching, all headers/query strings forwarded |
 
 Details that matter when changing this:
@@ -131,7 +132,12 @@ aws cloudfront create-invalidation \
 ```
 
 (Or invalidate just the reseeded prefix, e.g.
-`/api/v1/tiles/pmtiles/maui-basemap*`. The first 1,000 invalidation paths
+`/api/v1/tiles/pmtiles/maui-basemap*`. After the apply that moved PMTiles to
+the S3 origin (2026-10-24), run `--paths "/api/v1/tiles/pmtiles/*"` once so no
+edge keeps a cached 404 from the old Lambda proxy. A new archive must be
+uploaded to the bucket root **and** added to `local.pmtiles_edge_archives` in
+`cloudfront.tf`, which feeds both the edge allowlist and the bucket-policy
+statement that lets the distribution read it. The first 1,000 invalidation paths
 per month are free; a wildcard counts as one path.)
 
 **Cost**: effectively free at demo traffic — no monthly base fee; pay
