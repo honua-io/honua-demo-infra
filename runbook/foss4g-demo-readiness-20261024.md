@@ -77,7 +77,8 @@ Exit code: 2.
 
 ## What turns this green
 
-1. Apply the PMTiles + licensing plan (this PR), then
+1. **Done 2026-10-24** (`foss4g-demo-apply-20261024.md`: all green except the two
+   `*-export-json` checks). Apply the PMTiles + licensing plan (this PR), then
    `aws cloudfront create-invalidation --distribution-id "$(terraform output -raw cloudfront_distribution_id)" --paths "/api/v1/tiles/pmtiles/*"`.
    Expected: the eight `pmtiles-*` checks 206, `licensing-mode-disabled` and
    `entitlements-all-active` pass.

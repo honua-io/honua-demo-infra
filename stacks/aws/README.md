@@ -103,7 +103,8 @@ Details that matter when changing this:
   (API Gateway routes by Host); `Managed-AllViewerExceptHostHeader` forwards
   the rest, including `Range` and `Origin`.
 - **Edge CORS**: a response-headers policy stamps the demo's CORS headers
-  (`Access-Control-Allow-Origin: *`, credentials false, since 2026-10-24: tiles,
+  (`Access-Control-Allow-Origin: *`, credentials false, since 2026-10-24, applied and
+  probe-verified the same day: tiles,
   glyphs, terrain and PMTiles are anonymous public reads, and the earlier
   three-origin list blocked `https://samples.honua.io` and any page that copies a
   sample; the API-route policy also allows `*` and overrides the Lambda's own
@@ -382,7 +383,8 @@ editing `$LATEST` does not change what serves.
 
 #### Pro licensing (adopt-by-ARN)
 
-> **The demo runs licensing DISABLED (2026-10-24), matching shipped 2026.1.**
+> **The demo runs licensing DISABLED (2026-10-24, applied: `live` version 52,
+> `runbook/foss4g-demo-apply-20261024.md`), matching shipped 2026.1.**
 > `demo.tfvars` sets `enable_pro_license = false` and `licensing_mode = "Disabled"`,
 > so the Lambda carries `Licensing__Mode=Disabled` and no
 > `Licensing__LicenseContentSecretRef` / `Licensing__TrustedKeys__*`, and the
