@@ -87,12 +87,13 @@ locals {
   pmtiles_s3_origin_id = "honua-demo-data-s3"
 
   # Origins allowed on the cached tile behaviors (demo_cors and the PMTiles
-  # edge function). localhost:8123 is edge-only (see main.tf CORS budget note).
-  tile_cors_origins = [
-    "https://honua.io",
-    "https://www.honua.io",
-    "http://localhost:8123",
-  ]
+  # edge function): ANY origin (2026-10-24). Tiles, glyphs, terrain and the
+  # PMTiles archives are anonymous public reads with no credentials
+  # (access_control_allow_credentials = false), and the named list
+  # (honua.io, www.honua.io, localhost:8123) blocked https://samples.honua.io
+  # and every developer page that copies a sample. `*` also matches the
+  # API-route policy (demo_cors_api), which has always allowed any origin.
+  tile_cors_origins = ["*"]
 
   # Route53 alias target for demo.honua.io (consumed by main.tf):
   # CloudFront once validated, API Gateway custom domain until then.
@@ -200,11 +201,11 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
 # (Cors__AllowedOrigins = honua.io, www.honua.io, localhost:8123), so without the edge policy the
 # demo API answers only those three origins.
 #
-# The values below are the LIVE policy, transcribed exactly. Note the deliberate asymmetry with
-# demo_cors: this one allows `*` while the tile policy allows three named origins. That asymmetry is
-# pre-existing and is codified here rather than changed — narrowing it is a security decision to take
-# on its own evidence, not a side effect of putting live state under configuration control
-# (honua-demo-infra#76).
+# The values below are the LIVE policy, transcribed exactly. Since 2026-10-24 demo_cors (tiles)
+# also allows `*`, so both policies answer any origin; the earlier asymmetry (tiles limited to three
+# named origins, honua-demo-infra#76) blocked the public sample gallery. With origin_override = true
+# this edge policy replaces the Lambda's own narrow Cors__AllowedOrigins on every API route, so
+# https://samples.honua.io needs no app-level allowlist entry.
 resource "aws_cloudfront_response_headers_policy" "demo_cors_api" {
   #checkov:skip=CKV_AWS_259: HSTS is enforced at the distribution viewer_certificate level (TLSv1.2_2021 + redirect-to-https) and by the edge function on the generated root; this policy exists only to supply CORS to API routes.
   name    = "${var.name_prefix}-${var.environment}-api-cors"
@@ -457,8 +458,9 @@ resource "aws_cloudfront_cache_policy" "pmtiles_s3" {
 # preflights are answered here too (an S3 origin does not see the viewer's
 # Origin header, and the archive objects themselves need no preflight for a
 # single-range GET, which is CORS-safelisted). The allowed origins mirror
-# aws_cloudfront_response_headers_policy.demo_cors, which still stamps CORS
-# and Cache-Control on the actual GET/HEAD responses.
+# aws_cloudfront_response_headers_policy.demo_cors (local.tile_cors_origins;
+# "*" means any origin), which still stamps CORS and Cache-Control on the
+# actual GET/HEAD responses.
 # scripts/test-edge-pmtiles-rewrite.mjs runs this code.
 resource "aws_cloudfront_function" "pmtiles_rewrite" {
   name    = "${var.name_prefix}-${var.environment}-pmtiles-rewrite"
@@ -479,7 +481,9 @@ resource "aws_cloudfront_function" "pmtiles_rewrite" {
           'vary': { value: 'Origin' }
         };
         var origin = request.headers.origin && request.headers.origin.value;
-        if (origin && CORS_ORIGINS.indexOf(origin) !== -1) {
+        if (CORS_ORIGINS.indexOf('*') !== -1) {
+          headers['access-control-allow-origin'] = { value: '*' };
+        } else if (origin && CORS_ORIGINS.indexOf(origin) !== -1) {
           headers['access-control-allow-origin'] = { value: origin };
         }
         return { statusCode: 204, statusDescription: 'No Content', headers: headers };

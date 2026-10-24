@@ -74,19 +74,22 @@ test("unknown ids, traversal, and nested paths are 404 at the edge", () => {
   }
 });
 
-test("preflight echoes only the tile CORS origins", () => {
-  const ok = run("OPTIONS", "/api/v1/tiles/pmtiles/maui-basemap", { origin: { value: "https://honua.io" } });
-  assert.equal(ok.statusCode, 204);
-  assert.equal(ok.headers["access-control-allow-origin"].value, "https://honua.io");
-  assert.match(ok.headers["access-control-allow-headers"].value, /Range/u);
-  const no = run("OPTIONS", "/api/v1/tiles/pmtiles/maui-basemap", { origin: { value: "https://evil.example" } });
-  assert.equal(no.statusCode, 204);
-  assert.equal(no.headers["access-control-allow-origin"], undefined);
-  for (const name of Object.keys(ok.headers)) assert.equal(name, name.toLowerCase());
+test("preflight answers any origin with a wildcard (anonymous public tiles)", () => {
+  for (const origin of ["https://samples.honua.io", "https://example.com", "https://honua.io"]) {
+    const ok = run("OPTIONS", "/api/v1/tiles/pmtiles/maui-basemap", { origin: { value: origin } });
+    assert.equal(ok.statusCode, 204);
+    assert.equal(ok.headers["access-control-allow-origin"].value, "*");
+    assert.match(ok.headers["access-control-allow-headers"].value, /Range/u);
+    for (const name of Object.keys(ok.headers)) assert.equal(name, name.toLowerCase());
+  }
+  const noOrigin = run("OPTIONS", "/api/v1/tiles/pmtiles/maui-basemap");
+  assert.equal(noOrigin.headers["access-control-allow-origin"].value, "*");
 });
 
-test("edge CORS origins match the tile response-headers policy", () => {
-  assert.deepEqual([...hclLocal("tile_cors_origins")], ["https://honua.io", "https://www.honua.io", "http://localhost:8123"]);
+test("tile CORS is a credential-free wildcard shared with the response-headers policy", () => {
+  assert.deepEqual([...hclLocal("tile_cors_origins")], ["*"]);
+  const policy = source.slice(source.indexOf('resource "aws_cloudfront_response_headers_policy" "demo_cors" {'));
+  assert.match(policy, /access_control_allow_credentials = false/u);
   assert.match(source, /access_control_allow_origins \{\n\s*items = local\.tile_cors_origins/u);
 });
 

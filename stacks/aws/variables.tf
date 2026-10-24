@@ -120,8 +120,8 @@ variable "operation_key_ring_certificate_secret_arn" {
   default     = ""
 
   validation {
-    condition     = var.operation_key_ring_certificate_secret_arn == "" || can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$", var.operation_key_ring_certificate_secret_arn))
-    error_message = "operation_key_ring_certificate_secret_arn must be empty or a Secrets Manager secret ARN."
+    condition     = var.operation_key_ring_certificate_secret_arn == "" || can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+-[A-Za-z0-9]{6}$", var.operation_key_ring_certificate_secret_arn))
+    error_message = "operation_key_ring_certificate_secret_arn must be empty or a full Secrets Manager secret ARN (including the 6-character suffix)."
   }
 
   validation {

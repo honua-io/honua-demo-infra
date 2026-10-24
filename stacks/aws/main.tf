@@ -120,9 +120,11 @@ module "honua" {
 
   # Npgsql pool tuning, LIVE in the connection-string secret since
   # 2026-06-12 (previously hand-edited there — an apply used to silently
-  # revert it). Pool stays small on purpose: every Lambda execution
-  # environment runs its own pool, so worst case is
-  # reserved_concurrency x Maximum Pool Size connections.
+  # revert it). NOTE (2026-10-24): honua-server's PostgresDataSourceFactory
+  # OVERWRITES these pool keywords with Limits:Connections (defaults
+  # MaxConnectionPoolSize 200, MinConnectionPoolSize 20), so this string's
+  # "Maximum Pool Size=4" has not been in effect. The real caps are the
+  # Limits__Connections__* entries in additional_env below.
   db_connection_string_options = "Maximum Pool Size=4;Connection Idle Lifetime=60;Connection Pruning Interval=30"
 
   # PostGIS + PostGIS Raster are required by Honua, but the module's
@@ -274,6 +276,23 @@ module "honua" {
     # The public process contract is authenticated with a separately rotated,
     # process:*:execute-scoped demo key. Rate limiting partitions by that key and
     # uses Redis so Lambda replicas share one fixed one-minute window.
+    # PostgreSQL connection budget (2026-10-24, 53300 "remaining connection
+    # slots are reserved" under parallel FeatureServer bursts). db.t4g.small
+    # max_connections = LEAST(DBInstanceClassMemory/9531392, 5000), about 180,
+    # minus 5 reserved (superuser 3 + rds 2): DatabaseConnections peaked at 175
+    # at 07:06-07:15Z with 25 concurrent environments, i.e. about 7 per
+    # environment, because the server's own pool defaults (max 200, min 20 per
+    # data source) override the connection string. A request uses two pools
+    # (the metadata DataSource and the demo-rds secure-connection DataSource),
+    # so worst case is 25 reserved x 2 x 3 = 150, leaving about 25 slots for
+    # the seed/bootstrap/receipt Lambdas and RDS. MaxConcurrentQueries must be
+    # <= MaxConnectionPoolSize or the server refuses to start
+    # (LimitsOptionsValidator). MinConnectionPoolSize is not emitted: the pool
+    # factory clamps it to the cap (min(20, 3) = 3), and the 49 bytes are
+    # needed for the Redis key-ring flip (runbook/exports-redis-prereq.md).
+    Limits__Connections__MaxConnectionPoolSize = "3"
+    Limits__Connections__MaxConcurrentQueries  = "3"
+
     RateLimiting__Enabled                      = "true"
     RateLimiting__GlobalRequestsPerMinute      = "60"
     Geoprocessing__Executors__MaxArtifactBytes = "1048576"

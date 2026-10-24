@@ -34,13 +34,18 @@
 # reference; the server resolves it with the function role at startup and
 # writes the PKCS#12 to a private temp file. The secret is operator-owned and
 # created out of band (runbook/exports-redis-prereq.md); Terraform never reads
-# it. ~140 bytes of the 4096-byte Lambda environment budget.
+# it. ~95 bytes of the 4096-byte Lambda environment budget.
 # ---------------------------------------------------------------------------
 
 locals {
   redis_wired = var.enable_redis && var.wire_redis_connection
+  # arn:aws:secretsmanager:<region>:<acct>:secret:<name>-<6-char suffix> -> <name>
+  operation_key_ring_secret_name = var.operation_key_ring_certificate_secret_arn == "" ? "" : regex("^arn:aws:secretsmanager:[^:]+:[0-9]{12}:secret:(.+)-[A-Za-z0-9]{6}$", var.operation_key_ring_certificate_secret_arn)[0]
   operation_key_ring_environment = local.redis_wired ? {
-    Operations__SecretChannel__KeyRingCertificatePkcs12 = "aws:secretsmanager:${var.operation_key_ring_certificate_secret_arn}"
+    # NAME form (same account and region), not the ARN: 54 bytes shorter, which
+    # the 4096-byte Lambda environment needs once Redis is wired. The server
+    # resolves either form; the IAM grant below still names the exact ARN.
+    Operations__SecretChannel__KeyRingCertificatePkcs12 = "aws:secretsmanager:${local.operation_key_ring_secret_name}"
   } : {}
 }
 

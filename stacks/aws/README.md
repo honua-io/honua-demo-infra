@@ -103,8 +103,11 @@ Details that matter when changing this:
   (API Gateway routes by Host); `Managed-AllViewerExceptHostHeader` forwards
   the rest, including `Range` and `Origin`.
 - **Edge CORS**: a response-headers policy stamps the demo's CORS headers
-  (origins `https://honua.io`, `https://www.honua.io`, `http://localhost:8123`
-  — `localhost:8123` is edge-only since the app allowlist in main.tf dropped it for the Lambda env budget) on the cached behaviors,
+  (`Access-Control-Allow-Origin: *`, credentials false, since 2026-10-24: tiles,
+  glyphs, terrain and PMTiles are anonymous public reads, and the earlier
+  three-origin list blocked `https://samples.honua.io` and any page that copies a
+  sample; the API-route policy also allows `*` and overrides the Lambda's own
+  narrow `Cors__AllowedOrigins`) on the cached behaviors,
   because cached responses are shared across requesting origins. This also
   masks honua-server#1627 (missing CORS headers on error responses) for the
   tile routes.
