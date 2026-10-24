@@ -5,7 +5,10 @@ four product pillars. It covers two separable tracks:
 
 1. **Seed STAC collections** so the Imagery & Terrain Studio shows a live catalog.
 2. **Apply a Pro license** so geocoding, realtime streaming, and FeatureServer editing
-   light up.
+   light up. **Superseded 2026-10-24:** the demo now runs the way 2026.1 ships,
+   `Licensing__Mode=Disabled` (`licensing_mode = "Disabled"`, `enable_pro_license = false`
+   in `stacks/aws/demo.tfvars`), which activates every entitlement with no license
+   envelope. Track 2 below is kept as history and for a future 2026.2 licensed demo.
 
 > Scope note: the underlying server features already exist. This is **operational
 > enablement** on the deployed demo. The only server code change shipped alongside this
@@ -66,7 +69,7 @@ wins.
 | Area | State | Evidence |
 |---|---|---|
 | Track 1 — STAC seed | **Live.** `/stac/collections` returns `90810` + `90820`; `/stac/search` against `90810` returns 4 features; both collections also appear in `/api/v1/streaming/features/capabilities` layer list. | Direct probe, 2026-07-23 |
-| Track 2 — Pro license | **Live.** `/api/v1/capabilities/manifest` → `policies.currentEdition = "Pro"`, `licenseValidationState = "Valid"`. `geocoding.forward`/`geocoding.reverse`/`geocoding.failover`/`streaming.feature-subscriptions`/`editing.featureserver-edits` all `active: true`. The 14/29 `available:false` capability entries seen on an **anonymous** manifest call are RBAC (`insufficient-policy`, expected with no caller identity) or correctly `minimumEdition: Enterprise` gates (we're Pro) — not a licensing gap. | Direct probe, 2026-07-23 |
+| Track 2 — Pro license | **Superseded 2026-10-24 by `Licensing__Mode=Disabled`** (see Track 2 banner); after that apply the manifest reports `policies.currentEdition = "Enterprise"`, `licenseValidationState = "Disabled"`, `licenseValid = true`, and every entitlement `active: true`. Historical 2026-07-23 state: **Live.** `/api/v1/capabilities/manifest` → `policies.currentEdition = "Pro"`, `licenseValidationState = "Valid"`. `geocoding.forward`/`geocoding.reverse`/`geocoding.failover`/`streaming.feature-subscriptions`/`editing.featureserver-edits` all `active: true`. The 14/29 `available:false` capability entries seen on an **anonymous** manifest call are RBAC (`insufficient-policy`, expected with no caller identity) or correctly `minimumEdition: Enterprise` gates (we're Pro) — not a licensing gap. | Direct probe, 2026-07-23 |
 | Elevation / terrain | **Live and fully functional**, contradicting the 2026-07-20 probe. `maui-terrain` (layerId 8) is a registered raster dataset; `/elevation/maui-terrain/{value,profile,viewshed,line-of-sight,sun-shadow}` all return real computed results over real Maui terrain (elevations in a sane 4–590 m range), and `/terrain/maui-terrain/tile.json` + `.png` tiles serve `terrain-rgb` encoded tiles. No remediation needed. | Direct probe, 2026-07-23 |
 | Catalog cleanup — layer 68823 | **Done.** Not present in `/rest/services` (25 services, none named `test_service`/68823) or `/ogc/features/collections` (11 collections). Direct probe of `/rest/services/test_service/FeatureServer` returns `499 Unauthorized` (`allowAnonymous: false`), consistent with the recorded remediation (`PUT /api/v1/admin/services/test_service/access-policy {"allowAnonymous": false}`). | Direct probe, 2026-07-23 |
 | Geocoding | **Not working — categorical failure, not a cold-start.** The locator is published as `World` (not `maui`, which the original probe and this runbook's Step 4 assumed — `GET /rest/services/World/GeocodeServer?f=json` returns valid metadata with `Provider: nominatim`). But every `findAddressCandidates` call — first and repeated — fails after ~15.8s with `500 "Geocoding service error"`. Two consecutive calls both took ~15.8s (15.790s, 15.854s): this rules out a cold-start/keep-warm fix. Root cause (per the 2026-07-20/21 coordinator note, reconfirmed): the demo Lambda's VPC subnets have no NAT/IGW egress route, so the external Nominatim endpoint is unreachable from inside the VPC on every call. **Operator-decided fix (2026-07-23): switch to Amazon Location Service via a VPC interface endpoint (PrivateLink) — no NAT gateway.** IaC in `honua-io/honua-iac#127` (not applied); see *Remediation plan* item 1. | Direct probe, 2026-07-23 |
@@ -259,6 +262,16 @@ non-empty collection `90810` item/search result is present on the deployed runti
 
 ## Track 2 — Apply a Pro license (REQ-002/003/004/005)
 
+> **Superseded 2026-10-24 (FOSS4G NA readiness).** The demo no longer runs a Pro
+> envelope. `stacks/aws/demo.tfvars` sets `enable_pro_license = false` and
+> `licensing_mode = "Disabled"`, matching shipped 2026.1 (`INSTALL-2026.1.md`): the
+> server loads no license, meters nothing, and grants every `FeatureCatalog` entitlement,
+> including the ones Pro left inactive (`analytics.h3`, `editing.branch-versioning`,
+> `raster.multidim-coverage`, and the Enterprise-minimum keys). Nothing below is
+> required for geocoding, streaming, or editing on the demo any more. The staged
+> envelope `honua-demo-demo/license-pro` is untouched (it was never in Terraform state)
+> and stays available for a 2026.2 licensed demo.
+
 A Pro license unblocks the three remaining Pro-gated demo areas. Entitlement keys
 (from `FeatureCatalog`):
 
@@ -373,15 +386,16 @@ Geocoding__DefaultProvider=nominatim       # confirmed live; PLANNED to become
 # provider request construction would matter.
 ```
 
-The forward/reverse geocoding **operations** are Pro-gated (`geocoding.forward` /
-`geocoding.reverse`), so the Pro license from Steps 1–3 must be active (it is — see
-*As-verified live state* above). This holds for either provider — `amazon-location` and
-`nominatim` are both entitled the same way once Pro is active.
+The forward/reverse geocoding **operations** are entitlement-gated (`geocoding.forward` /
+`geocoding.reverse`, minimum edition Pro). With the demo on `Licensing__Mode=Disabled`
+(2026-10-24) every entitlement is active, so no license is needed. This holds for either
+provider — `amazon-location` and `nominatim` are entitled the same way.
 
 ### Step 5 — Streaming + editing need no extra config
 
-`streaming.feature-subscriptions` and `editing.featureserver-edits` are unlocked purely by
-the active Pro license. Streaming additionally requires Redis (already a server health
+`streaming.feature-subscriptions` and `editing.featureserver-edits` are unlocked by the
+entitlement layer; under `Licensing__Mode=Disabled` (the demo since 2026-10-24) they are
+always active. Streaming additionally requires Redis (already a server health
 prerequisite) for the change-feed/replay backend. The editing demo writes to a writable
 OData/FeatureServer layer with CORS/If-Match/ETag already fixed (#1629/#1653).
 
@@ -392,14 +406,17 @@ probes:
 
 Open these demo URLs in a browser and inspect the named fields:
 
-- `/api/v1/streaming/features/capabilities` — `enabled: true`, `edition: "Pro"`.
+- `/api/v1/streaming/features/capabilities` — `enabled: true` (`edition` reports the
+  Disabled-mode edition, not `"Pro"`, since 2026-10-24).
 - `/rest/services/World/GeocodeServer?f=json` — `currentVersion` is present. The
   deployed locator is `World`, not `maui` (see the Step 4 callout).
 - `/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=Kahului`
   — `candidates` is non-empty once the VPC egress fix lands; as verified on
   2026-07-23, this request still returns 500 after about 15.8 seconds.
-- `/api/v1/capabilities/manifest` — `policies.currentEdition` is `"Pro"`; the
-  manifest has no top-level `license` object.
+- `/api/v1/capabilities/manifest` — `policies.licenseValidationState` is `"Disabled"`,
+  `policies.currentEdition` is `"Enterprise"` (the Disabled-mode snapshot), and every
+  `policies.entitlements[].active` is `true`; the manifest has no top-level `license`
+  object.
 
 For REQ-005, make an authenticated edit with the `@honua/sdk-js` FeatureLayer
 client and confirm it persists on re-read; keep write credentials server-side.
@@ -469,8 +486,9 @@ those surfaces through their native clients:
 
 - Read the deployment manifest with
   `HonuaControlPlaneClient.getCapabilityManifest()` from `@honua/sdk-js/control-plane`.
-  Require `policies.currentEdition == "Pro"`, `licenseValid == true`, and
-  `licenseValidationState == "Valid"`.
+  Require `licenseValid == true`, `licenseValidationState == "Disabled"`, and every
+  `policies.entitlements[].active == true` (the demo runs `Licensing__Mode=Disabled`
+  since 2026-10-24; before that it required `currentEdition == "Pro"` and `"Valid"`).
 - Use `SceneView.elevationProfile()`, `SceneView.viewshed()`, and
   `SceneView.lineOfSight()` from `@honua/sdk-js/scene-workspace` for
   `maui-terrain`. Use the generated API explorer for point elevation and

@@ -16,6 +16,7 @@ output "lambda_function_name" { value = "validation" }
 output "private_route_table_ids" { value = ["rtb-00000000000000000"] }
 output "lambda_security_group_id" { value = "sg-00000000000000000" }
 output "private_subnet_ids" { value = ["subnet-00000000000000000", "subnet-00000000000000001"] }
+output "licensing_mode" { value = "Disabled" }
 output "pro_license_enabled" { value = false }
 output "pro_license_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-pro" }
 output "redis_connection_secret_arn" { value = "arn:aws:secretsmanager:us-east-1:000000000000:secret:validation-redis" }

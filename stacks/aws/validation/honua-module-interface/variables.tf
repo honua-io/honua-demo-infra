@@ -1,5 +1,6 @@
 # Caller-used input contract copied from honua-iac aws-serverless module at
-# a4a1ea52336549e4e7beb6864f115cb335cdc43b.
+# a4a1ea52336549e4e7beb6864f115cb335cdc43b; licensing_mode added from
+# e02ed058bdb65d3a054feec2da8451ede395771f (the current pin).
 variable "additional_env" { type = map(string) }
 variable "admin_password" { type = string }
 variable "amazon_location_data_source" { type = string }
@@ -34,6 +35,7 @@ variable "lambda_architectures" { type = list(string) }
 variable "lambda_memory_size" { type = number }
 variable "lambda_reserved_concurrent_executions" { type = number }
 variable "lambda_timeout_seconds" { type = number }
+variable "licensing_mode" { type = string }
 variable "log_retention_days" { type = number }
 variable "name_prefix" { type = string }
 variable "pro_license_content" { type = string }

@@ -128,8 +128,24 @@ variable "redis_node_type" {
 # honua-demo-demo/license-signing-key and must never be read by this config.
 # ---------------------------------------------------------------------------
 
+# Licensing deployment mode (2026.1 ships Licensing__Mode=Disabled: no license
+# envelope, no validation, no metering, every entitlement active). The module
+# declares it explicitly because the server's own default (Enabled) with no
+# license source resolves to Community. enable_pro_license = true forces
+# Enabled in the module regardless of this value.
+variable "licensing_mode" {
+  description = "Licensing deployment mode declared to the server as Licensing__Mode (\"Disabled\" or \"Enabled\"). The demo runs Disabled, matching shipped 2026.1. Ignored (forced to Enabled) when enable_pro_license is true."
+  type        = string
+  default     = "Disabled"
+
+  validation {
+    condition     = contains(["Disabled", "Enabled"], var.licensing_mode)
+    error_message = "licensing_mode must be \"Disabled\" or \"Enabled\"."
+  }
+}
+
 variable "enable_pro_license" {
-  description = "Deliver the signed Pro license to the demo Lambda via Secrets Manager. When off the server runs Community. The envelope itself is staged out-of-band and adopted via pro_license_secret_arn, so enabling Pro needs no secret material in tfvars."
+  description = "Deliver the signed Pro license to the demo Lambda via Secrets Manager (forces Licensing__Mode=Enabled). When off the server runs with licensing_mode (Disabled for the demo: all entitlements active), not Community. The envelope itself is staged out-of-band and adopted via pro_license_secret_arn, so enabling Pro needs no secret material in tfvars."
   type        = bool
   default     = false
 }

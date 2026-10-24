@@ -300,7 +300,7 @@ workstation and no `terraform import` step**.
 
 | Toggle | What it adds | Live values (from the deploy record) |
 |---|---|---|
-| `enable_pro_license` | `secretsmanager:GetSecretValue` for the Lambda role on the **externally-managed** license secret; injects `Licensing__LicenseContentSecretRef` + `Licensing__TrustedKeys__honuademo2026q2`. Creates **no** secret and **no** secret version. | secret `honua-demo-demo/license-pro` (ARN default in `variables.tf`); keyId `honuademo2026q2` |
+| `enable_pro_license` (**off** on the demo since 2026-10-24; `licensing_mode = "Disabled"`) | `secretsmanager:GetSecretValue` for the Lambda role on the **externally-managed** license secret; injects `Licensing__LicenseContentSecretRef` + `Licensing__TrustedKeys__honuademo2026q2`. Creates **no** secret and **no** secret version. | secret `honua-demo-demo/license-pro` (ARN default in `variables.tf`); keyId `honuademo2026q2` |
 | `enable_bedrock_ai` | least-privilege `bedrock:InvokeModel` (+ `…WithResponseStream`) on the Lambda role scoped to the Claude model's inference-profile + foundation-model ARNs; `WorkflowGeneration__*` env (provider=bedrock, region=us-west-2). Bedrock rides the fck-nat egress — the dedicated `bedrock-runtime` endpoint (live `vpce-003090af73dc835fe`, SG `sg-0ac55474b410c5d34`) was removed from config in the 2026-07-24 cost round; if it is in state the next apply destroys it, and if it is NOT in state it must be deleted by hand or it keeps billing (~$7.5/mo) as an orphan | model `us.anthropic.claude-sonnet-4-5-20250929-v1:0`; region `us-west-2` |
 | `enable_redis` | in-VPC ElastiCache Redis (`cache.t3.micro`, port 6379); `ConnectionStrings__redis`; the Lambda 6379 egress rule | enabled by `demo.tfvars`; immutable candidate evidence records the created cluster/SG identities after apply |
 
@@ -372,6 +372,17 @@ alias** — the alias serves a published version whose environment is frozen, so
 editing `$LATEST` does not change what serves.
 
 #### Pro licensing (adopt-by-ARN)
+
+> **The demo runs licensing DISABLED (2026-10-24), matching shipped 2026.1.**
+> `demo.tfvars` sets `enable_pro_license = false` and `licensing_mode = "Disabled"`,
+> so the Lambda carries `Licensing__Mode=Disabled` and no
+> `Licensing__LicenseContentSecretRef` / `Licensing__TrustedKeys__*`, and the
+> role loses `GetSecretValue` on the envelope. Every entitlement is active
+> (`/api/v1/capabilities/manifest` → `policies.licenseValidationState =
+> "Disabled"`). The `licensing_mode` input needs the `aws-serverless` module at
+> honua-iac `e02ed05` or later (the pin in `main.tf`). The adopt-by-ARN wiring
+> below is kept for a future licensed (2026.2) demo; the staged envelope is not
+> in state, so disabling licensing cannot delete it.
 
 The signed Pro license envelope is **managed entirely outside Terraform**. It is
 already staged in the demo account as `honua-demo-demo/license-pro`, and the

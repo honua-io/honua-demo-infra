@@ -22,7 +22,7 @@ INTERFACE = ROOT / "stacks" / "aws" / "validation" / "honua-module-interface"
 
 
 class CandidatePreflightContractTests(unittest.TestCase):
-    MODULE_COMMIT = "7abdb07c85c7a389a9c3cc97583e534f6c636a3b"
+    MODULE_COMMIT = "e02ed058bdb65d3a054feec2da8451ede395771f"
     SERVER_COMMIT = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
     DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
 
