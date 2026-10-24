@@ -83,3 +83,12 @@ The sibling STAC SQL at this ref has exact SHA-256
 (and the sibling `tests/seed/demo-*.sql` / `client-compat-v1.sql` fixtures at
 the same ref). Bump the pinned commit deliberately when a newer seed fixture is
 needed — do not float on `trunk`.
+
+## FOSS4G NA readiness (2026-10-24)
+
+`foss4g-demo-readiness-20261024.md` records the observed live state before the
+FOSS4G NA booth (PMTiles 404, empty MapServer/ImageServer exports, Pro
+licensing) with CloudWatch evidence and the probe output.
+`exports-redis-prereq.md` is the operator procedure for wiring Redis so
+exports work again: the one key-ring certificate secret to create and the
+ready-to-flip Terraform diff.
