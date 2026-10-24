@@ -10,6 +10,9 @@
 # a stored image, which needs Redis-coordinated temp storage); an OGC API Tiles MVT tile
 # (200/204); an OGC API Maps PNG (>0 bytes); and the capability manifest's licensing state
 # (licenseValidationState=Disabled, every policies.entitlements[] active).
+# Tile CORS (2026-10-24): a GET with `Origin: https://example.com` on an OGC Tiles MVT tile,
+# an ImageServer tile and the PMTiles basemap must carry `access-control-allow-origin: *`
+# (tiles are anonymous public reads; samples.honua.io and copied samples need it).
 set -uo pipefail
 LABEL="${1:?label}"; OUT="${2:-$HOME/.honua-runtime-proof/rc1-upgrade-20261022}"; mkdir -p "$OUT"
 B="${BASE:-https://demo.honua.io}"; R=us-west-2; F=honua-demo-demo-honua
@@ -24,8 +27,11 @@ demo_get() {
 import json,sys
 name,body,hdr,status,size=sys.argv[1:6]; ctype=sys.argv[6] if len(sys.argv)>6 else ""
 data=open(body,"rb").read()
-cache=next((l.split(":",1)[1].strip() for l in open(hdr,errors="replace") if l.lower().startswith("x-cache:")),None)
+def header(name):
+    return next((l.split(":",1)[1].strip() for l in open(hdr,errors="replace") if l.lower().startswith(name+":")),None)
+cache=header("x-cache")
 out={"status":int(status),"bytes":int(size),"type":ctype,"png":data[:8]==b"\x89PNG\r\n\x1a\n","cache":cache}
+if header("access-control-allow-origin") is not None: out["acao"]=header("access-control-allow-origin")
 if ctype.startswith("application/json"):
     try:
         j=json.loads(data); out["href"]=bool(j.get("href")); out["error"]=(j.get("error") or {}).get("code")
@@ -77,6 +83,10 @@ printf ',"imageserver-export":%s' "$(demo_get is-img "rest/services/maui-hillsha
 printf ',"imageserver-export-json":%s' "$(demo_get is-json "rest/services/maui-hillshade/ImageServer/exportImage?$BB&format=png&f=json")"
 printf ',"ogc-tiles-mvt":%s' "$(demo_get mvt "ogc/tiles/collections/maui-zoning/tiles/WebMercatorQuad/10/451/66")"
 printf ',"ogc-maps-png":%s' "$(demo_get maps "ogc/maps/collections/maui-zoning/map?bbox=-156.7,20.7,-156.2,21.05&width=256&height=256&f=png")"
+XO=(-H 'Origin: https://example.com')
+printf ',"cors-ogc-tiles":%s' "$(demo_get cors-mvt "ogc/tiles/collections/maui-zoning/tiles/WebMercatorQuad/10/451/66" "${XO[@]}")"
+printf ',"cors-imageserver-tile":%s' "$(demo_get cors-ist "rest/services/maui-hillshade/ImageServer/tile/10/451/66" "${XO[@]}")"
+printf ',"cors-pmtiles":%s' "$(demo_get cors-pm "api/v1/tiles/pmtiles/maui-basemap" -H 'Range: bytes=0-16383' "${XO[@]}")"
 code "$B/api/v1/capabilities/manifest" >/dev/null
 printf ',"licensing":%s' "$(python3 -c "
 import json;p=json.load(open('$T/body')).get('policies',{});e=p.get('entitlements',[])
@@ -106,6 +116,9 @@ for k in ("mapserver-export-json","imageserver-export-json"):
     v=demo.get(k) or {}
     if not (v.get("status")==200 and v.get("href")): bad.append(k)
 if (demo.get("ogc-tiles-mvt") or {}).get("status") not in (200,204): bad.append("ogc-tiles-mvt")
+for k in ("cors-ogc-tiles","cors-imageserver-tile","cors-pmtiles"):
+    v=demo.get(k) or {}
+    if not (v.get("status") in (200,204,206) and v.get("acao")=="*"): bad.append(k)
 lic=demo.get("licensing") or {}
 if lic.get("licenseValidationState")!="Disabled": bad.append("licensing-mode-disabled")
 if lic.get("inactive") or not lic.get("entitlements"): bad.append("entitlements-all-active")

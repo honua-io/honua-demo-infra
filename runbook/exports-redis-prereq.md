@@ -95,11 +95,12 @@ renders while `wire_redis_connection = false`.
      keep it a CIDR rule, see README "CIDR-egress gotcha");
    - `module.honua.aws_lambda_function.this` environment adds
      `ConnectionStrings__redis = aws:secretsmanager:<redis-connection ARN>` and
-     `Operations__SecretChannel__KeyRingCertificatePkcs12 = aws:secretsmanager:<step-2 ARN>`;
-   - environment budget **4028 of 4096 bytes**. This only fits because the
-     licensing change (`licensing_mode = "Disabled"`) removed 215 bytes of
-     `Licensing__*`; with the Pro envelope still wired it would be 4243 and the
-     apply would fail.
+     `Operations__SecretChannel__KeyRingCertificatePkcs12 = aws:secretsmanager:honua-demo-demo/operation-key-ring`
+     (the secret NAME, derived from the step-2 ARN, to save 54 bytes);
+   - environment budget **4065 of 4096 bytes** (re-planned 2026-10-24 after the
+     `Limits__Connections__*` pool caps were added). It only fits because the
+     licensing change removed 215 bytes of `Licensing__*` and the key-ring
+     reference uses the name form. Do not add any variable in the same change.
 
 5. **Before apply**: confirm `aws_lambda_alias.live` follows a clean
    (`HONUA_SKIP_MIGRATIONS=true`) version (rc1 runbook §11). Note the current
