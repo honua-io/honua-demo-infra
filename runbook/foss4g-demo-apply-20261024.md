@@ -111,3 +111,52 @@ Unchanged from `exports-redis-prereq.md`. The operator must:
 3. plan (expected Lambda env 4065 of 4096 bytes) and apply.
 
 Until then `f=json` exports return 503. `f=image` works.
+
+## Second apply round (2026-10-24 21:40–22:10Z): CORS headers, Redis + key ring, editing layer
+
+Operator go: "do 1 2 and 3" (Redis apply, CORS apply, editing publish). All three done by the
+coordinator from fresh worktrees on trunk; every plan was re-run against current state first.
+
+| # | Change | Plan | Apply | Verified |
+|---|---|---|---|---|
+| 2 | #96 edge CORS: both `aws_cloudfront_response_headers_policy` allow `If-Match`, `Prefer`, `OData-Version`, `OData-MaxVersion` | `0 add, 3 change, 0 destroy` (two policies + the standing `rds.force_ssl` normalization) | `0 added, 3 changed, 0 destroyed` | `OPTIONS /odata/Layers(68824)/Features(1)` with `Access-Control-Request-Headers: content-type,prefer,if-match,odata-version` → 204, `access-control-allow-headers` lists all four |
+| 3 | editing scratch layer (`editing-scratch-layer-anonymous-writes.md`) | n/a (admin API) | publish `201` layerId 68824 managed; policy `200` | anonymous PATCH 200 + re-read; source table untouched; reset `--apply` → `27 rows, seed state` |
+| 1 | #98 Redis + operation key ring (`exports-redis-prereq.md`) | `1 add, 5 change, 0 destroy`; six moved blocks; env 4065/4096 | `1 added, 5 changed, 0 destroyed`; `live` 52 → 53 | below |
+
+Redis apply verification (`rc1-upgrade-probe.sh after-redis`, 22:09Z): **`FAILED: none`**.
+`mapserver-export-json` and `imageserver-export-json` now return `200` with an `href`;
+`f=image` PNGs 49 KB / 27 KB; PMTiles, tile CORS, MVT, OGC Maps, licensing unchanged and green.
+CloudWatch: zero `SharedWriteRejectedRedisRequired` events after the apply. Boot: ~45 s of
+`Runtime.ExitError` cold starts (Secrets Manager 400 from `ResolveKeyRingMaterialAsync`) while
+the new IAM policy propagated, then clean; also an informational
+`Redis durability attestation: unverified (… ERR unknown command 'CONFIG' …)` line, because
+ElastiCache does not expose `CONFIG GET`; the manifest publishes that outcome.
+
+Capability manifest after: `jobs.runner` and `operations.proposals` report
+`available:false, reasonCode: insufficient-policy` for anonymous callers (previously
+`dependency-unavailable`), i.e. the dependency is satisfied.
+
+### Findings from this round
+
+- **H3 answers 501 for every source-mode layer, by design in rc.1.** The h3/h3_postgis
+  extensions are installed (4.2.3) and the function environment was replaced, yet
+  `…/maui-buildings/h3` and `…/maui-inspections/h3` still answer 501. Cause:
+  `PostgresStorageMappedFeatureReader.QueryH3Async` throws
+  `NotSupportedException("H3 queries are not supported for source-backed PostGIS layers yet.")`.
+  All seven Maui layers and `maui-inspections` are source-mode. The managed copy published in
+  step 3 answers: `GET /ogc/features/collections/maui-inspections-scratch/h3?resolution=5` →
+  200 GeoJSON (cells with `cellIndex`, `count`) in 0.4 s. To show H3 over the 42k buildings, a
+  managed-store copy of `maui_buildings` would have to be published (same admin call as the
+  inspections copy, no anonymous writes). Not done; operator decision.
+- **Managed process execution is refused on Lambda regardless of Redis** (see
+  `exports-redis-prereq.md` status). `POST /ogc/processes/processes/geometry.buffer/execution`
+  with the admin key, sync or async → `503 capability-unavailable`, `missingDependency:
+  long-lived-host`. Needs a long-lived host or `enable_gp_batch` with a managed-profile workload.
+- **Pre-existing: the `audit-chain-integrity` health check has been Unhealthy continuously since
+  at least 2026-10-21 22:04Z** ("entry_hash is missing at audit_id 287: an unhashed row follows a
+  hashed row"), every ~30 s in the Lambda log. `/healthz/ready` still answers 200, so it is not
+  readiness-gating. Not caused by today's work (first event predates every change); worth a
+  server/ops ticket before the booth, because any audit-trail story would show it.
+- The honua.io pages that describe these states (endpoints.html rows `mapserver-export-json`
+  and `analytics-h3`, the analytics flagship's H3 button, the geoprocessing page's "no Redis job
+  store" copy) are being updated in honua-site to match (lane O).

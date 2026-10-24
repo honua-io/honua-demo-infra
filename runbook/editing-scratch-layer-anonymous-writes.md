@@ -2,8 +2,17 @@
 
 Operator procedure for making Save on <https://honua.io/demo-editing.html>
 write to demo.honua.io. It also covers turning writes off again and resetting
-the synthetic inspection points to their seed. **Nothing in this file has been
-run against demo.honua.io.** The coordinator runs it after the operator's go.
+the synthetic inspection points to their seed. **Run against demo.honua.io on
+2026-10-24 21:49Z** on the operator's go: enable step 1 answered `201` with `layerId` **68824**
+(`storageMode: managed`, `schema: honua`, `table: features`, capabilities Query/Extract/Create/
+Update/Delete); step 2 answered `200`; anonymous `GET /odata/Layers` lists
+`(68824, 'maui-inspections-scratch')` with 27 rows; the anonymous PATCH probe on a missing row
+answered `404`; a real anonymous PATCH on ObjectId 166162 answered `200` with an `@odata.etag`,
+the re-read showed the new note, and `public.maui_inspections` (layer 12) was unchanged;
+`reset-inspections-scratch.sh --apply` then planned keep 26 / patch 1 and verified
+`27 rows, seed state`. honua.io/demo-editing.html reads layer 68824 and its pill says
+"Save sends a live OData write". The nightly reset schedule recommended below is still not
+created.
 
 ## What is actually blocking writes (verified 2026-10-24)
 
