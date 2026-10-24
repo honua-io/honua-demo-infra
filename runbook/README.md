@@ -30,6 +30,17 @@ transferred demo-capability program epic); the honua-server originals are
 replaced with a pointer stub, and the one code reference
 (`MetadataReleaseOperationOptions` XML docs) now points here.
 
+## Inspection & Editing scratch layer
+
+`editing-scratch-layer-anonymous-writes.md` covers the Save button on honua.io
+`/demo-editing.html`:
+- why writes are refused today. The policy already allows them; the layer is published `storageMode: source` → 501;
+- how to publish the managed editable copy `maui-inspections-scratch` with anonymous writes, and how to revert;
+- the abuse surface and request budget.
+
+`scripts/reset-inspections-scratch.sh` resets that layer to its 27 seed points
+over OData. It is a dry run by default and idempotent.
+
 ## Feature streaming
 
 `streaming-snapshot-conformance.md` is the operator procedure for making

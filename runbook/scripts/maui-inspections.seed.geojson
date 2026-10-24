@@ -1,0 +1,493 @@
+{
+  "type": "FeatureCollection",
+  "name": "maui-inspections",
+  "description": "Synthetic inspection points at real Maui parks, trailheads, and harbors. Demo data only — no real inspections are represented.",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 1,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.5498,
+          20.9421
+        ]
+      },
+      "properties": {
+        "name": "Waiheʻe Ridge Trailhead",
+        "category": "trail",
+        "status": "ok",
+        "note": "Boardwalk sections dry, signage intact. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-08T18:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 2,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.0448,
+          20.6622
+        ]
+      },
+      "properties": {
+        "name": "Pīpīwai Trailhead (Kīpahulu)",
+        "category": "trail",
+        "status": "needs_attention",
+        "note": "Bamboo debris across upper switchback. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-05T17:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 3,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.5223,
+          20.7905
+        ]
+      },
+      "properties": {
+        "name": "Lahaina Pali Trailhead (Māʻalaea side)",
+        "category": "trail",
+        "status": "ok",
+        "note": "Trailhead kiosk map weathered but legible. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-01T16:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 4,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.6671,
+          20.9988
+        ]
+      },
+      "properties": {
+        "name": "Kapalua Coastal Trail",
+        "category": "trail",
+        "status": "ok",
+        "note": "Footpath clear end to end. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-09T15:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 5,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4214,
+          20.6011
+        ]
+      },
+      "properties": {
+        "name": "Hoapili Trail (La Pérouse Bay)",
+        "category": "trail",
+        "status": "needs_attention",
+        "note": "Cairn markers displaced near lava field entry. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-29T14:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 6,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.2391,
+          20.9118
+        ]
+      },
+      "properties": {
+        "name": "Twin Falls Trailhead",
+        "category": "trail",
+        "status": "urgent",
+        "note": "Stream crossing rope frayed; flagged for replacement. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-07T13:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 7,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.2877,
+          20.8016
+        ]
+      },
+      "properties": {
+        "name": "Waihou Spring Trailhead",
+        "category": "trail",
+        "status": "ok",
+        "note": "Pine litter raked back from junction. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-25T12:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 8,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.2502,
+          20.714
+        ]
+      },
+      "properties": {
+        "name": "Keoneheʻeheʻe (Sliding Sands) Trailhead",
+        "category": "trail",
+        "status": "ok",
+        "note": "Summit-district signage in good order. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-03T18:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 9,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.2357,
+          20.7686
+        ]
+      },
+      "properties": {
+        "name": "Hosmer Grove Trailhead",
+        "category": "trail",
+        "status": "needs_attention",
+        "note": "Picnic shelter roof panel loose. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-20T17:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 10,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4447,
+          20.9
+        ]
+      },
+      "properties": {
+        "name": "Kanahā Beach Park",
+        "category": "park",
+        "status": "ok",
+        "note": "Restrooms serviced, showers operational. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-06T16:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 11,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.3946,
+          20.9148
+        ]
+      },
+      "properties": {
+        "name": "H.A. Baldwin Beach Park",
+        "category": "park",
+        "status": "needs_attention",
+        "note": "Pavilion B picnic tables need refinishing. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-04T15:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 12,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4497,
+          20.7066
+        ]
+      },
+      "properties": {
+        "name": "Kamaʻole Beach Park III",
+        "category": "park",
+        "status": "ok",
+        "note": "Lifeguard tower equipment check complete. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-08T14:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 13,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4493,
+          20.6321
+        ]
+      },
+      "properties": {
+        "name": "Mākena State Park (Big Beach)",
+        "category": "park",
+        "status": "urgent",
+        "note": "Erosion undercutting the south access stairs. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-09T13:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 14,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.6537,
+          21.0057
+        ]
+      },
+      "properties": {
+        "name": "D.T. Fleming Beach Park",
+        "category": "park",
+        "status": "ok",
+        "note": "Parking lot restriped last cycle. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-31T12:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 15,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.3587,
+          20.9337
+        ]
+      },
+      "properties": {
+        "name": "Hoʻokipa Beach Park",
+        "category": "park",
+        "status": "needs_attention",
+        "note": "Overlook railing bolts corroding. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-02T18:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 16,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4867,
+          20.8896
+        ]
+      },
+      "properties": {
+        "name": "Keōpūolani Regional Park",
+        "category": "park",
+        "status": "ok",
+        "note": "Irrigation timers reset after outage. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-28T17:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 17,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.0022,
+          20.7888
+        ]
+      },
+      "properties": {
+        "name": "Waiʻānapanapa State Park",
+        "category": "park",
+        "status": "ok",
+        "note": "Cabin-loop path swept; cave signage fine. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-05T16:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 18,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.5444,
+          20.8808
+        ]
+      },
+      "properties": {
+        "name": "ʻĪao Valley State Monument",
+        "category": "park",
+        "status": "needs_attention",
+        "note": "Streamside guardrail dented by rockfall. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-07T15:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 19,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.6623,
+          20.8468
+        ]
+      },
+      "properties": {
+        "name": "Launiupoko Beach Park",
+        "category": "park",
+        "status": "ok",
+        "note": "Keiki pool wall inspected, no cracks. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-23T14:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 20,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4767,
+          20.8984
+        ]
+      },
+      "properties": {
+        "name": "Kahului Harbor (Pier 2)",
+        "category": "harbor",
+        "status": "ok",
+        "note": "Fender lines within wear tolerance. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-04T13:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 21,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.6792,
+          20.8718
+        ]
+      },
+      "properties": {
+        "name": "Lahaina Small Boat Harbor",
+        "category": "harbor",
+        "status": "needs_attention",
+        "note": "Loading-dock cleat loose on slip row C. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-06T12:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 22,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.511,
+          20.791
+        ]
+      },
+      "properties": {
+        "name": "Māʻalaea Small Boat Harbor",
+        "category": "harbor",
+        "status": "ok",
+        "note": "Fuel-dock spill kit restocked. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-30T18:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 23,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -155.9842,
+          20.7572
+        ]
+      },
+      "properties": {
+        "name": "Hāna Wharf (Hāna Bay)",
+        "category": "harbor",
+        "status": "urgent",
+        "note": "Ladder rung cracked at mid-tide mark. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-08T17:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 24,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.6867,
+          20.8868
+        ]
+      },
+      "properties": {
+        "name": "Mala Wharf Boat Ramp",
+        "category": "harbor",
+        "status": "needs_attention",
+        "note": "Ramp algae buildup beyond service threshold. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-26T16:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.248,
+          20.7598
+        ]
+      },
+      "properties": {
+        "name": "Haleakalā Park Headquarters Visitor Center",
+        "category": "facility",
+        "status": "ok",
+        "note": "Exhibit hall and lot in good order. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-01T15:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 26,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.4477,
+          20.7041
+        ]
+      },
+      "properties": {
+        "name": "Kīhei Boat Ramp",
+        "category": "facility",
+        "status": "ok",
+        "note": "Wash-down hose pressure nominal. Demo data — synthetic inspection.",
+        "reported_at": "2026-06-03T14:00:00.000Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 27,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -156.5346,
+          20.8847
+        ]
+      },
+      "properties": {
+        "name": "Kepaniwai Park & Heritage Gardens",
+        "category": "facility",
+        "status": "needs_attention",
+        "note": "Pavilion lighting circuit intermittent. Demo data — synthetic inspection.",
+        "reported_at": "2026-05-27T13:00:00.000Z"
+      }
+    }
+  ]
+}
