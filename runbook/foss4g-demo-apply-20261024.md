@@ -160,3 +160,48 @@ Capability manifest after: `jobs.runner` and `operations.proposals` report
 - The honua.io pages that describe these states (endpoints.html rows `mapserver-export-json`
   and `analytics-h3`, the analytics flagship's H3 button, the geoprocessing page's "no Redis job
   store" copy) are being updated in honua-site to match (lane O).
+
+## Rollback of the Redis flip (2026-10-24 22:34Z)
+
+Decision by the coordinator on evidence, per `exports-redis-prereq.md` step 7:
+`aws lambda update-alias --function-name honua-demo-demo-honua --name live --function-version 52`.
+Version 52 is the pre-Redis environment (`HONUA_SKIP_MIGRATIONS=true`). Verified after: `/healthz/ready`
+200, Lambda `Errors` 0/min from 22:35Z, no adapter panics, 24-request parallel bursts all 200,
+`maui-inspections-scratch` reads/writes and its H3 still 200, exports `f=json` back to the 503 body.
+
+Why (all from `/aws/lambda/honua-demo-demo-honua` and CloudWatch, version 53 only):
+
+| Signal | Before the flip (08:00–21:55Z) | After (21:55–22:34Z) |
+|---|---|---|
+| Lambda `Errors` | 0 every hour, including two 25-concurrency bursts (238 throttles at 17:00Z) | 97 in 21:xx, 13 + 9 + 27 in 22:17–22:20, 5/5 at 22:26 and 22:27 (Googlebot, concurrency 1), 34/41 at 22:28 |
+| Adapter panics `lambda_runtime::layers::panic: … tcp connect error … Connection refused` | 0 | 4, 9, 27, 2, 5, 5, 33, 16 per minute 22:17–22:31 |
+| 36-request parallel burst (12 × export+OData+MVT) at 22:28Z | n/a | 33 × HTTP 500 in ~0.5 s, 2 × 200, 1 × 400 |
+| `RedisConnectionException` / `RedisTimeoutException` | n/a | 86 / 10 (ConnectTimeout to the cache.t3.micro TLS endpoint during the 25-container bursts; cache CPU 2 %) |
+
+Mechanism, from the zombie container's stream `2026/10/24/[53]c8edb36280fa465aa0812e681b01afdf`
+(alive since 22:13:04Z, served requests normally until 22:20:41Z):
+
+    22:20:40  MapServer export requested: "maui-zoning" with size 64x64
+    22:20:40  MapServer export completed: "maui-zoning" rendered 189 features in 205 ms
+    22:20:41  [INF] Beginning transaction / Checking whether journal table exists / Fetching list of already executed scripts   (x4, DbUp)
+    22:20:41  fail: MapServer export failed: "maui-zoning": "Distributed import progress state is unavailable while attempting to set progress."
+    22:20:41  HTTP "GET" "/rest/services/maui-zoning/MapServer/export" responded 200 in 499 ms
+    22:20:41  REPORT … Duration: 610 ms
+    22:20:41  START … ; ERROR Lambda runtime invoke … lambda_runtime::layers::panic: hyper_util … ConnectError("tcp connect error", … ConnectionRefused)
+    (every later invocation of this container: the same panic in ~1.5 ms, until 22:34Z)
+
+The server process left no managed exception, no `Application is shutting down`, no segfault
+text: it was simply gone between two invocations. Lambda kept the sandbox and kept routing to it,
+so one dead container answered 500 to everything it was given for up to 14 minutes. Related
+warnings in the same period: `Print orphan sweep failed` and `Redis {Operation} failed for
+distributed import queue` (same "Distributed import progress state is unavailable"), `Error in
+migration batch advance loop` (57P05 idle-session timeout), `Leadership … error`
+(ObjectDisposedException on a SafeWaitHandle). Filed against honua-server; the issue link is in
+the PR that adds this section.
+
+What stays from the round: the key-ring secret (operator-owned, never delete), the CORS headers,
+the editing scratch layer. Terraform: this PR swaps the moved blocks back and sets
+`wire_redis_connection = false` so the next apply builds a Redis-free version instead of
+re-pointing `live` at 53. Planned (not applied): `0 to add, 5 to change, 1 to destroy`
+(`aws_iam_role_policy.lambda_operation_key_ring[0]` destroyed; Lambda env 60 variables, 3814 bytes;
+`live` alias drift from the manual repoint is detected and will be re-pointed to the new version).

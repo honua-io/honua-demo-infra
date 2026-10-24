@@ -1,5 +1,7 @@
 # Exports need Redis: key-ring certificate prerequisite (demo.honua.io)
 
+Status 2026-10-24 22:34Z: **applied, then rolled back the same day** (`live` alias 53 → 52; see `foss4g-demo-apply-20261024.md` "Rollback"). Do not re-flip until the honua-server issue linked there is fixed and pinned. What follows is the record of the apply.
+
 Status 2026-10-24 22:00Z: **applied.** Steps 1–2 were run by the coordinator on the
 operator's go ("do 1 2 and 3"): the certificate was generated offline (CN
 `honua-demo-operation-key-ring`, RSA 3072, valid to 2036-10-21) and stored as the

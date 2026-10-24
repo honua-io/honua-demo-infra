@@ -1,9 +1,7 @@
 ###############################################################################
-# ElastiCache Redis ownership when it is NOT wired into the serving Lambda
-# (var.wire_redis_connection = false). Since 2026-10-24 the demo sets it to true
-# (runbook/exports-redis-prereq.md), so the module owns the six objects and the
-# resources below are count = 0; the moved blocks at the bottom record the
-# hand-back. The file stays so the flip can be reversed in a reviewed change.
+# ElastiCache Redis that is provisioned but NOT wired into the serving Lambda
+# (var.wire_redis_connection = false). Wired on 2026-10-24 (#98) and unwired again the
+# same day after the serving process started dying in warm containers; see demo.tfvars.
 #
 # Why this file exists
 # --------------------
@@ -148,30 +146,31 @@ resource "aws_secretsmanager_secret_version" "redis_connection_unwired" {
   secret_string = "${aws_elasticache_replication_group.redis_unwired[0].primary_endpoint_address}:6379,password=${random_password.redis_auth_unwired[0].result},ssl=true"
 }
 
-# Redis is WIRED (wire_redis_connection = true, 2026-10-24): the six objects live in
-# the module again (redis_enabled = true). The reverse blocks (module -> *_unwired)
-# were removed in the same change; a moved block cannot point both ways.
+# Redis is UNWIRED again (wire_redis_connection = false since the 2026-10-24 rollback):
+# the six objects move from the module back to the stack addresses. The reverse blocks
+# (*_unwired -> module) from #98 were removed in the same change; a moved block cannot
+# point both ways.
 moved {
-  from = random_password.redis_auth_unwired[0]
-  to   = module.honua.random_password.redis_auth[0]
+  from = module.honua.random_password.redis_auth[0]
+  to   = random_password.redis_auth_unwired[0]
 }
 moved {
-  from = aws_security_group.redis_unwired[0]
-  to   = module.honua.aws_security_group.redis[0]
+  from = module.honua.aws_security_group.redis[0]
+  to   = aws_security_group.redis_unwired[0]
 }
 moved {
-  from = aws_elasticache_subnet_group.redis_unwired[0]
-  to   = module.honua.aws_elasticache_subnet_group.redis[0]
+  from = module.honua.aws_elasticache_subnet_group.redis[0]
+  to   = aws_elasticache_subnet_group.redis_unwired[0]
 }
 moved {
-  from = aws_elasticache_replication_group.redis_unwired[0]
-  to   = module.honua.aws_elasticache_replication_group.redis[0]
+  from = module.honua.aws_elasticache_replication_group.redis[0]
+  to   = aws_elasticache_replication_group.redis_unwired[0]
 }
 moved {
-  from = aws_secretsmanager_secret.redis_connection_unwired[0]
-  to   = module.honua.aws_secretsmanager_secret.redis_connection[0]
+  from = module.honua.aws_secretsmanager_secret.redis_connection[0]
+  to   = aws_secretsmanager_secret.redis_connection_unwired[0]
 }
 moved {
-  from = aws_secretsmanager_secret_version.redis_connection_unwired[0]
-  to   = module.honua.aws_secretsmanager_secret_version.redis_connection[0]
+  from = module.honua.aws_secretsmanager_secret_version.redis_connection[0]
+  to   = aws_secretsmanager_secret_version.redis_connection_unwired[0]
 }
