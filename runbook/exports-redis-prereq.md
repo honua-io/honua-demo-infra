@@ -1,7 +1,9 @@
 # Exports need Redis: key-ring certificate prerequisite (demo.honua.io)
 
 Status 2026-10-24: **blocked on one operator-created secret.** Nothing in this
-file has been applied.
+file has been applied. The rest of the stack (PMTiles, licensing, CORS, pool caps) was
+applied the same day (`foss4g-demo-apply-20261024.md`), so step 4's expected plan now
+contains only the Redis flip.
 
 ## Why exports are empty
 

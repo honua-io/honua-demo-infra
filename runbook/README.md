@@ -91,4 +91,5 @@ FOSS4G NA booth (PMTiles 404, empty MapServer/ImageServer exports, Pro
 licensing) with CloudWatch evidence and the probe output.
 `exports-redis-prereq.md` is the operator procedure for wiring Redis so
 exports work again: the one key-ring certificate secret to create and the
-ready-to-flip Terraform diff.
+ready-to-flip Terraform diff. `foss4g-demo-apply-20261024.md` records the
+2026-10-24 apply (#91 + #92), the post-apply probe and the H3 501 finding.
