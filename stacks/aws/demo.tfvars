@@ -55,13 +55,17 @@ enable_amazon_location_geocoding = true
 # fixed-window request budget. The managed geometry.buffer executor runs in the
 # serving Lambda; Batch remains disabled for this bounded public process.
 enable_redis = true
-# Redis is WIRED into the serving Lambda since 2026-10-24 (ConnectionStrings__redis +
-# the operation key-ring certificate reference, honua-server#6500). The key-ring
-# PKCS#12 lives in the operator-owned secret below (created per
-# runbook/exports-redis-prereq.md; never managed by Terraform, never delete it:
-# it is the only key that can read the Redis key ring). This closes #6487 too.
-# Wiring unblocks MapServer/ImageServer exports, OGC process execution and jobs.
-wire_redis_connection                     = true
+# Redis is provisioned but UNWIRED again. It was wired on 2026-10-24 21:55Z (#98) and the
+# live alias was rolled back to the pre-Redis version at 22:34Z the same day: with
+# ConnectionStrings__redis set, the serving process died silently inside warm containers
+# (last app line: a MapServer export failing with "Distributed import progress state is
+# unavailable", then DbUp journal checks, then the Lambda Web Adapter panicking with
+# "tcp connect error: Connection refused" on every later invocation of that container);
+# the function logged 0 errors in the 14 h before the flip and 97 in the hour after.
+# See runbook/foss4g-demo-apply-20261024.md ("Rollback") and the honua-server issue it links.
+# The operation key-ring secret stays (operator-owned; it is the only key for the ring) and
+# its ARN stays here so the re-flip is a one-line change once the server fix is pinned.
+wire_redis_connection                     = false
 operation_key_ring_certificate_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/operation-key-ring-GDtfsQ"
 enable_gp_batch                           = false
 
