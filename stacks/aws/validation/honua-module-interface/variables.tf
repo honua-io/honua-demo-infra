@@ -31,6 +31,10 @@ variable "gp_batch_data_bucket_arn" { type = string }
 variable "gp_batch_data_bucket_enabled" { type = bool }
 variable "gp_batch_image" { type = string }
 variable "image" { type = string }
+variable "lambda_alias_version" {
+  type     = string
+  nullable = true
+}
 variable "lambda_architectures" { type = list(string) }
 variable "lambda_memory_size" { type = number }
 variable "lambda_reserved_concurrent_executions" { type = number }

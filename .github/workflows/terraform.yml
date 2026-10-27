@@ -1,0 +1,294 @@
+name: Terraform
+
+# The only path that changes demo.honua.io (honua-demo-infra#104). Founder rule:
+# AWS changes go through IaC and repository workflows, never the AWS CLI.
+#
+#   pull_request -> plan every deployed stack (environment demo-plan, the
+#                   plan-only role) and post one redacted plan comment.
+#   push to trunk / dispatch on trunk -> apply stacks/aws in the protected
+#                   `demo` environment (required reviewers, trunk only) with
+#                   the OIDC apply role from honua-iac bootstrap/aws-demo-deploy,
+#                   then re-plan and fail unless the result is clean.
+#
+# Emergency rollback is a one-line PR: `lambda_alias_version = "52"` in
+# stacks/aws/demo.tfvars (runbook/rollback-by-pr.md). The PR plan shows the
+# alias move; merge, approve the `demo` deployment, and this applies it.
+#
+# Before every plan, scripts/stack-plan.sh builds the PostGIS bootstrap
+# package (data.archive_file reads it at plan time) and, after it,
+# scripts/check-lambda-env-budget.py checks the serving Lambda environment
+# against the 4096-byte limit, so an oversized environment fails here and not
+# half-way through an apply.
+#
+# Public logs: the plan text is never printed; reports come from
+# scripts/plan-report.py (addresses, actions, non-sensitive values only).
+#
+# Configuration (README, "Plan and apply"):
+#   environment demo-plan  variable HONUA_DEMO_PLAN_ROLE_ARN   (bootstrap/aws-drift-plan demo_infra_drift_role_arn)
+#   environment demo       variable HONUA_DEMO_DEPLOY_ROLE_ARN (bootstrap/aws-demo-deploy role_arn)
+#                          secret   HONUA_DEMO_ADMIN_PASSWORD
+
+on:
+  pull_request:
+    paths:
+      - "stacks/**"
+      - "scripts/stack-plan.sh"
+      - "scripts/plan-report.py"
+      - "scripts/drift-stacks.py"
+      - "scripts/check-lambda-env-budget.py"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [trunk]
+    paths:
+      - "stacks/**"
+      - "scripts/stack-plan.sh"
+      - "scripts/plan-report.py"
+      - "scripts/drift-stacks.py"
+      - "scripts/check-lambda-env-budget.py"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: "1.15.8"
+  DEMO_REGION: us-west-2
+
+jobs:
+  stacks:
+    name: Stack coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Every stacks/ root is listed in stacks/drift-stacks.json
+        id: matrix
+        run: |
+          set -euo pipefail
+          python3 scripts/drift-stacks.py --check
+          echo "matrix=$(python3 scripts/drift-stacks.py --matrix)" >> "$GITHUB_OUTPUT"
+
+  plan:
+    name: Plan (${{ matrix.stack }})
+    needs: stacks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: demo-plan
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.stacks.outputs.matrix) }}
+    env:
+      STACK: ${{ matrix.stack }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Start the report
+        run: |
+          set -euo pipefail
+          mkdir -p plan-report
+          printf '### stacks/%s: the plan did not complete\n\nSee the job log.\n' "$STACK" > "plan-report/$STACK.md"
+
+      - name: Not-deployed stack
+        if: ${{ !matrix.deployed }}
+        run: |
+          set -euo pipefail
+          reason="$(python3 scripts/drift-stacks.py --get "$STACK" reason)"
+          printf '### stacks/%s: not deployed, not planned here\n\n%s\n' "$STACK" "$reason" > "plan-report/$STACK.md"
+
+      - name: Require the plan role
+        if: ${{ matrix.deployed }}
+        env:
+          ROLE_ARN: ${{ vars.HONUA_DEMO_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${ROLE_ARN}" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]]; then
+            echo "::error::HONUA_DEMO_PLAN_ROLE_ARN is unset in the demo-plan environment (honua-iac bootstrap/aws-drift-plan, demo_infra_drift_role_arn)."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC, plan-only role)
+        if: ${{ matrix.deployed }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.DEMO_REGION }}
+
+      - name: Setup Terraform
+        if: ${{ matrix.deployed }}
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prebuild, plan, env budget, report
+        if: ${{ matrix.deployed }}
+        run: |
+          set -euo pipefail
+          if [[ "$(python3 scripts/drift-stacks.py --get "$STACK" admin_password)" == "true" ]]; then
+            # PR plans compare against the live value (the plan-only role may
+            # read the Terraform-managed demo secrets); the nightly drift plan
+            # compares against the operator's copy instead.
+            pw="$(aws secretsmanager get-secret-value --region "$DEMO_REGION" \
+              --secret-id honua-demo-demo/admin-password --query SecretString --output text)"
+            echo "::add-mask::$pw"
+            export TF_VAR_honua_admin_password="$pw"
+          fi
+          # Lock-free: a PR plan is advisory and must not queue behind an apply.
+          scripts/stack-plan.sh "$STACK" "$RUNNER_TEMP/out" --no-lock
+          {
+            cat "$RUNNER_TEMP/out/report.md"
+            if [[ -f "$RUNNER_TEMP/out/env-budget.txt" ]]; then
+              printf '\nServing Lambda environment: `%s`\n' "$(head -1 "$RUNNER_TEMP/out/env-budget.txt")"
+            fi
+            if [[ "$(python3 scripts/drift-stacks.py --get "$STACK" apply)" != "true" ]]; then
+              printf '\n_Not applied on merge._ %s\n' "$(python3 scripts/drift-stacks.py --get "$STACK" apply_note)"
+            fi
+          } > "plan-report/$STACK.md"
+          cat "plan-report/$STACK.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plan-report-${{ matrix.stack }}
+          path: plan-report/
+          retention-days: 7
+
+  comment:
+    name: Post the plan comment
+    needs: plan
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PLAN_RESULT: ${{ needs.plan.result }}
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: plan-report-*
+          path: reports
+          merge-multiple: true
+
+      - name: Create or update the comment
+        run: |
+          set -euo pipefail
+          marker="<!-- honua-demo-infra:terraform-plan -->"
+          {
+            echo "$marker"
+            echo "## Terraform plan for \`${HEAD_SHA::12}\`"
+            echo
+            if [[ "$PLAN_RESULT" != "success" ]]; then
+              echo "**A plan failed ($PLAN_RESULT). Do not merge until it is green.**"
+              echo
+            fi
+            cat reports/*.md 2>/dev/null || echo "No stack produced a report."
+            echo
+            echo "On merge, \`stacks/aws\` is applied by this workflow in the protected \`demo\` environment after approval. Rollback is a one-line PR setting \`lambda_alias_version\` (runbook/rollback-by-pr.md)."
+          } > body.md
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq "map(select(.body | startswith(\"$marker\"))) | .[0].id // empty" | head -1)"
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@body.md >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@body.md >/dev/null
+          fi
+          [[ "$PLAN_RESULT" == "success" ]]
+
+  apply:
+    name: Apply stacks/aws (demo)
+    needs: stacks
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: demo
+    concurrency:
+      group: demo-apply
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Require the apply role and the admin password
+        env:
+          ROLE_ARN: ${{ vars.HONUA_DEMO_DEPLOY_ROLE_ARN }}
+          ADMIN_PASSWORD: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${ROLE_ARN}" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]]; then
+            echo "::error::HONUA_DEMO_DEPLOY_ROLE_ARN is unset in the demo environment (honua-iac bootstrap/aws-demo-deploy)."
+            exit 1
+          fi
+          if [[ -z "${ADMIN_PASSWORD}" ]]; then
+            echo "::error::secret HONUA_DEMO_ADMIN_PASSWORD is unset in the demo environment; an apply without it would replace the admin secret."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC, apply role)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.DEMO_REGION }}
+          role-duration-seconds: 7200
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prebuild, plan, env budget (locked)
+        id: plan
+        env:
+          TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          scripts/stack-plan.sh aws "$RUNNER_TEMP/plan"
+          cat "$RUNNER_TEMP/plan/report.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$(cat "$RUNNER_TEMP/plan/status")" >> "$GITHUB_OUTPUT"
+
+      - name: terraform apply (the saved plan, nothing else)
+        if: steps.plan.outputs.status == 'changes'
+        env:
+          TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Progress lines carry addresses and ids, not attribute values.
+          terraform -chdir=stacks/aws apply -input=false -no-color -lock-timeout=10m "$RUNNER_TEMP/plan/tfplan"
+
+      - name: Converged (re-plan must be clean)
+        if: steps.plan.outputs.status == 'changes'
+        env:
+          TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          scripts/stack-plan.sh aws "$RUNNER_TEMP/after"
+          {
+            echo
+            echo "#### After apply"
+            cat "$RUNNER_TEMP/after/report.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$(cat "$RUNNER_TEMP/after/status")" != clean ]]; then
+            echo "::error::stacks/aws did not converge: the post-apply plan still has changes (see the job summary)"
+            exit 1
+          fi

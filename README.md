@@ -53,6 +53,7 @@ manifest/
                         Derives the manifest from the seed definitions
   README.md             Manifest schema + publish-path documentation
 .github/workflows/
+  terraform.yml         PR plan comment; apply on merge to trunk (protected `demo` environment)
   drift-plan.yml        Nightly read-only `terraform plan` of every stack (see below)
   manifest-drift.yml    Fails PRs where the manifest is stale vs the seeds
 ```
@@ -131,14 +132,31 @@ identities. Supply the real `honua_admin_password`, review a saved plan that
 creates the new Redis resources and keeps Batch disabled, apply that exact
 plan, then bind readiness and GP canary evidence to the resulting candidate.
 
-## How to plan / apply
+## Plan and apply
+
+**AWS changes go only through `.github/workflows/terraform.yml`.** Do not use the AWS CLI or the console, and do not run a local `terraform apply` (founder rule; honua-demo-infra#104).
+
+| Event | What runs | Identity |
+|---|---|---|
+| Pull request touching `stacks/**` | Plans every deployed stack. One PR comment shows the redacted plan per stack and the serving Lambda's environment size. | `demo-plan` environment, plan-only role (honua-iac `bootstrap/aws-drift-plan`) |
+| Merge to `trunk` (or dispatch on `trunk`) | Applies `stacks/aws` after approval of the `demo` deployment. It applies the saved plan, then re-plans and fails unless that plan is clean. | `demo` environment (required reviewers, trunk only), apply role (honua-iac `bootstrap/aws-demo-deploy`) |
+| Nightly | Read-only drift plan of every stack (below) | `demo-drift` environment, plan-only role |
+
+Before every plan, `scripts/stack-plan.sh` builds the PostGIS bootstrap package, because `data.archive_file` reads it at plan time. After every plan it runs `scripts/check-lambda-env-budget.py`, so a serving Lambda environment over 4096 bytes fails before apply, not part-way through one. `aws-candidate-preflight` is planned on PRs but applied only through `scripts/candidate-preflight-plan-apply.sh`. `aws-db-migration-runner` is never applied by the workflow.
+
+**Emergency rollback:** one line in `stacks/aws/demo.tfvars`, `lambda_alias_version = "52"`, merged and applied by the workflow. See [`runbook/rollback-by-pr.md`](./runbook/rollback-by-pr.md).
+
+**Break-glass** (the workflow cannot run) follows honua-iac policy (honua-iac#318). Until that lands, it needs the founder's explicit go and a same-day PR that makes trunk match.
+
+A local `terraform plan` (read-only) is still fine for review:
 
 ```bash
 cd stacks/aws
-cp terraform.tfvars.example terraform.tfvars   # fill in real values; NEVER commit this file
-terraform init      # needs git credentials that can fetch the private honua-iac module — see below
-terraform plan
-terraform apply     # only ever run this deliberately, against the real account
+python3 postgis-bootstrap/build.py
+source <(../../../honua-iac/scripts/tf-pass-secrets.sh export)
+export TF_VAR_honua_admin_password="$HONUA_ADMIN_PASSWORD"
+terraform init
+terraform plan -lock=false -var-file=demo.tfvars
 ```
 
 ### Module source (private-repo auth)
@@ -289,6 +307,19 @@ except the S3 state lock files.
 3. Set environment secret `HONUA_DEMO_ADMIN_PASSWORD` to the value in `pass`
    (`honua/terraform`, `HONUA_ADMIN_PASSWORD`). Without it every plan would
    replace the admin secret version.
+
+`terraform.yml` needs two more environments:
+
+4. `demo-plan`: no branch policy, because PRs run there. Set variable
+   `HONUA_DEMO_PLAN_ROLE_ARN` to the same plan-only role. The PR plan reads the
+   live admin password from Secrets Manager, so it needs no secret here. Any
+   writer who can push a branch can run a read-only plan with this role,
+   including reading state. Add required reviewers to `demo-plan` if that is
+   too open.
+5. `demo`: required reviewers, deployment-branch policy `trunk` only. Set
+   variable `HONUA_DEMO_DEPLOY_ROLE_ARN` (honua-iac `bootstrap/aws-demo-deploy`,
+   output `role_arn`) and secret `HONUA_DEMO_ADMIN_PASSWORD` (from `pass`, as
+   above).
 
 ## Related
 

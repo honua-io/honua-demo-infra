@@ -147,8 +147,9 @@ renders while `wire_redis_connection = false`.
      and `imageserver-export` checks (PNG, > 0 bytes);
    - no new `SharedWriteRejectedRedisRequired` events.
 
-7. **Rollback**: repoint `live` to the version noted in step 5
-   (`aws lambda update-alias --function-name honua-demo-demo-honua --name live --function-version <n>`);
+7. **Rollback**: repoint `live` to the version noted in step 5 with a one-line PR
+   (`lambda_alias_version = "<n>"` in `stacks/aws/demo.tfvars`, `runbook/rollback-by-pr.md`;
+   never `aws lambda update-alias`);
    published versions freeze their environment, so this drops Redis
    immediately. Then revert the flip in Terraform (the moved blocks must be
    swapped back in the same change) before any further apply. Leave the secret:

@@ -648,8 +648,8 @@ attempted separately.
   and push a new demo image from
   `trunk` HEAD, set the `Geocoding__*` env block from item 1 above on the new version,
   publish it, and repoint the `live` alias from v33 to the new version
-  (`aws lambda update-alias --function-name honua-demo-demo-honua
-  --name live --function-version <new-version>` or the equivalent `terraform apply`).
+  through `terraform.yml` (merge to trunk, approve the `demo` deployment). Superseded
+  2026-10-27: no `aws lambda update-alias`; see `runbook/rollback-by-pr.md`.
 - **Expected verification:**
   - `GET /rest/services/maui-imagery/ImageServer?f=json` returns within the 20s
     statistics budget (not a 70s+ hang).
@@ -662,9 +662,8 @@ attempted separately.
   - Everything else in the *As-verified live state* table above still holds (STAC, Pro
     license, elevation, catalog cleanup, SensorThings 404) — this is a regression
     check, not expected to change any of those.
-- **Rollback:** repoint the `live` alias back to v33
-  (`aws lambda update-alias --function-name honua-demo-demo-honua --name live
-  --function-version 33`) — this reverts the geocoding provider switch along with
+- **Rollback:** repoint the `live` alias back to v33 with a one-line PR
+  (`lambda_alias_version = "33"`, `runbook/rollback-by-pr.md`) — this reverts the geocoding provider switch along with
   everything else in the deploy, back to Nominatim/`World` (broken, as today) until a
   fixed version is published. No DB rollback needed — migrations 083–088 are additive
   (`CreateNetworkDataset*`/`CreateOpsHealth*`/network-topology tables) and unrelated to
