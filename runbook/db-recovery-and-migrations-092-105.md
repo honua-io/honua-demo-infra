@@ -1,5 +1,9 @@
 # Governed recovery point and migrations 092-105
 
+> **Superseded (2026-10-27).** This runner build was never deployed; 092-105 were applied on
+> 2026-10-22 (`rc1-upgrade-dogfood-20261022.md`). The runner stack now carries the honua-server
+> 574c804 set: see `db-migrations-574c804.md`. The digests below describe the retired build.
+
 This procedure deploys and invokes a dedicated migrations-only artifact. It
 does not toggle the serving Lambda, use `$LATEST`, publish an application
 version, move `live`, or seed data. It is a prerequisite for, not a complete

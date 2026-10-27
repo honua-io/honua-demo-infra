@@ -1,5 +1,6 @@
 ###############################################################################
-# Immutable, no-trigger, migrations-only runner for demo schema 091 -> 105.
+# Immutable, no-trigger, migrations-only runner for the honua-server 574c804
+# pending set (Honua.Postgres 008, Honua.Server 136-140).
 #
 # This root is deliberately isolated from primary application and preflight
 # state. It never manages RDS, the application Lambda, aliases, seed helpers,
@@ -42,18 +43,19 @@ locals {
   vpc_id             = "vpc-0ac1893d15caf97b8"
   vpc_cidr           = "10.0.0.0/16"
   private_subnet_ids = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
-  function_name      = "honua-demo-demo-db-migration-092-105"
+  function_name      = "honua-demo-demo-db-migration-574c804"
   role_name          = "${local.function_name}-role"
   log_group_name     = "/aws/lambda/${local.function_name}"
   log_group_arn      = "arn:aws:logs:${local.region}:${local.account_id}:log-group:${local.log_group_name}"
-  source_commit      = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
-  candidate_digest   = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
-  pending_set_sha256 = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
-  preflight_sha256   = "357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee"
+  manifest           = jsondecode(file("${path.module}/runner/migration-manifest.v2.json"))
+  source_commit      = local.manifest.sourceCommit
+  candidate_digest   = local.manifest.candidateImageDigest
+  pending_set_sha256 = local.manifest.pendingScriptsSha256
+  executed_sha256    = local.manifest.executedScriptsSha256
   runner_source_dir  = "${path.module}/runner"
   runner_archive     = "${path.module}/db-migration-runner.zip"
   handler_sha256     = sha256(file("${local.runner_source_dir}/handler.py"))
-  manifest_sha256    = sha256(file("${local.runner_source_dir}/migration-manifest.v1.json"))
+  manifest_sha256    = sha256(file("${local.runner_source_dir}/migration-manifest.v2.json"))
   lock_sha256        = sha256(file("${local.runner_source_dir}/requirements.lock.json"))
 }
 
@@ -80,7 +82,7 @@ resource "aws_iam_role" "runner" {
 }
 
 resource "aws_iam_role_policy" "runner" {
-  name = "fixed-db-migration-092-105"
+  name = "fixed-db-migration-574c804"
   role = aws_iam_role.runner.id
 
   policy = jsonencode({
@@ -168,10 +170,10 @@ resource "aws_lambda_function" "runner" {
     variables = {
       DB_SECRET_ARN                   = data.aws_secretsmanager_secret.db_connection.arn
       EXPECTED_CANDIDATE_IMAGE_DIGEST = local.candidate_digest
+      EXPECTED_EXECUTED_SET_SHA256    = local.executed_sha256
       EXPECTED_PENDING_SET_SHA256     = local.pending_set_sha256
-      EXPECTED_PREFLIGHT_SHA256       = local.preflight_sha256
       EXPECTED_SOURCE_COMMIT          = local.source_commit
-      MIGRATION_OPERATION             = "apply-092-105"
+      MIGRATION_OPERATION             = "apply-574c804"
       SOURCE_HANDLER_SHA256           = local.handler_sha256
       SOURCE_MANIFEST_SHA256          = local.manifest_sha256
     }
@@ -192,11 +194,11 @@ resource "aws_lambda_function" "runner" {
 }
 
 output "db_migration_runner_qualified_arn" {
-  description = "Immutable qualified ARN for the fixed 092-105 runner; never invoke an unqualified ARN."
+  description = "Immutable qualified ARN for the fixed 574c804 runner; never invoke an unqualified ARN."
   value       = aws_lambda_function.runner.qualified_arn
 }
 
 output "db_migration_runner_version" {
-  description = "Immutable published version of the fixed 092-105 runner."
+  description = "Immutable published version of the fixed 574c804 runner."
   value       = aws_lambda_function.runner.version
 }

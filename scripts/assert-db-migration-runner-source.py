@@ -12,10 +12,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STACK = ROOT / "stacks" / "aws-db-migration-runner"
 RUNNER = STACK / "runner"
-SERVER_SOURCE = "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad"
-PENDING_DIGEST = "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"
-EXECUTED_DIGEST = "8a49e1c886f6ddf58f4baf89f7b74bdfcde3fbea4d2555050d56a050f78a15c4"
-ARCHIVE_SHA256 = "ff32a65ebd2f2f7efce184229492e1ffd629f22d1f040a0c6c2e6bd693f358dc"
+SERVER_SOURCE = "574c804176d969550a8e3002e0ebcc5b12df6893"
+SERVING_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
+PENDING_DIGEST = "ed316a74359ebf8a72348159955745ab3032fbfe035c4453dda826c0ce7ac6a3"
+EXECUTED_DIGEST = "9b9cbb998176d159b278e5a57515aeaed3e37c490943585089a6e974cb02cc33"
+PENDING_SCRIPTS = [
+    "Honua.Postgres.Migrations.008_AddRasterSamplingFunctions.sql",
+    "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
+    "Honua.Server.Migrations.137_CaptureFeatureChangeCommittedImage.sql",
+    "Honua.Server.Migrations.138_CreateJobArtifactImportReceipt.sql",
+    "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
+    "Honua.Server.Migrations.140_CreateAiExecutionAdmission.sql",
+]
+ARCHIVE_SHA256 = "2a8be2ef98433c526876aef2c7bbf28fc31ba4a39835c340879f24873e639511"
 
 
 def require(value: bool, message: str) -> None:
@@ -43,40 +52,46 @@ def main() -> None:
     for forbidden_action in ("rds:Delete", "rds:Restore", "rds:Modify", "lambda:Update", "lambda:Publish", "lambda:AddPermission", "kms:"):
         require(forbidden_action not in main_tf, f"forbidden runner IAM action: {forbidden_action}")
 
-    manifest_path = RUNNER / "migration-manifest.v1.json"
+    manifest_path = RUNNER / "migration-manifest.v2.json"
+    require(not (RUNNER / "migration-manifest.v1.json").exists(), "retired v1 manifest still present")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    require(manifest["schemaVersion"] == "honua-db-migration-runner-manifest-v2" and manifest["operation"] == "apply-574c804", "manifest schema/operation drifted")
     require(manifest["sourceCommit"] == SERVER_SOURCE, "server source pin drifted")
-    require(manifest["beforeVersion"] == 91 and manifest["afterVersion"] == 105, "migration boundary drifted")
+    require(manifest["candidateImageDigest"] == SERVING_IMAGE_DIGEST, "candidate image pin drifted")
     executed = manifest["executedScripts"]
-    require(len(executed) == 104 and len(set(executed)) == 104, "executed-script baseline size drifted")
-    require(all(re.fullmatch(r"Honua\.Server\.Migrations\.\d{3}_[A-Za-z0-9_]+\.sql", name) for name in executed), "executed-script baseline name drifted")
-    executed_versions = [int(re.search(r"\.(\d{3})_", name).group(1)) for name in executed]
-    require(executed_versions == sorted(executed_versions) and set(executed_versions) == set(range(1, 92)), "executed-script baseline order or coverage drifted")
-    require(executed[0] == "Honua.Server.Migrations.001_CreateHonuaSchema.sql" and executed[-1] == "Honua.Server.Migrations.091_RenormalizeGeocodeReferenceSearchText.sql", "executed-script baseline boundary drifted")
+    require(len(executed) == 158 and len(set(executed)) == 158 and executed == sorted(executed), "executed-script baseline size or order drifted")
+    require(all(re.fullmatch(r"Honua\.(Server|Postgres)\.Migrations\.\d{3}_[A-Za-z0-9_]+\.sql", name) for name in executed), "executed-script baseline name drifted")
+    require("Honua.Server.Migrations.109_AdoptConfiguredGuardedSchema.sql" not in executed, "non-default-schema adoption script admitted")
     require(hashlib.sha256("\n".join(executed).encode()).hexdigest() == EXECUTED_DIGEST == manifest["executedScriptsSha256"], "executed-script baseline digest drifted")
     entries = manifest["scripts"]
-    require(len(entries) == 14 and all(entry["phase"] == "Expand" for entry in entries), "exact Expand classification drifted")
-    require(not any(entry["phase"] == "Contract" for entry in entries), "Contract migration admitted")
     names = [entry["name"] for entry in entries]
-    require([int(re.search(r"\.(\d{3})_", name).group(1)) for name in names] == list(range(92, 106)), "migration order drifted")
+    require(names == PENDING_SCRIPTS, "pending script set or order drifted")
+    require(all(entry["phase"] == "Expand" for entry in entries) and manifest["contractApprovalNonce"] is None, "Contract migration admitted without a reviewed approval nonce")
+    require(not set(names) & set(executed), "pending script overlaps the baseline")
     require(hashlib.sha256("\n".join(names).encode()).hexdigest() == PENDING_DIGEST == manifest["pendingScriptsSha256"], "pending digest drifted")
-    require(set(path.name for path in (RUNNER / "migrations").glob("*.sql")) == {entry["file"] for entry in entries}, "migration source set drifted")
+    require(set(path.name for path in (RUNNER / "migrations").iterdir()) == {entry["file"] for entry in entries}, "migration source set drifted")
     for entry in entries:
         data = (RUNNER / "migrations" / entry["file"]).read_bytes()
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"migration source hash drifted: {entry['file']}")
+        script = json.loads(data)
+        require(script["name"] == entry["name"] and script["phase"] == entry["phase"] and script["commands"], f"migration body drifted: {entry['file']}")
+        declaration = script["declaration"]
+        require(declaration["scriptName"] == entry["name"] and declaration["declarationFormat"] == 1 and declaration["classification"] == "expand", f"reader declaration drifted: {entry['file']}")
+        require(hashlib.sha256(declaration["scriptText"].encode()).hexdigest().upper() == declaration["scriptSha256"], f"reader declaration hash drifted: {entry['file']}")
+        require(not any(re.search(r"\$Honua[A-Za-z0-9_]*\$", command) for command in script["commands"]), f"unrendered DbUp variable: {entry['file']}")
     handler = (RUNNER / "handler.py").read_text(encoding="utf-8")
     build = (RUNNER / "build.py").read_text(encoding="utf-8")
     for required in ('date_time=(1980, 1, 1, 0, 0, 0)', "zipfile.ZIP_STORED", "0o100644 << 16", 'ZipFile(output, "w")', 'if b"\\r" in data', 'key=lambda item: item[0].encode("utf-8")'):
         require(required in build, f"deterministic archive contract missing: {required}")
     require("ZIP_DEFLATED" not in build and "compresslevel" not in build, "host-dependent ZIP compression admitted")
     attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
-    for required in ("stacks/aws-db-migration-runner/runner/*.py text eol=lf", "stacks/aws-db-migration-runner/runner/*.json text eol=lf", "stacks/aws-db-migration-runner/runner/migrations/*.sql text eol=lf"):
+    for required in ("stacks/aws-db-migration-runner/runner/*.py text eol=lf", "stacks/aws-db-migration-runner/runner/*.json text eol=lf", "stacks/aws-db-migration-runner/runner/migrations/*.json text eol=lf"):
         require(required in attributes, f"hashed input LF pin missing: {required}")
     operator = (ROOT / "scripts" / "db-migration-runner-plan-apply.sh").read_text(encoding="utf-8")
     require(f'ARCHIVE_SHA256="{ARCHIVE_SHA256}"' in operator, "operator archive digest drifted")
     workflow = (ROOT / ".github" / "workflows" / "manifest-drift.yml").read_text(encoding="utf-8")
     require(workflow.count("runner/build.py --source") == 2 and ARCHIVE_SHA256 in workflow, "CI does not independently rebuild and pin the advertised archive")
-    for required in ("pg_try_advisory_xact_lock", 'connection.run("BEGIN")', 'connection.run("COMMIT")', 'connection.run("ROLLBACK")', "journal-before-boundary-drift", "migration-replay-rejected", "journal-after-boundary-drift"):
+    for required in ("pg_try_advisory_xact_lock", 'connection.run("BEGIN")', 'connection.run("COMMIT")', 'connection.run("ROLLBACK")', "journal-before-boundary-drift", "migration-replay-rejected", "journal-after-boundary-drift", "postgis-raster-missing", "reader-compatibility-declaration-conflict", 'SET search_path TO public'):
         require(required in handler, f"transaction/replay contract missing: {required}")
     for leak in ("traceback", "str(exc)", "SecretString\"]", "connectionString"):
         require(leak not in handler, f"secret/error leakage surface present: {leak}")
