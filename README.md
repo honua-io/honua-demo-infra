@@ -261,9 +261,11 @@ missing from it.
 
 There is no skip path: an unconfigured run is a red run.
 
-- `aws` and `aws-candidate-preflight` are planned against their state.
-- `aws-db-migration-runner` was reviewed but never applied. The job asserts
-  that its state object and its function are still absent.
+- `aws`, `aws-candidate-preflight` and `aws-db-migration-runner` are planned
+  against their state. The runner's archive is rebuilt first and must match
+  the reviewed `ARCHIVE_SHA256` in `scripts/db-migration-runner-plan-apply.sh`.
+- A stack marked `"deployed": false` must keep no state object and no listed
+  function; the job goes red if one appears.
 - The only tolerated diff is a `standing` entry in `stacks/drift-stacks.json`:
   an exact provider artifact (address, one attribute, exact before and after
   values) that links the issue removing it. Today that is the
@@ -280,7 +282,9 @@ There is no skip path: an unconfigured run is a red run.
 
 The role is `demo_infra_drift_role_arn` from honua-iac
 `infrastructure/terraform/bootstrap/aws-drift-plan`: plan-only, trusted only
-for `repo:honua-io/honua-demo-infra:environment:demo-drift`. Writes are denied
+for `repo:honua-io@217718039/honua-demo-infra@1310514636:environment:demo-drift`.
+This repository issues immutable OIDC subjects (`use_immutable_subject = true`),
+so a trust policy written in the name form never matches. Writes are denied
 except the S3 state lock files.
 
 1. Create the `demo-drift` environment with a deployment-branch policy that
