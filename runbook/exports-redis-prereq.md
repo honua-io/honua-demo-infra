@@ -1,5 +1,15 @@
 # Exports need Redis: key-ring certificate prerequisite (demo.honua.io)
 
+Status 2026-10-27: **re-wire prepared (honua-demo-infra#101), not applied.** The server cause of
+the 10-24 rollback is honua-server#6558 (a Redis `TaskCanceledException` after a Lambda thaw
+escaped the admin API-key index backfill, and `StopHost` left a listener-less process that the
+Lambda Web Adapter answered with `layers::panic` for ~8 min). It is fixed in honua-server#6644,
+which also exits a stopping host inside Lambda so the sandbox is recycled. The re-wire PR pins
+an image built from a commit containing #6644, reverses #100's moved blocks (#100 was never
+applied, so state still holds the six objects at the module addresses and nothing moves), sets
+`wire_redis_connection = true`, and lets the apply bring `live` (moved by hand to 52) back under
+Terraform. Steps 1-2 (certificate and secret) are already done; start at step 4.
+
 Status 2026-10-24 22:34Z: **applied, then rolled back the same day** (`live` alias 53 → 52; see `foss4g-demo-apply-20261024.md` "Rollback"). Do not re-flip until the honua-server issue linked there is fixed and pinned. What follows is the record of the apply.
 
 Status 2026-10-24 22:00Z: **applied.** Steps 1–2 were run by the coordinator on the
