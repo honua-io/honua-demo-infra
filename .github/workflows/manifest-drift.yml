@@ -124,4 +124,5 @@ jobs:
         run: |
           python3 scripts/drift-stacks.py --check
           python3 scripts/test-plan-report.py
+          python3 scripts/test-terraform-workflow.py
           python3 stacks/aws/postgis-bootstrap/build.py --check --out "$RUNNER_TEMP/postgis-bootstrap-build"

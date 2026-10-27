@@ -38,7 +38,7 @@ def unknown(manifest: dict, root: Path = STACKS) -> list[str]:
 
 def matrix(manifest: dict) -> list[dict]:
     return [
-        {"stack": name, "deployed": bool(entry.get("deployed"))}
+        {"stack": name, "deployed": bool(entry.get("deployed")), "apply": bool(entry.get("apply"))}
         for name, entry in sorted(manifest["stacks"].items())
     ]
 
