@@ -242,7 +242,8 @@ jobs:
         run: |
           set -euo pipefail
           title="Terraform drift: demo.honua.io does not match trunk"
-          statuses="$(cat reports/*.status 2>/dev/null | sort -u | tr '\n' ' ')"
+          # No reports at all (the coverage job failed) must still reach the issue.
+          statuses="$(cat reports/*.status 2>/dev/null | sort -u | tr '\n' ' ' || true)"
           echo "plan job: $PLAN_RESULT; statuses: ${statuses:-none}"
           {
             echo "Nightly drift plan $(date -u +%Y-%m-%dT%H:%MZ), trunk \`${GITHUB_SHA::12}\`: $RUN_URL"
