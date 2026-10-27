@@ -1,0 +1,53 @@
+{
+  "schema": "honua-demo-infra/postgis-bootstrap-lock/v1",
+  "comment": "Every input of the PostGIS bootstrap archive, hash-locked. build.py refuses any byte that differs. pg8000 1.31.2 needs scramp<1.5 (1.5.0 removed make_channel_binding); this is the set the last working archive (2026-10-24) resolved. Bump an entry only with its sha256, in a reviewed PR.",
+  "wheels": [
+    {
+      "name": "pg8000",
+      "version": "1.31.2",
+      "filename": "pg8000-1.31.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/09/a0/2b30d52017c4ced8fc107386666ea7573954eb708bf66121f0229df05d41/pg8000-1.31.2-py3-none-any.whl",
+      "sha256": "436c771ede71af4d4c22ba867a30add0bc5c942d7ab27fadbb6934a487ecc8f6"
+    },
+    {
+      "name": "scramp",
+      "version": "1.4.18",
+      "filename": "scramp-1.4.18-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/90/f4/17a3dba5195a8cb91d3dda129dfff4aaecb4d046df70efcf18de5227991e/scramp-1.4.18-py3-none-any.whl",
+      "sha256": "1b9c55c5dafb7fe19f6087158c6d2216d37b64f7cd68c2930cbe9ccf5b2c0979"
+    },
+    {
+      "name": "asn1crypto",
+      "version": "1.5.1",
+      "filename": "asn1crypto-1.5.1-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl",
+      "sha256": "db4e40728b728508912cbb3d44f19ce188f218e9eba635821bb4b68564f8fd67"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "3.0.0",
+      "filename": "python_dateutil-3.0.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5a/17/cebee01d1c0c1441174cf0456ddc91b280d79acb65340c05e41d77866ee8/python_dateutil-3.0.0-py2.py3-none-any.whl",
+      "sha256": "3c79630202e4152c6add678446984236efe4f57e84d8e892aab0637bab82e9fd"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.5",
+      "filename": "tzdata-2026.5-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/94/21/1e5995a1c920cce14e4bffae20c665ec10e7ed03ab25e006cd741092b718/tzdata-2026.5-py2.py3-none-any.whl",
+      "sha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac"
+    }
+  ],
+  "rds_ca_bundle": {
+    "filename": "rds-global-bundle.pem",
+    "url": "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
+    "sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+  }
+}

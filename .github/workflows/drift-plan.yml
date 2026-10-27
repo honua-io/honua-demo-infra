@@ -1,107 +1,270 @@
 name: Demo Drift Plan
 
-# Scheduled, READ-ONLY `terraform plan` against the live demo.honua.io AWS
-# account (honua-iac#126 extraction, item 6). Never applies. Purpose: turn
-# the demo's known hand-managed drift (see stacks/aws/README.md → "Pro + AI
-# demo drift") into a visible, recurring signal instead of a surprise.
+# Nightly READ-ONLY `terraform plan` of every Terraform root under stacks/
+# against the live demo.honua.io account (honua-demo-infra#103). It never
+# applies. It exists because on 2026-10-24 the live alias was moved 53 -> 52
+# by hand with the AWS CLI and nothing noticed for two days.
 #
-# ONE-TIME OPERATOR SETUP (this workflow no-ops until both are done — see
-# repo README "Drift-plan CI: one-time operator setup"):
-#   1. Provision an AWS OIDC role for this repo (mirror honua-iac's
-#      infrastructure/terraform/components/aws-github-oidc component —
-#      trust `repo:honua-io/honua-demo-infra:*` or a tighter `environment:` subject,
-#      permissions scoped to read-only Describe/Get/List on the demo stack's
-#      resources plus s3:GetObject/s3:PutObject on the tfstate key for
-#      backend init). Put the resulting role ARN in the repo variable
-#      HONUA_DEMO_DRIFT_ROLE_ARN below (currently a placeholder — the role
-#      does not exist yet, so this workflow is dispatch-only and will fail
-#      fast with a clear message if run before the ARN is set).
-#   2. Set repo variable HONUA_DEMO_DRIFT_ENABLED=true to turn on the daily
-#      schedule (left commented out below until then) and set the tfvars
-#      inputs (repo vars HONUA_DEMO_HONUA_IMAGE / HONUA_DEMO_ROUTE53_ZONE_ID,
-#      repo secret HONUA_DEMO_ADMIN_PASSWORD) so the plan reflects real
-#      values instead of failing on missing required variables.
+# Result contract:
+#   - any resource or output change in any stack            -> RED, and the
+#     "Terraform drift" issue is opened or updated with a redacted report;
+#   - the plan could not run (role/secret unset, AccessDenied, error) -> RED;
+#   - every stack plans clean                               -> green, and an
+#     open drift issue is closed with a comment.
+# There is no skip path: an unconfigured run is a failed run.
 #
-# Until both steps are done, workflow_dispatch still runs (for ad-hoc use)
-# but the job's `if` gate skips it neutrally unless HONUA_DEMO_DRIFT_ROLE_ARN
-# is set to a real ARN.
+# The only tolerated diffs are `standing` entries in stacks/drift-stacks.json:
+# exact provider artifacts (address, one attribute, exact before/after) that
+# each link the issue removing them. scripts/plan-report.py applies them.
+#
+# This repository and its Actions logs are public. The plan's text output is
+# never printed; the report shows addresses, actions and non-sensitive
+# attribute values only.
+#
+# Identity: the plan-only OIDC role from honua-iac
+# infrastructure/terraform/bootstrap/aws-drift-plan (output
+# demo_infra_drift_role_arn). It trusts exactly
+# repo:honua-io/honua-demo-infra:environment:demo-drift, and the demo-drift
+# environment allows deployments from trunk only. Configuration (README,
+# "Drift plan"):
+#   environment demo-drift  variable HONUA_DEMO_DRIFT_ROLE_ARN
+#                           secret   HONUA_DEMO_ADMIN_PASSWORD
 
 on:
+  schedule:
+    - cron: "17 9 * * *"
   workflow_dispatch: {}
-  # Uncomment once HONUA_DEMO_DRIFT_ENABLED=true is set (operator step 2
-  # above) and the role ARN in step 1 is live. Daily at 09:00 UTC.
-  # schedule:
-  #   - cron: "0 9 * * *"
 
 permissions:
   contents: read
-  id-token: write # required to mint the OIDC token for aws-actions/configure-aws-credentials
 
 concurrency:
   group: demo-drift-plan
   cancel-in-progress: false
 
 env:
-  HONUA_DEMO_DRIFT_ROLE_ARN: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN || '' }}
+  TERRAFORM_VERSION: "1.15.8"
+  STATE_BUCKET: honua-tfstate-585192672263
+  STATE_REGION: us-east-1
+  DEMO_REGION: us-west-2
 
 jobs:
-  drift-plan:
-    name: Read-only terraform plan (demo.honua.io)
+  stacks:
+    name: Stack coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Neutral no-op (not a failure) until the operator has provisioned the
-    # OIDC role and pointed HONUA_DEMO_DRIFT_ROLE_ARN at it, OR opted in via
-    # HONUA_DEMO_DRIFT_ENABLED for the schedule. workflow_dispatch with the
-    # ARN already set always runs (ad-hoc operator check).
-    if: ${{ (vars.HONUA_DEMO_DRIFT_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && vars.HONUA_DEMO_DRIFT_ROLE_ARN != '' }}
-    defaults:
-      run:
-        working-directory: stacks/aws
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
-        with:
-          role-to-assume: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN }}
-          aws-region: us-west-2
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        with:
-          terraform_version: "1.15.8"
-          terraform_wrapper: false
-
-      - name: terraform init
-        run: terraform init -input=false -no-color
-
-      - name: terraform plan (read-only, never applied)
-        id: plan
-        env:
-          TF_VAR_honua_image: ${{ vars.HONUA_DEMO_HONUA_IMAGE }}
-          TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
-          TF_VAR_route53_zone_id: ${{ vars.HONUA_DEMO_ROUTE53_ZONE_ID }}
-          TF_VAR_enable_redis: "true"
-          TF_VAR_enable_bedrock_ai: "true"
-          TF_VAR_enable_pro_license: "false"
-          TF_VAR_licensing_mode: "Disabled"
+      - name: Every stacks/ root is listed in stacks/drift-stacks.json
+        id: matrix
         run: |
-          set +e
-          terraform plan -input=false -no-color -lock-timeout=60s -detailed-exitcode
-          code=$?
-          set -e
-          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
-          # 0 = no changes, 1 = real error, 2 = changes present (expected
-          # until the operator has run the terraform import steps in
-          # stacks/aws/README.md — this workflow never applies either way).
-          if [ "$code" = "1" ]; then
+          set -euo pipefail
+          python3 scripts/drift-stacks.py --check
+          echo "matrix=$(python3 scripts/drift-stacks.py --matrix)" >> "$GITHUB_OUTPUT"
+
+  plan:
+    name: Drift plan (${{ matrix.stack }})
+    needs: stacks
+    # No branch filter here on purpose: a dispatch from another branch is
+    # refused by the demo-drift environment's trunk-only policy and goes red,
+    # rather than skipping to green.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: demo-drift
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.stacks.outputs.matrix) }}
+    env:
+      STACK: ${{ matrix.stack }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Start the report
+        run: |
+          set -euo pipefail
+          mkdir -p drift-report
+          printf 'error\n' > "drift-report/$STACK.status"
+          printf '### stacks/%s: the plan did not complete\n\nSee the job log of run %s.\n' \
+            "$STACK" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "drift-report/$STACK.md"
+
+      - name: Require the drift role (never green while unconfigured)
+        env:
+          ROLE_ARN: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${ROLE_ARN}" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]]; then
+            echo "::error title=drift plan not configured::HONUA_DEMO_DRIFT_ROLE_ARN is unset or not a role ARN in the demo-drift environment. Apply honua-iac infrastructure/terraform/bootstrap/aws-drift-plan and set it (README, Drift plan)."
             exit 1
           fi
 
-      - name: Surface drift result
+      - name: Configure AWS credentials (OIDC, plan-only role)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_DRIFT_ROLE_ARN }}
+          aws-region: ${{ env.DEMO_REGION }}
+
+      - name: Not-deployed stack stays absent
+        if: ${{ !matrix.deployed }}
         run: |
-          case "${{ steps.plan.outputs.exitcode }}" in
-            0) echo "No drift detected (plan exit 0)." ;;
-            2) echo "::warning::terraform plan shows pending changes — review the plan step output above. Expected until the stacks/aws/README.md terraform-import steps have been run against this state; this workflow never applies." ;;
+          set -euo pipefail
+          key="$(python3 scripts/drift-stacks.py --get "$STACK" state_key)"
+          drift=0
+          if aws s3api head-object --region "$STATE_REGION" --bucket "$STATE_BUCKET" --key "$key" >/dev/null 2>head.err; then
+            echo "::error::state object $key exists, but stacks/drift-stacks.json records $STACK as never applied"
+            drift=1
+          elif ! grep -q '404\|Not Found' head.err; then
+            cat head.err >&2; exit 1
+          fi
+          for fn in $(python3 scripts/drift-stacks.py --get "$STACK" absent_lambda_functions | jq -r '.[]'); do
+            if aws lambda get-function --region "$DEMO_REGION" --function-name "$fn" >/dev/null 2>get.err; then
+              echo "::error::Lambda function $fn exists, but $STACK is recorded as never applied"
+              drift=1
+            elif ! grep -q 'ResourceNotFoundException' get.err; then
+              cat get.err >&2; exit 1
+            fi
+          done
+          if [[ "$drift" == 1 ]]; then
+            printf 'drift\n' > "drift-report/$STACK.status"
+            printf '### stacks/%s: CHANGES\n\nRecorded as never applied, but its state object or function exists. Apply it only through scripts/db-migration-runner-plan-apply.sh and then mark it deployed in stacks/drift-stacks.json.\n' "$STACK" > "drift-report/$STACK.md"
+            exit 1
+          fi
+          printf 'clean\n' > "drift-report/$STACK.status"
+          printf '### stacks/%s: not deployed, still absent\n' "$STACK" > "drift-report/$STACK.md"
+
+      - name: Setup Terraform
+        if: ${{ matrix.deployed }}
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prebuild plan-time artifacts
+        if: ${{ matrix.deployed }}
+        run: |
+          set -euo pipefail
+          python3 scripts/drift-stacks.py --get "$STACK" prebuild | jq -r '.[]' | while IFS= read -r cmd; do
+            echo "+ $cmd"
+            bash -c "$cmd"
+          done
+
+      - name: terraform init
+        if: ${{ matrix.deployed }}
+        run: terraform -chdir="stacks/$STACK" init -input=false -no-color
+
+      - name: terraform plan (read-only, never applied)
+        if: ${{ matrix.deployed }}
+        env:
+          ADMIN_PASSWORD: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          args=(-input=false -no-color -lock-timeout=10m -detailed-exitcode -out="$RUNNER_TEMP/drift.tfplan")
+          var_file="$(python3 scripts/drift-stacks.py --get "$STACK" var_file)"
+          [[ -n "$var_file" ]] && args+=("-var-file=$var_file")
+          if [[ "$(python3 scripts/drift-stacks.py --get "$STACK" admin_password)" == "true" ]]; then
+            if [[ -z "$ADMIN_PASSWORD" ]]; then
+              echo "::error::secret HONUA_DEMO_ADMIN_PASSWORD is unset in the demo-drift environment; without it every plan replaces the admin secret version"
+              exit 1
+            fi
+            export TF_VAR_honua_admin_password="$ADMIN_PASSWORD"
+          fi
+          # The plan's text goes to a file that is never printed or uploaded
+          # (public logs). Errors still reach the log on stderr.
+          set +e
+          terraform -chdir="stacks/$STACK" plan "${args[@]}" > "$RUNNER_TEMP/plan.txt"
+          code=$?
+          set -e
+          echo "terraform plan exit code: $code"
+          if [[ "$code" != 0 && "$code" != 2 ]]; then
+            grep -E '^(Error|│ Error)' "$RUNNER_TEMP/plan.txt" || true
+            exit 1
+          fi
+
+      - name: Classify and report
+        if: ${{ matrix.deployed }}
+        run: |
+          set -euo pipefail
+          terraform -chdir="stacks/$STACK" show -json "$RUNNER_TEMP/drift.tfplan" > "$RUNNER_TEMP/plan.json"
+          set +e
+          python3 scripts/plan-report.py --plan "$RUNNER_TEMP/plan.json" --stack "$STACK" \
+            --title "stacks/$STACK" --out "drift-report/$STACK.md"
+          code=$?
+          set -e
+          cat "drift-report/$STACK.md" >> "$GITHUB_STEP_SUMMARY"
+          case "$code" in
+            0) printf 'clean\n' > "drift-report/$STACK.status" ;;
+            2) printf 'drift\n' > "drift-report/$STACK.status"
+               echo "::error title=drift::stacks/$STACK: live AWS differs from trunk. See the drift issue and the job summary."
+               exit 1 ;;
+            *) exit 1 ;;
           esac
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: drift-report-${{ matrix.stack }}
+          path: drift-report/
+          retention-days: 14
+
+  issue:
+    name: Open, update or close the drift issue
+    needs: [stacks, plan]
+    if: always() && github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PLAN_RESULT: ${{ needs.plan.result }}
+      STACKS_RESULT: ${{ needs.stacks.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: drift-report-*
+          path: reports
+          merge-multiple: true
+
+      - name: Reconcile the issue
+        run: |
+          set -euo pipefail
+          title="Terraform drift: demo.honua.io does not match trunk"
+          statuses="$(cat reports/*.status 2>/dev/null | sort -u | tr '\n' ' ')"
+          echo "plan job: $PLAN_RESULT; statuses: ${statuses:-none}"
+          {
+            echo "Nightly drift plan $(date -u +%Y-%m-%dT%H:%MZ), trunk \`${GITHUB_SHA::12}\`: $RUN_URL"
+            echo
+            cat reports/*.md 2>/dev/null || echo "No stack produced a report."
+            echo
+            echo "Live AWS must change only through this repository's workflows (founder rule). Fix drift by reverting the out-of-band change, or by a PR that makes trunk match, then let the apply workflow converge it. Never with the AWS CLI."
+          } > body.md
+          existing="$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [[ "$PLAN_RESULT" == "success" && "$STACKS_RESULT" == "success" ]]; then
+            if [[ -n "$existing" ]]; then
+              gh issue comment "$existing" --body-file body.md
+              gh issue close "$existing" --reason completed --comment "Every stack plans clean; closing."
+            fi
+            exit 0
+          fi
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh label create drift --color B60205 --description "Live infrastructure differs from trunk" 2>/dev/null || true
+            gh issue create --title "$title" --label drift --body-file body.md
+          fi
+          echo "::error::drift plan is red: $PLAN_RESULT"
+          exit 1

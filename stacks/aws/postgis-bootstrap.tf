@@ -9,63 +9,43 @@
 # Terraform invokes it exactly once after the database is created
 # (idempotent: CREATE EXTENSION IF NOT EXISTS), and again whenever handler.py changes.
 #
-# Build prerequisites on the apply host: python3 + pip (replaces the module's
-# psql + network-path requirement). The pure-Python pg8000 driver is vendored
-# into the deployment zip at apply time; nothing is compiled.
+# Build prerequisites on the plan/apply host: python3 and HTTPS to PyPI and the
+# RDS truststore (replaces the module's psql + network-path requirement). Run
+# `python3 postgis-bootstrap/build.py` before `terraform plan`; see below.
 ###############################################################################
 
 locals {
-  postgis_bootstrap_dir    = "${path.module}/postgis-bootstrap"
-  postgis_bootstrap_pg8000 = "1.31.2" # pure-Python PostgreSQL driver, pinned
-  # pg8000 1.31.2 declares only scramp>=1.4.5 but calls scramp.make_channel_binding,
-  # which scramp 1.5.0 (2026-10-25 on PyPI) removed. Pin the last 1.4.x release, the
-  # newest scramp an unpinned build resolved before 1.5.0 shipped (the archive that
-  # last bootstrapped successfully, 2026-10-24). Bump only together with pg8000.
-  postgis_bootstrap_scramp    = "1.4.18"
+  postgis_bootstrap_dir       = "${path.module}/postgis-bootstrap"
   postgis_bootstrap_func_name = "${var.name_prefix}-${var.environment}-postgis-bootstrap"
-  # Amazon RDS global CA bundle, vendored into the zip so the Lambda can verify
-  # the RDS server certificate (chain + hostname) instead of trusting any cert.
-  # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
-  postgis_bootstrap_rds_ca_url      = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
-  postgis_bootstrap_rds_ca_filename = "rds-global-bundle.pem"
 }
 
+# The package directory is built by postgis-bootstrap/build.py from the
+# hash-locked inputs in postgis-bootstrap/requirements.lock.json (pg8000 and
+# its full transitive set as exact wheels, plus the Amazon RDS global CA
+# bundle so the Lambda can verify the RDS server certificate). The lock keeps
+# #105's scramp 1.4.18 pin: scramp 1.5.0 removed make_channel_binding, which
+# pg8000 1.31.2 calls. The build installs
+# nothing and writes every file 0644, so the zip is byte-identical on every
+# host. CI runs the same script before `terraform plan`, because the archive
+# below is read at plan time whenever this resource has no pending change.
 resource "terraform_data" "postgis_bootstrap_build" {
   triggers_replace = {
-    handler        = filesha256("${local.postgis_bootstrap_dir}/handler.py")
-    pg8000_version = local.postgis_bootstrap_pg8000
-    scramp_version = local.postgis_bootstrap_scramp
-    rds_ca_url     = local.postgis_bootstrap_rds_ca_url
+    handler = filesha256("${local.postgis_bootstrap_dir}/handler.py")
+    build   = filesha256("${local.postgis_bootstrap_dir}/build.py")
+    lock    = filesha256("${local.postgis_bootstrap_dir}/requirements.lock.json")
   }
 
   provisioner "local-exec" {
-    interpreter = ["python3", "-c"]
-    command     = <<-EOT
-      import pathlib, shutil, subprocess, sys, urllib.request
-      root = pathlib.Path(r"${local.postgis_bootstrap_dir}")
-      build = root / "build"
-      shutil.rmtree(build, ignore_errors=True)
-      build.mkdir(parents=True, exist_ok=True)
-      subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet",
-                             "--target", str(build), "pg8000==${local.postgis_bootstrap_pg8000}",
-                             "scramp==${local.postgis_bootstrap_scramp}"])
-      shutil.copy(root / "handler.py", build / "handler.py")
-      # Vendor the Amazon RDS global CA bundle so the Lambda can verify the RDS
-      # server certificate. The build host already requires internet for pip.
-      ca = build / "${local.postgis_bootstrap_rds_ca_filename}"
-      with urllib.request.urlopen("${local.postgis_bootstrap_rds_ca_url}", timeout=30) as r:
-          data = r.read()
-      if b"BEGIN CERTIFICATE" not in data:
-          raise SystemExit("downloaded RDS CA bundle is not a PEM certificate file")
-      ca.write_bytes(data)
-    EOT
+    interpreter = ["python3"]
+    command     = "${local.postgis_bootstrap_dir}/build.py"
   }
 }
 
 data "archive_file" "postgis_bootstrap" {
-  type        = "zip"
-  source_dir  = "${local.postgis_bootstrap_dir}/build"
-  output_path = "${local.postgis_bootstrap_dir}/bootstrap.zip"
+  type             = "zip"
+  source_dir       = "${local.postgis_bootstrap_dir}/build"
+  output_path      = "${local.postgis_bootstrap_dir}/bootstrap.zip"
+  output_file_mode = "0644"
 
   depends_on = [terraform_data.postgis_bootstrap_build]
 }

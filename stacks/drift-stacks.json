@@ -1,0 +1,38 @@
+{
+  "comment": "Every Terraform root under stacks/ and how the nightly drift plan (.github/workflows/drift-plan.yml) and the PR plan/apply workflow (.github/workflows/terraform.yml) treat it. scripts/drift-stacks.py refuses a stacks/ directory that is not listed here. A standing entry tolerates ONE exact provider artifact and must link the issue that removes it.",
+  "stacks": {
+    "aws": {
+      "deployed": true,
+      "state_key": "demo/aws-demo/terraform.tfstate",
+      "var_file": "demo.tfvars",
+      "admin_password": true,
+      "prebuild": [
+        "python3 stacks/aws/postgis-bootstrap/build.py --check"
+      ],
+      "standing": [
+        {
+          "address": "module.honua.module.rds[0].module.db_parameter_group.aws_db_parameter_group.this[0]",
+          "actions": ["update"],
+          "attribute": "parameter",
+          "before": [{"apply_method": "pending-reboot", "name": "rds.force_ssl", "value": "1"}],
+          "after": [{"apply_method": "immediate", "name": "rds.force_ssl", "value": "1"}],
+          "issue": "https://github.com/honua-io/honua-iac/issues/321"
+        }
+      ]
+    },
+    "aws-candidate-preflight": {
+      "deployed": true,
+      "state_key": "demo/aws-demo/candidate-preflight.tfstate",
+      "prebuild": [],
+      "standing": []
+    },
+    "aws-db-migration-runner": {
+      "deployed": false,
+      "state_key": "demo/aws-demo/db-migration-runner.tfstate",
+      "absent_lambda_functions": ["honua-demo-demo-db-migration-092-105"],
+      "reason": "Reviewed but never applied: no state object and no function exist. The drift check asserts both stay absent; a state object or function appearing outside a reviewed apply is drift. Applying it is governed by scripts/db-migration-runner-plan-apply.sh, not by the apply workflow.",
+      "prebuild": [],
+      "standing": []
+    }
+  }
+}
