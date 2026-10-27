@@ -38,10 +38,11 @@ region                         = "us-west-2"
 route53_zone_id                = "Z089181827C9GKIKHXUTT"
 stac_seed_metadata_environment = "Production"
 
-# The serving image: the amd64 Lambda AOT build of honua-server 199bce77fe99 mirrored
-# into this region's ECR (tag rc-2026.1-rc.1-lambda-aot-199bce7-amd64). The function
+# The serving image: the amd64 Lambda AOT build of honua-server trunk 574c804176d9 (contains
+# honua-server#6644, the #6558 fix) published by "Build & Publish Platform Images" run
+# 40540495543 to this region's ECR (tag trunk-574c804-lambda-aot-amd64). The function
 # architecture is x86_64 in main.tf and must match. Digest-pinned; bump with the server pin.
-honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:24bb5279ece9dc55da46a69c4bbed5430a773490fcb11476c5ab615f7305e7d3"
+honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
 
 # Studio AI — the demo runs Bedrock-backed generation.
 enable_studio_ai  = true
@@ -55,17 +56,19 @@ enable_amazon_location_geocoding = true
 # fixed-window request budget. The managed geometry.buffer executor runs in the
 # serving Lambda; Batch remains disabled for this bounded public process.
 enable_redis = true
-# Redis is provisioned but UNWIRED again. It was wired on 2026-10-24 21:55Z (#98) and the
-# live alias was rolled back to the pre-Redis version at 22:34Z the same day: with
-# ConnectionStrings__redis set, the serving process died silently inside warm containers
-# (last app line: a MapServer export failing with "Distributed import progress state is
-# unavailable", then DbUp journal checks, then the Lambda Web Adapter panicking with
-# "tcp connect error: Connection refused" on every later invocation of that container);
-# the function logged 0 errors in the 14 h before the flip and 97 in the hour after.
-# See runbook/foss4g-demo-apply-20261024.md ("Rollback") and the honua-server issue it links.
-# The operation key-ring secret stays (operator-owned; it is the only key for the ring) and
-# its ARN stays here so the re-flip is a one-line change once the server fix is pinned.
-wire_redis_connection                     = false
+# Redis is WIRED into the serving Lambda again (ConnectionStrings__redis + the operation
+# key-ring certificate reference, honua-server#6500). It was first wired on 2026-10-24 (#98)
+# and rolled back by hand the same day because the serving process died silently inside
+# warm containers. Root cause (honua-server#6558, fixed in honua-server#6644): after a
+# Lambda freeze/thaw the admin API-key index backfill let a Redis TaskCanceledException
+# escape, StopHost stopped the host, and the frozen sandbox left a listener-less process
+# that the Lambda Web Adapter answered with "layers::panic" for ~8 minutes. The image below
+# carries that fix plus a guard that exits a stopping host so Lambda recycles the sandbox.
+# The key-ring PKCS#12 lives in the operator-owned secret below (created per
+# runbook/exports-redis-prereq.md; never managed by Terraform, never delete it: it is the
+# only key that can read the Redis key ring). Wiring also closes honua-server#6487 and
+# unblocks MapServer/ImageServer exports, OGC process execution and jobs.
+wire_redis_connection                     = true
 operation_key_ring_certificate_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/operation-key-ring-GDtfsQ"
 enable_gp_batch                           = false
 
