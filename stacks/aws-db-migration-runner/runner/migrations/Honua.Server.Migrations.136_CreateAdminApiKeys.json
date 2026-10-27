@@ -1,0 +1,17 @@
+{
+  "name": "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Elastic License 2.0. See LICENSE in the project root.\n\n-- Shared admin API key registry for multi-instance hosts that run without Redis (AWS Lambda,\n-- Deployment:Mode=MultiNode) (#6487). A per-process dictionary leaves a key minted on one\n-- instance unknown to the others. Only the SHA-256 of the key material is stored.\n-- Expand-only: a new table; nothing existing is altered.\nCREATE SCHEMA IF NOT EXISTS \"honua\"",
+    "CREATE TABLE IF NOT EXISTS \"honua\".admin_api_keys (\n    id UUID PRIMARY KEY,\n    name TEXT NOT NULL,\n    key_prefix TEXT NOT NULL,\n    key_hash BYTEA NOT NULL,\n    permissions TEXT[] NOT NULL DEFAULT '{}',\n    created_at TIMESTAMPTZ NOT NULL,\n    updated_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ,\n    last_used_at TIMESTAMPTZ,\n    rotated_at TIMESTAMPTZ,\n    revoked_at TIMESTAMPTZ,\n    created_by TEXT\n)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_admin_api_keys_key_hash\n    ON \"honua\".admin_api_keys (key_hash)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "3E672A412A92632DB5ED514AB525608FC83E9E10736C947D01140D1CDAF160F6",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Elastic License 2.0. See LICENSE in the project root.\n\n-- Shared admin API key registry for multi-instance hosts that run without Redis (AWS Lambda,\n-- Deployment:Mode=MultiNode) (#6487). A per-process dictionary leaves a key minted on one\n-- instance unknown to the others. Only the SHA-256 of the key material is stored.\n-- Expand-only: a new table; nothing existing is altered.\nCREATE SCHEMA IF NOT EXISTS $HonuaSchema$;\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.admin_api_keys (\n    id UUID PRIMARY KEY,\n    name TEXT NOT NULL,\n    key_prefix TEXT NOT NULL,\n    key_hash BYTEA NOT NULL,\n    permissions TEXT[] NOT NULL DEFAULT '{}',\n    created_at TIMESTAMPTZ NOT NULL,\n    updated_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ,\n    last_used_at TIMESTAMPTZ,\n    rotated_at TIMESTAMPTZ,\n    revoked_at TIMESTAMPTZ,\n    created_by TEXT\n);\n\nCREATE UNIQUE INDEX IF NOT EXISTS ux_admin_api_keys_key_hash\n    ON $HonuaSchema$.admin_api_keys (key_hash);\n"
+  }
+}

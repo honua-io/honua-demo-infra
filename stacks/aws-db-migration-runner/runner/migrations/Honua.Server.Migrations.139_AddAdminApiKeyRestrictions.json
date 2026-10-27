@@ -1,0 +1,18 @@
+{
+  "name": "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Elastic License 2.0. See LICENSE in the project root.\n\n-- Migration: 139_AddAdminApiKeyRestrictions.sql\n-- Description: Optional per-key request restrictions for managed API keys: an origin\n--              (Referer/Origin) allow-list and a client IP (CIDR) allow-list. NULL means\n--              unrestricted, so every key minted before this migration keeps working as-is.\n-- Dependencies: Requires admin_api_keys from 136.\n-- Expand-only: two nullable columns with no default; older readers select explicit columns\n-- and never read them.\n\nALTER TABLE \"honua\".admin_api_keys\n    ADD COLUMN IF NOT EXISTS allowed_referrers TEXT[]",
+    "ALTER TABLE \"honua\".admin_api_keys\n    ADD COLUMN IF NOT EXISTS allowed_ip_ranges TEXT[]",
+    "COMMENT ON COLUMN \"honua\".admin_api_keys.allowed_referrers IS\n    'Origin patterns (scheme://host[:port], optional leading *.) a request Origin/Referer must match; NULL = unrestricted'",
+    "COMMENT ON COLUMN \"honua\".admin_api_keys.allowed_ip_ranges IS\n    'CIDR ranges the resolved client IP must fall in; NULL = unrestricted'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "44AE83E6EEEC3F77CD5149C10375FA9853301EE03064461FEAA34E232510A11A",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Elastic License 2.0. See LICENSE in the project root.\n\n-- Migration: 139_AddAdminApiKeyRestrictions.sql\n-- Description: Optional per-key request restrictions for managed API keys: an origin\n--              (Referer/Origin) allow-list and a client IP (CIDR) allow-list. NULL means\n--              unrestricted, so every key minted before this migration keeps working as-is.\n-- Dependencies: Requires admin_api_keys from 136.\n-- Expand-only: two nullable columns with no default; older readers select explicit columns\n-- and never read them.\n\nALTER TABLE $HonuaSchema$.admin_api_keys\n    ADD COLUMN IF NOT EXISTS allowed_referrers TEXT[];\nALTER TABLE $HonuaSchema$.admin_api_keys\n    ADD COLUMN IF NOT EXISTS allowed_ip_ranges TEXT[];\n\nCOMMENT ON COLUMN $HonuaSchema$.admin_api_keys.allowed_referrers IS\n    'Origin patterns (scheme://host[:port], optional leading *.) a request Origin/Referer must match; NULL = unrestricted';\nCOMMENT ON COLUMN $HonuaSchema$.admin_api_keys.allowed_ip_ranges IS\n    'CIDR ranges the resolved client IP must fall in; NULL = unrestricted';\n"
+  }
+}

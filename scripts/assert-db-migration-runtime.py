@@ -13,19 +13,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "stacks" / "aws-db-migration-runner" / "runner"
-ARCHIVE_BASE64_SHA256 = "/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw="
+MANIFEST = json.loads((RUNNER / "migration-manifest.v2.json").read_text(encoding="utf-8"))
+ARCHIVE_BASE64_SHA256 = "Kovi75hDPFJodq7yx7vyj8MbpKOYNcNAh58khz5jlRE="
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
-RUNNER_NAME = "honua-demo-demo-db-migration-092-105"
+RUNNER_NAME = "honua-demo-demo-db-migration-574c804"
 RUNNER_ARN = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{RUNNER_NAME}"
 RUNNER_ROLE = f"arn:aws:iam::{ACCOUNT}:role/{RUNNER_NAME}-role"
 VPC_ID = "vpc-0ac1893d15caf97b8"
 SUBNETS = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
-MIGRATION_SOURCE_IMAGE_DIGEST = "sha256:67d96f75ec9220c7cc238e241888d5cf79d9587b8220aaa1bfcb4f0d6f4bd861"
-SERVING_IMAGE_DIGEST = "sha256:d97baf44b17ba5b9537320281f721252ed12f1fb43bee001011d720f3ae7d622"
-SERVING_VERSION = "42"
-SERVING_REVISION = "71e97786-9c59-4112-9fcb-6f80e82a3878"
-LIVE_REVISION = "f1cbb8ce-cea5-47b0-ab69-1b2c73a94ada"
+MIGRATION_SOURCE_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
+SERVING_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
+SERVING_VERSION = "54"
+SERVING_REVISION = "8b14c978-a9b1-4ef1-a7d8-c1b9d7879178"
+LIVE_REVISION = "e729b0ba-3572-4dec-aa6a-b45c5a6487eb"
 SG = re.compile(r"^sg-[0-9a-f]{17}$")
 SECRET_ARN = re.compile(r"^arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-[A-Za-z0-9]{6}$")
 STATE_ADDRESSES = {
@@ -121,12 +122,12 @@ def sanitize_runner(raw: dict, pins: dict) -> dict:
     expected_environment = {
         "DB_SECRET_ARN": environment["DB_SECRET_ARN"],
         "EXPECTED_CANDIDATE_IMAGE_DIGEST": MIGRATION_SOURCE_IMAGE_DIGEST,
-        "EXPECTED_PENDING_SET_SHA256": "e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7",
-        "EXPECTED_PREFLIGHT_SHA256": "357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee",
-        "EXPECTED_SOURCE_COMMIT": "7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad",
-        "MIGRATION_OPERATION": "apply-092-105",
+        "EXPECTED_EXECUTED_SET_SHA256": MANIFEST["executedScriptsSha256"],
+        "EXPECTED_PENDING_SET_SHA256": MANIFEST["pendingScriptsSha256"],
+        "EXPECTED_SOURCE_COMMIT": MANIFEST["sourceCommit"],
+        "MIGRATION_OPERATION": "apply-574c804",
         "SOURCE_HANDLER_SHA256": hashlib.sha256((RUNNER / "handler.py").read_bytes()).hexdigest(),
-        "SOURCE_MANIFEST_SHA256": hashlib.sha256((RUNNER / "migration-manifest.v1.json").read_bytes()).hexdigest(),
+        "SOURCE_MANIFEST_SHA256": hashlib.sha256((RUNNER / "migration-manifest.v2.json").read_bytes()).hexdigest(),
     }
     req(environment == expected_environment, "runner environment drifted")
     revision = config.get("RevisionId")
@@ -148,7 +149,7 @@ def sanitize_serving(raw: dict) -> dict:
     arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{SERVING_VERSION}"
     req(config.get("FunctionName") == "honua-demo-demo-honua" and config.get("FunctionArn") == arn, "serving identity drifted")
     req(config.get("Version") == SERVING_VERSION and config.get("RevisionId") == SERVING_REVISION, "serving version drifted")
-    req(config.get("Architectures") == ["arm64"] and config.get("MemorySize") == 2048 and config.get("Timeout") == 60, "serving runtime bounds drifted")
+    req(config.get("Architectures") == ["x86_64"] and config.get("MemorySize") == 2048 and config.get("Timeout") == 60, "serving runtime bounds drifted")
     resolved = code.get("ResolvedImageUri", "")
     req(type(resolved) is str and resolved.endswith(f"@{SERVING_IMAGE_DIGEST}"), "serving digest drifted")
     environment = config.get("Environment", {}).get("Variables")
@@ -158,7 +159,7 @@ def sanitize_serving(raw: dict) -> dict:
     return {"schema":"honua-db-migration-function-audit-v1", "kind":"serving", "functionArn":arn,
             "version":SERVING_VERSION, "revisionId":config["RevisionId"], "resolvedImageDigest":SERVING_IMAGE_DIGEST,
             "skipMigrations":True, "requiresOutOfBandMigrations":True,
-            "architectures":["arm64"], "memorySize":2048, "timeout":60}
+            "architectures":["x86_64"], "memorySize":2048, "timeout":60}
 
 
 def sanitize_live(raw: dict) -> dict:
@@ -192,7 +193,7 @@ def build(args: argparse.Namespace) -> dict:
     req(runner["timeout"] == 900 and runner["reservedConcurrentExecutions"] == 1 and runner["architectures"] == ["arm64"], "runner bounds evidence drifted")
     req(runner["functionArn"] == pins["runnerQualifiedArn"] and runner["version"] == pins["runnerVersion"], "runner state identity binding drifted")
     req(runner["vpcId"] == VPC_ID and runner["subnetIds"] == SUBNETS and runner["securityGroupIds"] == [pins["securityGroupId"]], "runner VPC evidence drifted")
-    req(serving == {"schema":"honua-db-migration-function-audit-v1","kind":"serving","functionArn":f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{SERVING_VERSION}","version":SERVING_VERSION,"revisionId":SERVING_REVISION,"resolvedImageDigest":SERVING_IMAGE_DIGEST,"skipMigrations":True,"requiresOutOfBandMigrations":True,"architectures":["arm64"],"memorySize":2048,"timeout":60}, "serving evidence drifted")
+    req(serving == {"schema":"honua-db-migration-function-audit-v1","kind":"serving","functionArn":f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{SERVING_VERSION}","version":SERVING_VERSION,"revisionId":SERVING_REVISION,"resolvedImageDigest":SERVING_IMAGE_DIGEST,"skipMigrations":True,"requiresOutOfBandMigrations":True,"architectures":["x86_64"],"memorySize":2048,"timeout":60}, "serving evidence drifted")
     req(live["functionVersion"] == SERVING_VERSION and live["revisionId"] == LIVE_REVISION and live["routing"] == {}, "live evidence drifted")
     exact_keys(db, {"DBInstanceIdentifier","DBInstanceArn","DbiResourceId","DBInstanceStatus","Engine","EngineVersion","StorageEncrypted","KmsKeyId"}, "DB evidence")
     req(db == {"DBInstanceIdentifier":"honua-demo-demo-postgres","DBInstanceArn":"arn:aws:rds:us-west-2:585192672263:db:honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","DBInstanceStatus":"available","Engine":"postgres","EngineVersion":"15.17","StorageEncrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}, "DB identity/status drifted")

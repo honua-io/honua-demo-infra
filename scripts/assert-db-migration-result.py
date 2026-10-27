@@ -11,10 +11,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = json.loads((ROOT / "stacks/aws-db-migration-runner/runner/migration-manifest.v1.json").read_text(encoding="utf-8"))
+MANIFEST = json.loads((ROOT / "stacks/aws-db-migration-runner/runner/migration-manifest.v2.json").read_text(encoding="utf-8"))
 NAMES = [entry["name"] for entry in MANIFEST["scripts"]]
 SHA = re.compile(r"^[0-9a-f]{64}$")
-EXPECTED_RUNNER_CODE_SHA256 = "/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw="
+EXPECTED_RUNNER_CODE_SHA256 = "Kovi75hDPFJodq7yx7vyj8MbpKOYNcNAh58khz5jlRE="
 
 
 def require(value: bool, message: str) -> None:
@@ -33,12 +33,12 @@ def sha(path: Path) -> str:
 
 def expected_payload() -> dict:
     return {
-        "schemaVersion": "honua-db-migration-result-v1", "operation": "apply-092-105", "status": "passed",
+        "schemaVersion": "honua-db-migration-result-v2", "operation": "apply-574c804", "status": "passed",
         "sourceCommit": MANIFEST["sourceCommit"], "candidateImageDigest": MANIFEST["candidateImageDigest"],
-        "preflightReceiptSha256": MANIFEST["preflightReceiptSha256"],
-        "migration": {"phase":"Expand", "beforeVersion":91, "afterVersion":105, "appliedScriptCount":14,
-          "appliedScripts":NAMES, "pendingScripts":[], "executedButNotDiscoveredScripts":[],
-          "pendingScriptsSha256":MANIFEST["pendingScriptsSha256"], "journalContinuous":True},
+        "migration": {"executedScriptsSha256": MANIFEST["executedScriptsSha256"], "appliedScriptCount": len(NAMES),
+          "appliedScripts": NAMES, "contractScripts": [], "contractApprovalNonce": None, "pendingScripts": [],
+          "pendingScriptsSha256": MANIFEST["pendingScriptsSha256"], "readerCompatibilityDeclarations": len(NAMES),
+          "journalContinuous": True},
     }
 
 
@@ -53,10 +53,10 @@ def build(metadata_path: Path, payload_path: Path, snapshot_path: Path, runtime_
     require(snapshot["Engine"] == "postgres" and snapshot["EngineVersion"] == "15.17" and snapshot["Encrypted"] is True, "snapshot engine/encryption drifted")
     receipt = {"schema":"honua-db-migration-invocation-receipt-v1", "runnerQualifiedArn":runtime["qualifiedArn"],
       "runnerVersion":version, "runnerCodeSha256":runtime["codeSha256"], "sourceCommit":MANIFEST["sourceCommit"], "candidateImageDigest":MANIFEST["candidateImageDigest"],
-      "preflightReceiptSha256":MANIFEST["preflightReceiptSha256"], "pendingScriptsSha256":MANIFEST["pendingScriptsSha256"],
+      "executedScriptsSha256":MANIFEST["executedScriptsSha256"], "pendingScriptsSha256":MANIFEST["pendingScriptsSha256"],
       "snapshotIdentifier":snapshot["DBSnapshotIdentifier"], "snapshotArn":snapshot["DBSnapshotArn"],
       "metadataSha256":sha(metadata_path), "payloadSha256":sha(payload_path), "snapshotSha256":sha(snapshot_path), "runtimeSha256":sha(runtime_path)}
-    require(all(SHA.fullmatch(receipt[key]) for key in ("preflightReceiptSha256","pendingScriptsSha256","metadataSha256","payloadSha256","snapshotSha256","runtimeSha256")), "receipt digest invalid")
+    require(all(SHA.fullmatch(receipt[key]) for key in ("executedScriptsSha256","pendingScriptsSha256","metadataSha256","payloadSha256","snapshotSha256","runtimeSha256")), "receipt digest invalid")
     return receipt
 
 

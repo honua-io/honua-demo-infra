@@ -15,18 +15,18 @@ def fake_state(module,environment,security_group_id="sg-0123456789abcdef0"):
   resource("managed","aws_security_group","runner",{"id":security_group_id,"vpc_id":module.VPC_ID}),
   resource("managed","aws_lambda_function","runner",{"qualified_arn":qualified,"version":version,"role":module.RUNNER_ROLE,"runtime":"python3.13","handler":"handler.handler","memory_size":512,"source_code_hash":module.ARCHIVE_BASE64_SHA256,"vpc_config":[{"vpc_id":module.VPC_ID,"subnet_ids":list(module.SUBNETS),"security_group_ids":[security_group_id]}],"environment":[{"variables":environment}]})]}
 class Tests(unittest.TestCase):
- def test_source_contract(self): subprocess.run(["python",str(ROOT/"scripts/assert-db-migration-runner-source.py")],check=True)
+ def test_source_contract(self): subprocess.run(["python3",str(ROOT/"scripts/assert-db-migration-runner-source.py")],check=True)
  def test_snapshot_hostile_mutations(self):
-  base={"DBSnapshotIdentifier":"honua-demo-pre-092-105-e0ee6b49e116","DBSnapshotArn":"arn:aws:rds:us-west-2:585192672263:snapshot:honua-demo-pre-092-105-e0ee6b49e116","DBInstanceIdentifier":"honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","Status":"available","SnapshotType":"manual","Engine":"postgres","EngineVersion":"15.17","Encrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8","TagList":[{"Key":"HonuaMigration","Value":"092-105"},{"Key":"PendingScriptsSha256","Value":"e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7"}]}
+  base={"DBSnapshotIdentifier":"honua-demo-pre-574c804-ed316a743591","DBSnapshotArn":"arn:aws:rds:us-west-2:585192672263:snapshot:honua-demo-pre-574c804-ed316a743591","DBInstanceIdentifier":"honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","Status":"available","SnapshotType":"manual","Engine":"postgres","EngineVersion":"15.17","Encrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8","TagList":[{"Key":"HonuaMigration","Value":"574c804"},{"Key":"PendingScriptsSha256","Value":"ed316a74359ebf8a72348159955745ab3032fbfe035c4453dda826c0ce7ac6a3"}]}
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"s.json"
-   p.write_text(json.dumps(base)); subprocess.run(["python",str(ROOT/"scripts/assert-db-migration-snapshot.py"),str(p)],check=True)
+   p.write_text(json.dumps(base)); subprocess.run(["python3",str(ROOT/"scripts/assert-db-migration-snapshot.py"),str(p)],check=True)
    for key,value in (("Status","creating"),("SnapshotType","automated"),("DBInstanceIdentifier","other"),("DbiResourceId","other"),("EngineVersion","15.16"),("Encrypted",False),("KmsKeyId","other")):
-    bad=dict(base); bad[key]=value; p.write_text(json.dumps(bad)); self.assertNotEqual(subprocess.run(["python",str(ROOT/"scripts/assert-db-migration-snapshot.py"),str(p)]).returncode,0)
+    bad=dict(base); bad[key]=value; p.write_text(json.dumps(bad)); self.assertNotEqual(subprocess.run(["python3",str(ROOT/"scripts/assert-db-migration-snapshot.py"),str(p)]).returncode,0)
  def test_operator_single_mutation_order(self):
   text=(ROOT/"scripts/db-migration-runner-invoke.sh").read_text()
   self.assertEqual(text.count("aws rds create-db-snapshot"),1); self.assertEqual(text.count("aws lambda invoke"),1)
-  self.assertEqual(text.count("| python scripts/assert-db-migration-runtime.py sanitize"),3)
+  self.assertEqual(text.count("| python3 scripts/assert-db-migration-runtime.py sanitize"),3)
   self.assertIn('sanitize runner --state "$STATE"',text)
   self.assertIn('sanitize serving',text)
   self.assertNotIn('get-function --function-name "$QUALIFIED_ARN" >',text)
@@ -36,19 +36,19 @@ class Tests(unittest.TestCase):
  def test_plan_builds_twice_before_plan_and_apply(self):
   text=(ROOT/"scripts/db-migration-runner-plan-apply.sh").read_text()
   self.assertEqual(text.count('runner/build.py" --source'),2)
-  self.assertLess(text.index("runner-a.zip"),text.index('terraform -chdir="$STACK" plan'))
-  self.assertLess(text.index('cmp "$EVIDENCE_DIR/runner-a.zip" "$EVIDENCE_DIR/runner-b.zip"'),text.index('terraform -chdir="$STACK" plan'))
-  self.assertLess(text.index('python scripts/assert-db-migration-runner-plan.py'),text.index('terraform -chdir="$STACK" apply'))
+  self.assertLess(text.index("runner-a.zip"),text.index('"$TERRAFORM" -chdir="$STACK" plan'))
+  self.assertLess(text.index('cmp "$EVIDENCE_DIR/runner-a.zip" "$EVIDENCE_DIR/runner-b.zip"'),text.index('"$TERRAFORM" -chdir="$STACK" plan'))
+  self.assertLess(text.index('python3 scripts/assert-db-migration-runner-plan.py'),text.index('"$TERRAFORM" -chdir="$STACK" apply'))
   self.assertIn('if [[ "$PHASE" == "plan" ]]',text)
   self.assertIn('if [[ "$PHASE" != "apply"',text)
   self.assertIn('REVIEWED_MANIFEST_SHA256="$4"',text)
-  self.assertLess(text.index('exit 0'),text.index('terraform -chdir="$STACK" apply'))
+  self.assertLess(text.index('exit 0'),text.index('"$TERRAFORM" -chdir="$STACK" apply'))
  def test_result_receipt_rejects_hostile_drift(self):
   spec=importlib.util.spec_from_file_location("migration_result",ROOT/"scripts/assert-db-migration-result.py"); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-  manifest=json.loads((ROOT/"stacks/aws-db-migration-runner/runner/migration-manifest.v1.json").read_text())
-  runtime={"qualifiedArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-092-105:1","version":"1","codeSha256":"/zKmXr0vL3784YQilJLh/9Yp8i0fBAoMbC5r1pPzWNw="}
+  manifest=json.loads((ROOT/"stacks/aws-db-migration-runner/runner/migration-manifest.v2.json").read_text())
+  runtime={"qualifiedArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-574c804:1","version":"1","codeSha256":module.EXPECTED_RUNNER_CODE_SHA256}
   metadata={"StatusCode":200,"ExecutedVersion":"1"}; payload=module.expected_payload()
-  snapshot={"DBSnapshotIdentifier":"honua-demo-pre-092-105-e0ee6b49e116","DBSnapshotArn":"arn:aws:rds:us-west-2:585192672263:snapshot:honua-demo-pre-092-105-e0ee6b49e116","DBInstanceIdentifier":"honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","Status":"available","SnapshotType":"manual","Engine":"postgres","EngineVersion":"15.17","Encrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}
+  snapshot={"DBSnapshotIdentifier":"honua-demo-pre-574c804-ed316a743591","DBSnapshotArn":"arn:aws:rds:us-west-2:585192672263:snapshot:honua-demo-pre-574c804-ed316a743591","DBInstanceIdentifier":"honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","Status":"available","SnapshotType":"manual","Engine":"postgres","EngineVersion":"15.17","Encrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}
   with tempfile.TemporaryDirectory() as d:
    paths={name:Path(d)/f"{name}.json" for name in ("metadata","payload","snapshot","runtime")}
    def write(values):
@@ -61,10 +61,10 @@ class Tests(unittest.TestCase):
    with self.assertRaises(RuntimeError): module.build(paths["metadata"],paths["payload"],paths["snapshot"],paths["runtime"])
  def test_runtime_sanitizer_and_receipt_reject_drift_without_leaking_raw_configuration(self):
   spec=importlib.util.spec_from_file_location("migration_runtime",ROOT/"scripts/assert-db-migration-runtime.py"); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-  env={"DB_SECRET_ARN":"arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-Ab12Cd","EXPECTED_CANDIDATE_IMAGE_DIGEST":module.MIGRATION_SOURCE_IMAGE_DIGEST,"EXPECTED_PENDING_SET_SHA256":"e0ee6b49e11639e971a58efd942f377de588b81bd6f8ed7eb0dae4ccb1a28cb7","EXPECTED_PREFLIGHT_SHA256":"357424246af64a7e435ac5e694f50d8935fd61744ac7ce954efb05223dc3c0ee","EXPECTED_SOURCE_COMMIT":"7a29ce0cb4b862b7e58bd58c42e96dcc5e16ccad","MIGRATION_OPERATION":"apply-092-105","SOURCE_HANDLER_SHA256":module.hashlib.sha256((module.RUNNER/"handler.py").read_bytes()).hexdigest(),"SOURCE_MANIFEST_SHA256":module.hashlib.sha256((module.RUNNER/"migration-manifest.v1.json").read_bytes()).hexdigest()}
+  env={"DB_SECRET_ARN":"arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-Ab12Cd","EXPECTED_CANDIDATE_IMAGE_DIGEST":module.MIGRATION_SOURCE_IMAGE_DIGEST,"EXPECTED_EXECUTED_SET_SHA256":module.MANIFEST["executedScriptsSha256"],"EXPECTED_PENDING_SET_SHA256":module.MANIFEST["pendingScriptsSha256"],"EXPECTED_SOURCE_COMMIT":module.MANIFEST["sourceCommit"],"MIGRATION_OPERATION":"apply-574c804","SOURCE_HANDLER_SHA256":module.hashlib.sha256((module.RUNNER/"handler.py").read_bytes()).hexdigest(),"SOURCE_MANIFEST_SHA256":module.hashlib.sha256((module.RUNNER/"migration-manifest.v2.json").read_bytes()).hexdigest()}
   state=fake_state(module,env)
   runner={"Configuration":{"FunctionName":module.RUNNER_NAME,"FunctionArn":module.RUNNER_ARN+":1","Version":"1","RevisionId":"11111111-1111-1111-1111-111111111111","CodeSha256":module.ARCHIVE_BASE64_SHA256,"Runtime":"python3.13","Handler":"handler.handler","Role":module.RUNNER_ROLE,"MemorySize":512,"Timeout":900,"Architectures":["arm64"],"VpcConfig":{"VpcId":module.VPC_ID,"SubnetIds":list(module.SUBNETS),"SecurityGroupIds":["sg-0123456789abcdef0"]},"Environment":{"Variables":env}},"Concurrency":{"ReservedConcurrentExecutions":1},"Code":{"Location":"https://signed.example/do-not-persist"}}
-  serving={"Configuration":{"FunctionName":"honua-demo-demo-honua","FunctionArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:"+module.SERVING_VERSION,"Version":module.SERVING_VERSION,"RevisionId":module.SERVING_REVISION,"Architectures":["arm64"],"MemorySize":2048,"Timeout":60,"Environment":{"Variables":{"HONUA_SKIP_MIGRATIONS":"true","ControlPlane__DeployTargets__0__RequiresOutOfBandMigrations":"true","ControlPlane__DeployTargets__0__ArtifactReference":"repo@"+module.SERVING_IMAGE_DIGEST,"PASSWORD":"secret-sentinel"}}},"Code":{"ResolvedImageUri":"repo@"+module.SERVING_IMAGE_DIGEST,"Location":"https://signed.example/do-not-persist"}}
+  serving={"Configuration":{"FunctionName":"honua-demo-demo-honua","FunctionArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:"+module.SERVING_VERSION,"Version":module.SERVING_VERSION,"RevisionId":module.SERVING_REVISION,"Architectures":["x86_64"],"MemorySize":2048,"Timeout":60,"Environment":{"Variables":{"HONUA_SKIP_MIGRATIONS":"true","ControlPlane__DeployTargets__0__RequiresOutOfBandMigrations":"true","ControlPlane__DeployTargets__0__ArtifactReference":"repo@"+module.SERVING_IMAGE_DIGEST,"PASSWORD":"secret-sentinel"}}},"Code":{"ResolvedImageUri":"repo@"+module.SERVING_IMAGE_DIGEST,"Location":"https://signed.example/do-not-persist"}}
   live={"AliasArn":"arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:live","Name":"live","FunctionVersion":module.SERVING_VERSION,"RevisionId":module.LIVE_REVISION,"RoutingConfig":{}}
   sanitized={"runner":module.sanitize("runner",runner,state),"serving":module.sanitize("serving",serving),"live":module.sanitize("live",live)}
   evidence=json.dumps(sanitized,sort_keys=True)
@@ -90,7 +90,7 @@ class Tests(unittest.TestCase):
   alternate_secret=copy.deepcopy(runner); alternate_secret["Configuration"]["Environment"]["Variables"]["DB_SECRET_ARN"]="arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-Zz99Yy"
   with self.assertRaises(RuntimeError): module.sanitize("runner",alternate_secret,state)
   serving_mutations=[]
-  bad=copy.deepcopy(serving); bad["Configuration"]["Version"]="43"; serving_mutations.append(bad)
+  bad=copy.deepcopy(serving); bad["Configuration"]["Version"]="53"; serving_mutations.append(bad)
   bad=copy.deepcopy(serving); bad["Configuration"]["RevisionId"]="00000000-0000-0000-0000-000000000000"; serving_mutations.append(bad)
   bad=copy.deepcopy(serving); bad["Code"]["ResolvedImageUri"]="repo@sha256:"+"0"*64; serving_mutations.append(bad)
   bad=copy.deepcopy(serving); bad["Configuration"]["Environment"]["Variables"]["HONUA_SKIP_MIGRATIONS"]="false"; serving_mutations.append(bad)
@@ -110,7 +110,7 @@ class Tests(unittest.TestCase):
   source=ROOT/"stacks/aws-db-migration-runner/runner"; module.validate_repo_inputs(source)
   with tempfile.TemporaryDirectory() as d:
    copy_root=Path(d)/"runner"; shutil.copytree(source,copy_root)
-   candidates=[copy_root/"requirements.lock.json",copy_root/"handler.py",copy_root/"migration-manifest.v1.json",copy_root/"migrations/092_CreateSavedMapOperationLog.sql"]
+   candidates=[copy_root/"requirements.lock.json",copy_root/"handler.py",copy_root/"migration-manifest.v2.json",copy_root/"migrations/Honua.Server.Migrations.136_CreateAdminApiKeys.json"]
    for path in candidates:
     original=path.read_bytes(); path.write_bytes(original+b"\r")
     with self.assertRaises(RuntimeError): module.validate_repo_inputs(copy_root)

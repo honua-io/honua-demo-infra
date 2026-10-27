@@ -30,9 +30,9 @@ def fetch(entry: dict, cache: Path) -> Path:
 def validate_repo_inputs(source: Path) -> None:
     migrations = source / "migrations"
     migration_inputs = sorted(migrations.iterdir(), key=lambda path: path.name.encode("utf-8"))
-    if not migration_inputs or any(not path.is_file() or path.suffix != ".sql" for path in migration_inputs):
-        raise RuntimeError("migration input set contains a non-SQL file")
-    inputs = [source / "requirements.lock.json", source / "handler.py", source / "migration-manifest.v1.json", *migration_inputs]
+    if not migration_inputs or any(not path.is_file() or path.suffix != ".json" for path in migration_inputs):
+        raise RuntimeError("migration input set contains a non-JSON file")
+    inputs = [source / "requirements.lock.json", source / "handler.py", source / "migration-manifest.v2.json", *migration_inputs]
     for path in inputs:
         try:
             data = path.read_bytes()
@@ -84,7 +84,7 @@ def main() -> None:
                     archive.extract(member, stage)
         ca = fetch(lock["rdsCa"], cache)
         shutil.copyfile(ca, stage / "rds-global-bundle.pem")
-        for name in ("handler.py", "migration-manifest.v1.json"):
+        for name in ("handler.py", "migration-manifest.v2.json"):
             shutil.copyfile(source / name, stage / name)
         migrations = stage / "migrations"
         shutil.copytree(source / "migrations", migrations)
