@@ -21,7 +21,10 @@ test ! -e "$EVIDENCE_DIR"; mkdir -p "$EVIDENCE_DIR"
 
 audit() {
   local prefix="$1" status=0
-  aws lambda get-function --function-name "$QUALIFIED_ARN" --output json | python3 scripts/assert-db-migration-runtime.py sanitize runner --state "$STATE" > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
+  # Reserved concurrency is function-level: get-function on a qualified version ARN returns no Concurrency block.
+  aws lambda get-function --function-name "$QUALIFIED_ARN" --output json \
+    | jq --argjson c "$(aws lambda get-function-concurrency --function-name "${QUALIFIED_ARN%:*}" --output json)" '.Concurrency = $c' \
+    | python3 scripts/assert-db-migration-runtime.py sanitize runner --state "$STATE" > "$EVIDENCE_DIR/$prefix-runner.json" || status=1
   aws lambda get-function --function-name "$SERVING_ARN" --output json | python3 scripts/assert-db-migration-runtime.py sanitize serving > "$EVIDENCE_DIR/$prefix-serving.json" || status=1
   aws lambda get-alias --function-name honua-demo-demo-honua --name live --output json | python3 scripts/assert-db-migration-runtime.py sanitize live > "$EVIDENCE_DIR/$prefix-live.json" || status=1
   aws rds describe-db-instances --db-instance-identifier "$DB_ID" --query 'DBInstances[0].{DBInstanceIdentifier:DBInstanceIdentifier,DBInstanceArn:DBInstanceArn,DbiResourceId:DbiResourceId,DBInstanceStatus:DBInstanceStatus,Engine:Engine,EngineVersion:EngineVersion,StorageEncrypted:StorageEncrypted,KmsKeyId:KmsKeyId}' > "$EVIDENCE_DIR/$prefix-db.json" || status=1
