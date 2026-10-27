@@ -12,10 +12,24 @@
       "standing": [
         {
           "address": "module.honua.module.rds[0].module.db_parameter_group.aws_db_parameter_group.this[0]",
-          "actions": ["update"],
+          "actions": [
+            "update"
+          ],
           "attribute": "parameter",
-          "before": [{"apply_method": "pending-reboot", "name": "rds.force_ssl", "value": "1"}],
-          "after": [{"apply_method": "immediate", "name": "rds.force_ssl", "value": "1"}],
+          "before": [
+            {
+              "apply_method": "pending-reboot",
+              "name": "rds.force_ssl",
+              "value": "1"
+            }
+          ],
+          "after": [
+            {
+              "apply_method": "immediate",
+              "name": "rds.force_ssl",
+              "value": "1"
+            }
+          ],
           "issue": "https://github.com/honua-io/honua-iac/issues/321"
         }
       ]
@@ -27,11 +41,12 @@
       "standing": []
     },
     "aws-db-migration-runner": {
-      "deployed": false,
+      "deployed": true,
       "state_key": "demo/aws-demo/db-migration-runner.tfstate",
-      "absent_lambda_functions": ["honua-demo-demo-db-migration-092-105"],
-      "reason": "Reviewed but never applied: no state object and no function exist. The drift check asserts both stay absent; a state object or function appearing outside a reviewed apply is drift. Applying it is governed by scripts/db-migration-runner-plan-apply.sh, not by the apply workflow.",
-      "prebuild": [],
+      "apply_note": "Applied only through scripts/db-migration-runner-plan-apply.sh (saved, reviewed plan); runtime invocation is a separate gate. The 574c804 runner was applied 2026-10-27 (#108).",
+      "prebuild": [
+        "python3 stacks/aws-db-migration-runner/runner/build.py --source stacks/aws-db-migration-runner/runner --output stacks/aws-db-migration-runner/db-migration-runner.zip && test \"$(sha256sum stacks/aws-db-migration-runner/db-migration-runner.zip | cut -d' ' -f1)\" = \"$(sed -n 's/^readonly ARCHIVE_SHA256=\"\\([0-9a-f]*\\)\"$/\\1/p' scripts/db-migration-runner-plan-apply.sh)\""
+      ],
       "standing": []
     }
   }
