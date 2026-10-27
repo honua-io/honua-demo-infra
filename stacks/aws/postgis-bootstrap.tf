@@ -15,8 +15,13 @@
 ###############################################################################
 
 locals {
-  postgis_bootstrap_dir       = "${path.module}/postgis-bootstrap"
-  postgis_bootstrap_pg8000    = "1.31.2" # pure-Python PostgreSQL driver, pinned
+  postgis_bootstrap_dir    = "${path.module}/postgis-bootstrap"
+  postgis_bootstrap_pg8000 = "1.31.2" # pure-Python PostgreSQL driver, pinned
+  # pg8000 1.31.2 declares only scramp>=1.4.5 but calls scramp.make_channel_binding,
+  # which scramp 1.5.0 (2026-10-25 on PyPI) removed. Pin the last 1.4.x release, the
+  # newest scramp an unpinned build resolved before 1.5.0 shipped (the archive that
+  # last bootstrapped successfully, 2026-10-24). Bump only together with pg8000.
+  postgis_bootstrap_scramp    = "1.4.18"
   postgis_bootstrap_func_name = "${var.name_prefix}-${var.environment}-postgis-bootstrap"
   # Amazon RDS global CA bundle, vendored into the zip so the Lambda can verify
   # the RDS server certificate (chain + hostname) instead of trusting any cert.
@@ -29,6 +34,7 @@ resource "terraform_data" "postgis_bootstrap_build" {
   triggers_replace = {
     handler        = filesha256("${local.postgis_bootstrap_dir}/handler.py")
     pg8000_version = local.postgis_bootstrap_pg8000
+    scramp_version = local.postgis_bootstrap_scramp
     rds_ca_url     = local.postgis_bootstrap_rds_ca_url
   }
 
@@ -41,7 +47,8 @@ resource "terraform_data" "postgis_bootstrap_build" {
       shutil.rmtree(build, ignore_errors=True)
       build.mkdir(parents=True, exist_ok=True)
       subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet",
-                             "--target", str(build), "pg8000==${local.postgis_bootstrap_pg8000}"])
+                             "--target", str(build), "pg8000==${local.postgis_bootstrap_pg8000}",
+                             "scramp==${local.postgis_bootstrap_scramp}"])
       shutil.copy(root / "handler.py", build / "handler.py")
       # Vendor the Amazon RDS global CA bundle so the Lambda can verify the RDS
       # server certificate. The build host already requires internet for pip.
