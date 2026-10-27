@@ -119,3 +119,9 @@ jobs:
           python3 scripts/test-candidate-preflight-postapply.py
           python3 scripts/test-candidate-preflight-plan-receipt.py
           python3 scripts/test-candidate-preflight-runtime-audit.py
+
+      - name: Drift and plan tooling (stack coverage, redacted report, deterministic bootstrap build)
+        run: |
+          python3 scripts/drift-stacks.py --check
+          python3 scripts/test-plan-report.py
+          python3 stacks/aws/postgis-bootstrap/build.py --check --out "$RUNNER_TEMP/postgis-bootstrap-build"

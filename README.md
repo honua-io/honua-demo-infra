@@ -53,7 +53,7 @@ manifest/
                         Derives the manifest from the seed definitions
   README.md             Manifest schema + publish-path documentation
 .github/workflows/
-  drift-plan.yml        Scheduled read-only `terraform plan` (see below)
+  drift-plan.yml        Nightly read-only `terraform plan` of every stack (see below)
   manifest-drift.yml    Fails PRs where the manifest is stale vs the seeds
 ```
 
@@ -245,32 +245,50 @@ Lambda alias rollback are defined in
 [`runbook/wms-release-promotion.md`](./runbook/wms-release-promotion.md). It
 must remain fail-closed until both runtime and source-governance gates pass.
 
-## Drift-plan CI: one-time operator setup
+## Drift plan
 
-`.github/workflows/drift-plan.yml` runs a scheduled, **read-only**
-`terraform plan` against the live account so the known hand-managed drift
-(above) becomes a visible signal instead of a surprise. It never applies.
+`.github/workflows/drift-plan.yml` runs a **read-only** `terraform plan` of
+every Terraform root under `stacks/` every night at 09:17 UTC (and on manual
+dispatch from `trunk`). It never applies. `stacks/drift-stacks.json` lists the
+roots; `scripts/drift-stacks.py --check` fails CI when a `stacks/` directory is
+missing from it.
 
-It ships **disabled** because the AWS OIDC role it needs does not exist yet:
+| Result | Run | Issue "Terraform drift: demo.honua.io does not match trunk" |
+|---|---|---|
+| Any resource or output change in any stack | red | opened, or updated with a comment |
+| The plan could not run (role or secret unset, AccessDenied, error) | red | opened, or updated |
+| Every stack plans clean | green | closed with a comment |
 
-1. Provision an AWS OIDC role for this repo — mirror honua-iac's
-   `infrastructure/terraform/components/aws-github-oidc` component (trust
-   `repo:honua-io/honua-demo-infra:*` or a tighter `environment:` subject; grant it
-   read-only Describe/Get/List on the demo stack's resources, plus
-   `s3:GetObject`/`s3:PutObject` scoped to the `demo/aws-demo/` state key for
-   backend init/locking — **not** broad write access).
-2. Set the repo variable `HONUA_DEMO_DRIFT_ROLE_ARN` to that role's ARN.
-3. Set repo variables `HONUA_DEMO_HONUA_IMAGE` (the live ECR image URI) and
-   `HONUA_DEMO_ROUTE53_ZONE_ID` (the `demo.honua.io` hosted zone ID), and repo
-   secret `HONUA_DEMO_ADMIN_PASSWORD` (the live admin-password secret value),
-   so the plan reflects real inputs instead of failing on missing required
-   variables.
-4. Set repo variable `HONUA_DEMO_DRIFT_ENABLED=true` and uncomment the
-   `schedule:` block in the workflow to turn on the daily run.
+There is no skip path: an unconfigured run is a red run.
 
-Until all of the above are done, the workflow only runs on manual
-`workflow_dispatch` and skips neutrally (not a failure) if the role ARN is
-still the placeholder.
+- `aws` and `aws-candidate-preflight` are planned against their state.
+- `aws-db-migration-runner` was reviewed but never applied. The job asserts
+  that its state object and its function are still absent.
+- The only tolerated diff is a `standing` entry in `stacks/drift-stacks.json`:
+  an exact provider artifact (address, one attribute, exact before and after
+  values) that links the issue removing it. Today that is the
+  `rds.force_ssl` `apply_method` refresh artifact, honua-iac#321.
+- The PostGIS bootstrap package is built before the plan
+  (`stacks/aws/postgis-bootstrap/build.py`), because `data.archive_file`
+  reads the build directory at plan time. The build is hash-locked and
+  byte-identical on every host, so it no longer shows up as a code-hash diff.
+- The repository and its logs are public. The workflow never prints the plan
+  text. Reports (job summary and issue) come from `scripts/plan-report.py` and
+  show addresses, actions and non-sensitive attribute values only.
+
+### Configuration
+
+The role is `demo_infra_drift_role_arn` from honua-iac
+`infrastructure/terraform/bootstrap/aws-drift-plan`: plan-only, trusted only
+for `repo:honua-io/honua-demo-infra:environment:demo-drift`. Writes are denied
+except the S3 state lock files.
+
+1. Create the `demo-drift` environment with a deployment-branch policy that
+   allows `trunk` only.
+2. Set environment variable `HONUA_DEMO_DRIFT_ROLE_ARN` to the role ARN.
+3. Set environment secret `HONUA_DEMO_ADMIN_PASSWORD` to the value in `pass`
+   (`honua/terraform`, `HONUA_ADMIN_PASSWORD`). Without it every plan would
+   replace the admin secret version.
 
 ## Related
 
