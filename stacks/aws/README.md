@@ -169,7 +169,7 @@ https://fck-nat.dev — purpose-built minimal NAT AMI) replaces all of them:
   paths (Nominatim, OIDC, webhooks) are network-possible again.
 - **Accepted SPOF**: one instance, one AZ. If it dies, private-subnet egress
   is down (the public CloudFront → API Gateway → Lambda invoke path stays
-  up, but Secrets Manager / Bedrock / Amazon Location / deploy-control calls
+  up, but Secrets Manager / Bedrock / Nominatim geocoding / deploy-control calls
   fail) until `terraform apply -replace=aws_instance.nat` (~2 min).
   Acceptable for a demo; a production stack would run fck-nat in an ASG or a
   managed NAT gateway per AZ. See the runbook ("Cost & network
@@ -179,61 +179,38 @@ If the demo ever outgrows the instance, bump `nat_instance_type`, or set
 `enable_nat_gateway = true` in `main.tf` (managed NAT, ~$33/mo + data) and
 remove `nat-instance.tf`.
 
-### Geocoding on Amazon Location Service (honua-server#2948)
+### Geocoding: Nominatim (OpenStreetMap) via the NAT egress
 
-> Unlike the "Pro + AI demo drift" toggles below, this one is **not** live —
-> it is a plan awaiting operator approval, not already-applied state to
-> adopt/import.
+The demo geocoder is the server's built-in default: **Nominatim**
+(OpenStreetMap), `GeocodingConfiguration.DefaultProvider = "nominatim"`,
+`LocatorName = "World"` (`/rest/services/World/GeocodeServer`). This stack
+passes no geocoding inputs to the `aws-serverless` module, so the module
+injects no `Geocoding__*` env and provisions no geocoding resources; the
+server defaults apply unchanged.
 
-Off by default (`enable_amazon_location_geocoding = false`). The demo's
-geocoding provider defaults to Nominatim (OpenStreetMap) purely because
-that's the server's compiled-in default (`GeocodingConfiguration.DefaultProvider
-= "nominatim"`, `LocatorName = "World"`) — no env var currently sets either on
-`demo.honua.io`. Nominatim needs general internet egress, which this VPC does
-not have (see "No NAT gateway" above): every forward/reverse geocode call
-fails after a consistent ~15.8s outbound-connect timeout, first call or
-hundredth alike — a categorical network-reachability problem, not a
-cold-start one, and a keep-warm probe would not fix it.
+Nominatim needs general internet egress. The fck-nat instance above provides
+it; before that NAT existed every geocode call failed after a ~15.8s
+outbound-connect timeout (honua-server#2948). If the NAT instance is down,
+geocoding fails with it.
 
-Setting `enable_amazon_location_geocoding = true`:
+The server talks to the public `https://nominatim.openstreetmap.org`
+instance by default. That instance's usage policy
+(https://operations.osmfoundation.org/policies/nominatim/) allows at most
+1 request/second, requires an identifying User-Agent (the server sends
+`Honua/1.0 (+https://honua.io)`), and is meant for light use. It suits
+occasional demo lookups. It does not suit bulk geocoding or heavy traffic;
+those need a self-hosted Nominatim (point `Geocoding__Providers__Nominatim__BaseUrl`
+at it via `additional_env`).
 
-- Provisions an **Amazon Location place index** (`aws_location_place_index`,
-  data source `Esri` by default) via the `aws-serverless` module.
-- Grants the Lambda role a least-privilege policy scoped to that index:
-  `geo:SearchPlaceIndexForText`, `geo:SearchPlaceIndexForPosition`,
-  `geo:SearchPlaceIndexForSuggestions`, `geo:DescribePlaceIndex` (the latter
-  two beyond forward/reverse geocode because the server's provider class
-  already calls them for its `suggest` operation and health check).
-- Injects `Geocoding__DefaultProvider=amazon-location` +
-  `Geocoding__Providers__AmazonLocation__*` and explicitly
-  `Geocoding__Providers__Nominatim__Enabled=false` (see the module README for
-  why: Nominatim's own default is `Enabled=true`, and failover would
-  otherwise retry it — and hang another ~15.8s — on any Amazon Location
-  error).
-- Amazon Location is reached through the fck-nat egress (`nat-instance.tf`);
-  the dedicated `geo.places` interface endpoint this originally provisioned
-  was removed in the 2026-07-24 cost round.
-
-**Data source note**: results come from Esri (or HERE if
-`amazon_location_data_source = "Here"`) — not OpenStreetMap. This is a full
-provider swap: coverage, address formatting, and attribution differ from
-Nominatim.
-
-**Cost**: the place index has no idle charge — cost is per API call under
-Amazon Location's Esri/HERE pricing tier, low single dollars/month at demo
-traffic volumes. No dedicated endpoint or compute (traffic rides the shared
-fck-nat instance).
-
-**This has not been applied.** See the root repo's demo runbook
-(`honua-server` `docs/internal/demo/demo-honua-io-capability-runbook.md`) for
-the full operator-approval remediation plan this PR is one part of, including
-the exact `terraform plan`/`apply` sequence and rollback (repoint
-`Geocoding__DefaultProvider` back to `nominatim` and destroy the place index +
-endpoint — additive, no coupling to the other tracks).
+**Amazon Location is not used** (owner decision, 2026-10-28). The
+`enable_amazon_location_geocoding` / `amazon_location_*` inputs were removed
+from this root and from the checked-in module-interface stub
+(`validation/honua-module-interface/`), so re-enabling it would take a code
+change, not a tfvars flag.
 
 ### Studio AI proxy on Bedrock (`enable_studio_ai`) — not yet applied
 
-> Like the Amazon Location toggle above, this one is **not** live — it is new
+> This one is **not** live — it is new
 > wiring awaiting operator approval, not already-applied state to adopt or
 > import. Tracks issue #9 (REQ-002: Studio AI proxy configured with at least
 > one provider; keys server-side only) for the Studio pilot rehearsal.
@@ -664,11 +641,10 @@ terraform output postgis_bootstrap_result
 | CloudWatch Logs (90-day, low volume) | ~$1 |
 | Secrets Manager secrets, Route53 zone | ~$1.50 |
 | AWS Budget | $0 (first two budgets free) |
-| **Total** | **~$37 / month** stock; **~$46–51 / month** with the live add-ons (Pro license $1.50, Bedrock/Studio AI per-token, Amazon Location per-call, ElastiCache ~$9 if/when Redis is enabled) |
+| **Total** | **~$37 / month** stock; **~$46–51 / month** with the live add-ons (Pro license $1.50, Bedrock/Studio AI per-token, ElastiCache ~$9 if/when Redis is enabled) |
 
 This total is the **stock** apply (`enable_redis`, `enable_pro_license`,
-`enable_bedrock_ai`, `enable_studio_ai`, and
-`enable_amazon_location_geocoding` all default `false`). Before the
+`enable_bedrock_ai`, and `enable_studio_ai` all default `false`). Before the
 2026-07-24 cost round the live environment's fixed spend was ~$140/mo — the
 delta is almost entirely interface-endpoint ENI-hours (~$110). The temporary
 RDS small→micro downsize was reversed after it produced connection-slot 500s.
