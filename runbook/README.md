@@ -17,6 +17,12 @@ honua-server backlog).
 > durable GP jobs, and distributed rate limits; the live apply/canary receipt
 > remains required before that state is described as deployed.
 
+> **Superseded 2026-10-28 (geocoding):** the demo no longer uses Amazon Location. By owner
+> decision the geocoder is the server's built-in default, Nominatim (OpenStreetMap,
+> `World` locator), reached through the fck-nat egress. The Amazon Location inputs were
+> removed from `stacks/aws`; see `stacks/aws/README.md` ("Geocoding"). The Amazon Location
+> material below is kept as history only.
+
 ## Demo B (ops champion) runbooks
 
 `demo-b-ops-runbook.md` (recording runbook for the ops-champion story) and

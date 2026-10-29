@@ -206,15 +206,13 @@ module "honua" {
   bedrock_ai_model  = var.bedrock_ai_model
   bedrock_ai_region = var.bedrock_ai_region
 
-  # ---- Geocoding on Amazon Location — gated on var.enable_amazon_location_geocoding
-  # Replaced Nominatim (honua-server#2948: unreachable before the VPC had any
-  # egress) with the server's built-in amazon-location provider. The place
-  # index is reached through the fck-nat egress (nat-instance.tf); the
-  # geo.places interface endpoint it used to need was removed in the
-  # 2026-07-24 cost round.
-  enable_amazon_location_geocoding = var.enable_amazon_location_geocoding
-  amazon_location_place_index_name = var.amazon_location_place_index_name
-  amazon_location_data_source      = var.amazon_location_data_source
+  # ---- Geocoding: the server's built-in default (Nominatim / OpenStreetMap,
+  # LocatorName "World"). No geocoding inputs are passed to the module, so it
+  # injects no Geocoding__* env and provisions no place index. Nominatim is
+  # reached over the general internet egress of the fck-nat instance
+  # (nat-instance.tf). Amazon Location is deliberately NOT used (owner
+  # decision 2026-10-28); do not reintroduce the module's
+  # enable_amazon_location_geocoding input.
 
   # Networking — no MANAGED NAT gateway (~$33/mo + data). Egress for the
   # private subnets comes from the demo's own fck-nat t4g.nano instance
