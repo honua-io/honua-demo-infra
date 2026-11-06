@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "stacks" / "aws-db-migration-runner" / "runner"
 MANIFEST = json.loads((RUNNER / "migration-manifest.v2.json").read_text(encoding="utf-8"))
-ARCHIVE_BASE64_SHA256 = "Kovi75hDPFJodq7yx7vyj8MbpKOYNcNAh58khz5jlRE="
+ARCHIVE_BASE64_SHA256 = "1PEpdyk9YjKD05zNwsVkSQnik6OaEFTzkdClncPV9BY="
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
 RUNNER_NAME = "honua-demo-demo-db-migration-574c804"

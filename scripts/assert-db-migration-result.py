@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "stacks/aws-db-migration-runner/runner/migration-manifest.v2.json").read_text(encoding="utf-8"))
 NAMES = [entry["name"] for entry in MANIFEST["scripts"]]
 SHA = re.compile(r"^[0-9a-f]{64}$")
-EXPECTED_RUNNER_CODE_SHA256 = "Kovi75hDPFJodq7yx7vyj8MbpKOYNcNAh58khz5jlRE="
+EXPECTED_RUNNER_CODE_SHA256 = "1PEpdyk9YjKD05zNwsVkSQnik6OaEFTzkdClncPV9BY="
 
 
 def require(value: bool, message: str) -> None:
