@@ -126,11 +126,11 @@ output "nat_public_ip" {
 }
 
 output "studio_ai_enabled" {
-  description = "Whether the demo Lambda is wired for live Studio AI generation via Amazon Bedrock (StudioAiProxy, honua-server#3000)."
+  description = "Whether the demo Lambda is configured for Studio AI through the Anthropic API."
   value       = var.enable_studio_ai
 }
 
 output "studio_ai_model" {
-  description = "Bedrock model id the Studio AI proxy is configured to use (null unless enable_studio_ai)."
+  description = "Anthropic API model the Studio proxy is configured to use; null when disabled."
   value       = var.enable_studio_ai ? var.studio_ai_model : null
 }

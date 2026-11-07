@@ -243,27 +243,19 @@ variable "bedrock_ai_region" {
 # ---------------------------------------------------------------------------
 
 variable "enable_studio_ai" {
-  description = "Wire the demo Lambda for live Studio AI generation via Amazon Bedrock: grant the Lambda role bedrock:InvokeModel / InvokeModelWithResponseStream scoped to studio_ai_model's (and studio_ai_fallback_models') inference-profile + foundation-model ARNs and inject the StudioAiProxy__* env (kind=bedrock). Bedrock is reached via the fck-nat egress (nat-instance.tf). Off by default."
+  description = "Configure Studio with Anthropic API access through an operator-populated Secrets Manager container. Off by default."
   type        = bool
   default     = false
 }
 
 variable "studio_ai_model" {
-  description = "Bedrock model id the server's Studio AI proxy uses. Defaults to the cross-region Claude Opus 5 inference profile (the `us.` prefix routes across us-east-1/us-east-2/us-west-2; profile verified ACTIVE in this account 2026-07-24). The account's foundation-model agreement for anthropic.claude-opus-5 was accepted the same day; runtime entitlement can lag the agreement — run the runbook's converse smoke before a rehearsal, and if it still returns AccessDenied flip this to a studio_ai_fallback_models entry (no IAM change needed). The IAM grant covers this model plus studio_ai_fallback_models."
+  description = "Anthropic API model for Studio. Live qualification permits only Claude Opus 5.5."
   type        = string
-  default     = "us.anthropic.claude-opus-5"
-}
-
-variable "studio_ai_fallback_models" {
-  description = "Additional Bedrock model ids the Studio AI IAM grant ALSO covers (inference-profile + foundation-model ARNs), so studio_ai_model can be flipped between them with a plain env change and no IAM edit. Defaults to the cross-region Claude Sonnet 4.6 profile — verified invocable end-to-end in this account (2026-07-24, us-east-1 and us-west-2) and the rehearsal fallback while the Opus 5 entitlement propagates."
-  type        = list(string)
-  default     = ["us.anthropic.claude-sonnet-4-6"]
-}
-
-variable "studio_ai_region" {
-  description = "AWS region the server invokes Bedrock in for the Studio AI proxy (StudioAiProxy provider Region). Defaults to us-west-2, matching bedrock_ai_region — keep it equal to var.region so invocations stay region-local through the NAT egress."
-  type        = string
-  default     = "us-west-2"
+  default     = "claude-opus-5-5"
+  validation {
+    condition     = can(regex("^claude-opus-5-5(-[0-9]{8})?$", var.studio_ai_model))
+    error_message = "Studio requires the Anthropic API model claude-opus-5-5 or its dated snapshot."
+  }
 }
 
 # ---------------------------------------------------------------------------

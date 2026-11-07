@@ -231,58 +231,39 @@ the exact `terraform plan`/`apply` sequence and rollback (repoint
 `Geocoding__DefaultProvider` back to `nominatim` and destroy the place index +
 endpoint — additive, no coupling to the other tracks).
 
-### Studio AI proxy on Bedrock (`enable_studio_ai`) — not yet applied
+### Studio AI proxy through Anthropic (`enable_studio_ai`)
 
-> Like the Amazon Location toggle above, this one is **not** live — it is new
-> wiring awaiting operator approval, not already-applied state to adopt or
-> import. Tracks issue #9 (REQ-002: Studio AI proxy configured with at least
-> one provider; keys server-side only) for the Studio pilot rehearsal.
+The proposed configuration selects Anthropic API Claude Opus 5.5, with no Studio
+Bedrock adapter or fallback. This is configuration awaiting main's review and
+apply; it is not a live qualification receipt. The deployed revision and provider
+must be verified before the single live run tracked in
+[Studio #212](https://github.com/honua-io/honua-studio/issues/212).
 
-Off by default (`enable_studio_ai = false`). honua-server#3000's Studio AI
-proxy (`src/Honua.Ai/Features/StudioAiProxy`) powers live AI generation in
-Honua Studio; its `bedrock` adapter kind authenticates via the AWS credential
-chain and targets the regional bedrock-runtime endpoint derived from the
-provider's `Region` — no endpoint URL, no API key, so nothing secret enters
-Terraform, tfvars, or state.
+`enable_studio_ai` defaults to false; `demo.tfvars` enables it and pins
+`studio_ai_model = "claude-opus-5-5"`. When enabled, `studio-ai.tf` creates the
+`<name_prefix>-<environment>/studio-anthropic-api-key` secret container, grants
+only the serving Lambda role `secretsmanager:GetSecretValue` on its exact ARN,
+and supplies these server configuration values:
 
-Setting `enable_studio_ai = true` (`studio-ai.tf`):
+- `StudioAiProxy__Enabled=true`, `StudioAiProxy__DefaultProvider=opus`.
+- `StudioAiProxy__Providers__opus__Kind=anthropic` and
+  `StudioAiProxy__Providers__opus__Endpoint=https://api.anthropic.com`.
+- `StudioAiProxy__Providers__opus__Model=claude-opus-5-5`.
+- `StudioAiProxy__Providers__opus__ApiKey=aws:secretsmanager:<container ARN>`.
 
-- Grants the Lambda execution role a least-privilege inline policy
-  (`bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` — the
-  Converse/ConverseStream APIs authorize against these same actions) scoped to
-  `studio_ai_model`'s **and** `studio_ai_fallback_models`' inference-profile
-  ARNs (calling region, account-scoped) **plus** each model's underlying
-  foundation-model ARNs in every `us.` member region
-  (us-east-1/us-east-2/us-west-2) — both halves are required or the routed
-  invocation gets AccessDenied. Covering the fallback models up front means an
-  operator can flip `studio_ai_model` between them with a plain env change and
-  no IAM edit. Separate from the module's WorkflowGeneration grant so the two
-  AI add-ons toggle/model independently.
-- Injects the exact server config keys (`StudioAiProxy` section, ASP.NET Core
-  double-underscore form): `StudioAiProxy__Enabled=true`,
-  `StudioAiProxy__DefaultProvider=bedrock`,
-  `StudioAiProxy__Providers__bedrock__Kind=bedrock`,
-  `StudioAiProxy__Providers__bedrock__Model=<studio_ai_model>`,
-  `StudioAiProxy__Providers__bedrock__Region=<studio_ai_region>`.
-- Network path: Bedrock is reached through the fck-nat egress
-  (`nat-instance.tf`) — no dedicated endpoint. (The bedrock-runtime
-  interface endpoint this originally shared with `enable_bedrock_ai` was
-  removed in the 2026-07-24 cost round.)
+Terraform creates no secret version, reads no value, and outputs no value. The
+operator populates the container after apply using a local protected key file;
+see the Studio section of the capability runbook. Empty or inaccessible secrets
+fail at model invocation even if the capabilities endpoint says configured.
+The server must include `StudioAiProxyApiKeyResolver` secret-reference support.
+HTTPS egress to `api.anthropic.com` uses the existing NAT path.
 
-**Model**: defaults to the cross-region Claude Opus 5 inference profile
-`us.anthropic.claude-opus-5` (profile ACTIVE in this account; the
-foundation-model agreement for `anthropic.claude-opus-5` was accepted
-2026-07-24, and runtime entitlement can lag the agreement — smoke-test before
-a rehearsal). The IAM grant also covers `studio_ai_fallback_models`, default
-`us.anthropic.claude-sonnet-4-6` — verified invocable end-to-end on
-2026-07-24 (from us-east-1 and from us-west-2, the region the demo Lambda
-actually calls) — so flipping `studio_ai_model` to it is env-only.
-`us.anthropic.claude-haiku-4-5-20251001-v1:0` also invokes in this account.
-Validation smoke commands live in the repo runbook
-(`runbook/demo-honua-io-capability-runbook.md` → "Studio AI (Bedrock BYOM)").
-
-**Region**: keep `studio_ai_region` equal to `region` (the VPC's region) so
-invocations stay region-local through the NAT egress.
+Main must inspect the complete plan and run `scripts/check-lambda-env-budget.py`
+on its JSON before applying: the serving Lambda environment has a 4096-byte cap.
+Do not remove unrelated configuration or relax that limit to fit the provider.
+No cloud plan or apply was performed for this change. Offline validation uses
+`python3 scripts/test-studio-ai-provider.py`, which evaluates the actual provider
+configuration with Terraform's mocked AWS provider.
 
 ### Pro + AI demo drift (Pro license, Bedrock AI, Redis)
 

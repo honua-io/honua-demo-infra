@@ -44,9 +44,9 @@ stac_seed_metadata_environment = "Production"
 # architecture is x86_64 in main.tf and must match. Digest-pinned; bump with the server pin.
 honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
 
-# Studio AI — the demo runs Bedrock-backed generation.
+# Studio AI uses Anthropic API; the key value is set by the operator after apply.
 enable_studio_ai  = true
-studio_ai_model   = "us.anthropic.claude-sonnet-4-6"
+studio_ai_model   = "claude-opus-5-5"
 enable_bedrock_ai = true
 
 # Amazon Location geocoding is ON for the demo (the server's compiled-in default is Nominatim).
