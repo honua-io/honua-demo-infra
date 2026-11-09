@@ -32,6 +32,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      - name: Validate source provenance coverage and receipt status
+        run: python3 manifest/test_source_provenance.py
+
       - name: Regenerate manifest and fail on drift
         run: python3 manifest/generate-demo-services.py --check
 
