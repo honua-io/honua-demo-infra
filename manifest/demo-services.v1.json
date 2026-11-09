@@ -318,8 +318,8 @@
           "mvtSourceLayer": "layer"
         }
       },
-      "source": "Climate/MapServer/45 \"SLR Exposure Area - 3.2 Ft. Scenario\" (UH/NOAA)",
-      "vintage": "PacIOOS/UH-SOEST SLR viewer",
+      "source": "Climate/MapServer/45 \"SLR Exposure Area - 3.2 Ft. Scenario\" (UH Coastal Geology Group / PacIOOS / Tetra Tech)",
+      "vintage": "2017 study (historical input version unattested)",
       "license": "Public domain",
       "provenance": {
         "status": "legacy-unattested",
