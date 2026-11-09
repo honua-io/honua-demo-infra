@@ -172,10 +172,10 @@
       "license": {
         "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
         "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
-        "attribution": "University of Hawaii SOEST; NOAA; Hawaii Statewide GIS Program",
+        "attribution": "SOEST; UH Coastal Geology Group; PacIOOS; Tetra Tech, Inc.; Hawaii Statewide GIS Program",
         "obligations": [
           "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim.",
-          "Distributor public-domain policy does not attest historical UH/NOAA input terms; confirm originator terms before redistributing any replacement artifact."
+          "Distributor public-domain policy does not attest historical originator input terms; confirm originator terms before redistributing any replacement artifact."
         ]
       },
       "processing": {
@@ -185,7 +185,7 @@
           -155.95,
           21.25
         ],
-        "description": "Display geometry: maxAllowableOffset 0.00002 degrees, precision 6, simplify 0.00002 degrees; long-term exposure, not a storm or evacuation forecast."
+        "description": "3.2-foot sea-level-rise exposure scenario. Display geometry: maxAllowableOffset 0.00002 degrees, precision 6, simplify 0.00002 degrees; long-term exposure, not a storm or evacuation forecast."
       },
       "artifact": {
         "sha256": null

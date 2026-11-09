@@ -7,7 +7,7 @@
   "sources": {
     "seedManifest": "stacks/aws/SEED_MANIFEST.md",
     "sourceProvenance": "manifest/source-provenance.v1.json",
-    "sourceProvenanceSha256": "b18fd4f8605b14cbd2e78c37a8bb82e9ffd3a6cf40b21f78e6dd9a8a0b586daf",
+    "sourceProvenanceSha256": "954e076aaca5abb1c3a42afef464820275185202aa231d878f8deac24b0e5ff8",
     "stacSeed": "https://raw.githubusercontent.com/honua-io/honua-server/1fc339a3692289e9bc4ec90ed1533c5eb22a995e/tests/seed/demo-stac-imagery-v1.sql",
     "stacSeedSha256": "de33f838030b7aeced93ea7f8084ad4b45b1d76e2ae53bbcbc8d3ffc7b202687",
     "wmsRelease": "manifest/wms-release.v1.json"
@@ -339,10 +339,10 @@
         "license": {
           "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
           "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
-          "attribution": "University of Hawaii SOEST; NOAA; Hawaii Statewide GIS Program",
+          "attribution": "SOEST; UH Coastal Geology Group; PacIOOS; Tetra Tech, Inc.; Hawaii Statewide GIS Program",
           "obligations": [
             "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim.",
-            "Distributor public-domain policy does not attest historical UH/NOAA input terms; confirm originator terms before redistributing any replacement artifact."
+            "Distributor public-domain policy does not attest historical originator input terms; confirm originator terms before redistributing any replacement artifact."
           ]
         },
         "processing": {
@@ -352,7 +352,7 @@
             -155.95,
             21.25
           ],
-          "description": "Display geometry: maxAllowableOffset 0.00002 degrees, precision 6, simplify 0.00002 degrees; long-term exposure, not a storm or evacuation forecast."
+          "description": "3.2-foot sea-level-rise exposure scenario. Display geometry: maxAllowableOffset 0.00002 degrees, precision 6, simplify 0.00002 degrees; long-term exposure, not a storm or evacuation forecast."
         },
         "artifact": {
           "sha256": null
@@ -365,7 +365,7 @@
           "newDemoEligible": false
         }
       },
-      "attribution": "University of Hawaii SOEST; NOAA; Hawaii Statewide GIS Program"
+      "attribution": "SOEST; UH Coastal Geology Group; PacIOOS; Tetra Tech, Inc.; Hawaii Statewide GIS Program"
     },
     {
       "id": "maui-place-names",
