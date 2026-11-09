@@ -2,7 +2,7 @@
   "format": "honua.demo-source-provenance.v1",
   "entries": {
     "maui-parcels": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/ParcelsZoning/MapServer/30",
@@ -31,10 +31,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-zoning": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/ParcelsZoning/MapServer/33",
@@ -63,10 +69,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-roads": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/Transportation/MapServer/5",
@@ -95,10 +107,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-flood-hazard": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/Hazards/MapServer/4",
@@ -112,7 +130,8 @@
         "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
         "attribution": "FEMA; Hawaii Statewide GIS Program",
         "obligations": [
-          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim.",
+          "The recorded licence basis is the Hawaii distributor policy; confirm original FEMA DFIRM input terms before redistributing any replacement artifact."
         ]
       },
       "processing": {
@@ -127,24 +146,36 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-sea-level-rise": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/Climate/MapServer/45",
           "sha256": null,
           "role": "seed-reference"
+        },
+        {
+          "url": "https://files.hawaii.gov/dbedt/op/gis/data/slr_exposure_area_3_pt_2_ft.html",
+          "sha256": null,
+          "role": "attribution"
         }
       ],
-      "vintage": "2017 study; 3.2-foot scenario",
+      "vintage": "2017 study (current distributor metadata; historical input version unattested)",
       "license": {
         "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
         "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
-        "attribution": "University of Hawaii SOEST; Hawaii Statewide GIS Program",
+        "attribution": "University of Hawaii SOEST; NOAA; Hawaii Statewide GIS Program",
         "obligations": [
-          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim.",
+          "Distributor public-domain policy does not attest historical UH/NOAA input terms; confirm originator terms before redistributing any replacement artifact."
         ]
       },
       "processing": {
@@ -159,10 +190,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-place-names": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://geodata.hawaii.gov/arcgis/rest/services/HistoricCultural/MapServer/2",
@@ -172,11 +209,12 @@
       ],
       "vintage": null,
       "license": {
-        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
-        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "id": "LicenseRef-USGS-Public-Domain",
+        "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
         "attribution": "USGS GNIS; Hawaii Statewide GIS Program",
         "obligations": [
-          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim.",
+          "USGS-produced data are public domain; inspect original input metadata for any third-party restrictions before replacement."
         ]
       },
       "processing": {
@@ -191,10 +229,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-buildings": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://docs.overturemaps.org/attribution/",
@@ -211,7 +255,7 @@
       "license": {
         "id": "ODbL-1.0",
         "url": "https://opendatacommons.org/licenses/odbl/1-0/",
-        "attribution": "Overture Maps Foundation · © OpenStreetMap contributors",
+        "attribution": "Overture Maps Foundation \u00b7 \u00a9 OpenStreetMap contributors",
         "obligations": [
           "Credit Overture Maps Foundation and OpenStreetMap contributors, with ODbL notice/link.",
           "Publicly used adapted databases must comply with ODbL share-alike and corresponding database access obligations; produced works retain attribution."
@@ -229,10 +273,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-hillshade": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://apps.nationalmap.gov/downloader/",
@@ -264,10 +314,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-terrain": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://apps.nationalmap.gov/downloader/",
@@ -299,15 +355,26 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-imagery": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://naip-usdaonline.hub.arcgis.com/",
           "sha256": null,
           "role": "catalogue"
+        },
+        {
+          "url": "https://coastalimagery.blob.core.windows.net/digitalcoast/HI_NAIP_2021_9668/",
+          "sha256": null,
+          "role": "seed-reference"
         }
       ],
       "vintage": "2021 Hawaii NAIP, 60 cm",
@@ -326,10 +393,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "maui-basemap": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://build.protomaps.com/20260610.pmtiles",
@@ -341,7 +414,7 @@
       "license": {
         "id": "ODbL-1.0",
         "url": "https://opendatacommons.org/licenses/odbl/1-0/",
-        "attribution": "© OpenStreetMap contributors · Protomaps",
+        "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Protomaps",
         "obligations": [
           "Credit OpenStreetMap contributors and Protomaps with ODbL notice/link.",
           "Adapted database public use remains subject to ODbL share-alike and corresponding database access obligations."
@@ -359,10 +432,16 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     },
     "glyphs": {
-      "status": "missing-seed-receipts",
+      "status": "legacy-unattested",
       "sources": [
         {
           "url": "https://github.com/openmaptiles/fonts/tree/v2.0",
@@ -385,7 +464,13 @@
       "artifact": {
         "sha256": null
       },
-      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Fresh downloads cannot attest the historical bytes. Legacy artifact: excluded from the new demo and retired at the rc.2 cut; keep the old demo unchanged until cutover. New demo data requires fresh pipeline receipts.",
+      "lifecycle": {
+        "state": "legacy",
+        "provenance": "unattested",
+        "retirement": "rc.2 cut",
+        "newDemoEligible": false
+      }
     }
   }
 }

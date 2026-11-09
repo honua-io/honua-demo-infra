@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import argparse
 
-from source_provenance import bind_provenance
 import difflib
 import hashlib
 import json
@@ -45,6 +44,8 @@ import re
 import sys
 import urllib.request
 from pathlib import Path
+
+from source_provenance import bind_provenance
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SEED_MANIFEST = REPO_ROOT / "stacks" / "aws" / "SEED_MANIFEST.md"

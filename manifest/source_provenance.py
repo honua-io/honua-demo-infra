@@ -19,14 +19,17 @@ def valid_hash(value) -> bool:
 
 
 def validate_entry(identifier: str, entry: dict) -> None:
-    require(entry.get("status") in {"verified", "missing-seed-receipts"}, f"{identifier}: status")
+    require(isinstance(entry, dict), f"{identifier}: entry must be an object")
+    require(entry.get("status") in {"verified", "legacy-unattested"}, f"{identifier}: status")
     sources = entry.get("sources")
     require(isinstance(sources, list) and bool(sources), f"{identifier}: sources")
     for source in sources:
+        require(isinstance(source, dict), f"{identifier}: source must be an object")
         url = urlparse(source.get("url", ""))
         require(url.scheme in {"https", "s3"} and bool(url.netloc), f"{identifier}: source URL")
         require(source.get("role") in {"seed-reference", "catalogue", "attribution", "input"}, f"{identifier}: source role")
         require(source.get("sha256") is None or valid_hash(source["sha256"]), f"{identifier}: source hash")
+        require(source["role"] == "input" or source.get("sha256") is None, f"{identifier}: discovery references cannot carry input hashes")
     license_record = entry.get("license", {})
     for key in ("id", "url", "attribution"):
         require(isinstance(license_record.get(key), str) and bool(license_record[key].strip()), f"{identifier}: license {key}")
@@ -40,6 +43,8 @@ def validate_entry(identifier: str, entry: dict) -> None:
         require(bool(inputs) and all(valid_hash(source.get("sha256")) for source in inputs), f"{identifier}: verified input receipts")
         require(valid_hash(artifact.get("sha256")) and bool(entry.get("vintage")), f"{identifier}: verified artifact and vintage")
     else:
+        require(entry.get("lifecycle") == {"state": "legacy", "provenance": "unattested", "retirement": "rc.2 cut", "newDemoEligible": False}, f"{identifier}: legacy retirement")
+        require(artifact.get("sha256") is None and all(source.get("sha256") is None for source in sources), f"{identifier}: unattested artifacts cannot carry hashes")
         require(isinstance(entry.get("gap"), str) and bool(entry["gap"].strip()), f"{identifier}: missing receipt gap")
 
 

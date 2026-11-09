@@ -16,7 +16,9 @@ class SourceProvenanceTests(unittest.TestCase):
     def test_existing_artifacts_have_explicit_receipt_gaps(self):
         for identifier, entry in self.definition['entries'].items():
             validate_entry(identifier, entry)
-            self.assertEqual(entry['status'], 'missing-seed-receipts')
+            self.assertEqual(entry['status'], 'legacy-unattested')
+            self.assertFalse(entry['lifecycle']['newDemoEligible'])
+            self.assertTrue(all(source['sha256'] is None for source in entry['sources']))
             self.assertIsNone(entry['artifact']['sha256'])
             self.assertTrue(entry['gap'])
 
@@ -42,9 +44,22 @@ class SourceProvenanceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_entry('buildings', entry)
 
+    def test_discovery_reference_hashes_are_rejected(self):
+        self.entry['sources'][0]['sha256'] = 'c' * 64
+        with self.assertRaisesRegex(ValueError, 'discovery references'):
+            validate_entry('buildings', self.entry)
+
+    def test_legacy_artifact_cannot_be_reused_by_new_demo(self):
+        self.entry['lifecycle']['newDemoEligible'] = True
+        with self.assertRaisesRegex(ValueError, 'legacy retirement'):
+            validate_entry('buildings', self.entry)
+
     def test_generated_coverage_binding_and_definition_digest(self):
         manifest = json.loads(Path(__file__).with_name('demo-services.v1.json').read_text())
         services, assets = manifest['services'], manifest['assets']
+        for target in [*services, *assets.values()]:
+            target.pop('provenance', None)
+            target.pop('attribution', None)
         digest = bind_provenance(services, assets)
         self.assertEqual(digest, hashlib.sha256(PROVENANCE_PATH.read_bytes()).hexdigest())
         self.assertEqual(manifest['sources']['sourceProvenanceSha256'], digest)

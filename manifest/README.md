@@ -199,13 +199,18 @@ non-STAC service and the glyph asset. Regeneration embeds each entry as
 This digest verifies the declaration, **not the deployed data**. Existing endpoint
 paths, service IDs and seed counts are preserved. The v1.4 fields are additive.
 
+The structured `provenance.license` records attribution and obligations; the
+older free-text `license` remains a historical compatibility field.
+
 Each entry records source references, vintage (null when unknown), licence,
 attribution, redistribution obligations, processing and artifact checksum.
 `catalogue`, `attribution` and `seed-reference` URLs are discovery references;
 they are not exact historical input-byte receipts. The current entries are all
-`missing-seed-receipts`, with explicit gaps and null hashes. Do not infer that a
-fresh download proves the bytes already deployed. Recover original input hashes,
-exact tile/VRT versions and seeded output hashes before changing status.
+`legacy-unattested`, with explicit gaps and null hashes. Their lifecycle marks
+them ineligible for the new demo and retired at the rc.2 cut. Keep the old demo
+unchanged until cutover; main owns removal in that cutover change. The new demo
+uses fresh pipeline snapshots and receipts. Fresh downloads cannot attest old
+deployed bytes. This declaration does not remove services or apply infrastructure.
 
 `verified` requires a named vintage, hashed `input` sources and a hashed output;
 it is a source declaration, not a runtime availability check. Validation rejects
