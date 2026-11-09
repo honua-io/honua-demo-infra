@@ -36,6 +36,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+
+from source_provenance import bind_provenance
 import difflib
 import hashlib
 import json
@@ -516,6 +518,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
     stac = stac_service(stac_sql)
 
     services = vectors + rasters + basemaps + [stac]
+    provenance_sha256 = bind_provenance(services, assets)
     wms_definition, wms_definition_sha256 = load_wms_release()
     wms_release, wms_bindings = public_wms_release(
         wms_definition, wms_definition_sha256
@@ -533,7 +536,7 @@ def build_manifest(stac_sql_path: str | None) -> dict:
 
     manifest = {
         "format": "honua.demo-services.v1",
-        "schemaVersion": "1.3.0",
+        "schemaVersion": "1.4.0",
         "description": (
             "Publicly discoverable seeded services of the demo.honua.io demo "
             "environment. Generated from seed definitions by "
@@ -544,6 +547,8 @@ def build_manifest(stac_sql_path: str | None) -> dict:
         "publishUrl": PUBLISH_URL,
         "sources": {
             "seedManifest": "stacks/aws/SEED_MANIFEST.md",
+            "sourceProvenance": "manifest/source-provenance.v1.json",
+            "sourceProvenanceSha256": provenance_sha256,
             "stacSeed": stac_url,
             "stacSeedSha256": stac_source_sha256,
             "wmsRelease": "manifest/wms-release.v1.json",

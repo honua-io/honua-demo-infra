@@ -1,0 +1,391 @@
+{
+  "format": "honua.demo-source-provenance.v1",
+  "entries": {
+    "maui-parcels": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/ParcelsZoning/MapServer/30",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "county data May 2025",
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "County of Maui; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Maui Nui extent extraction; historical extraction parameters require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-zoning": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/ParcelsZoning/MapServer/33",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "July 2025",
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "County of Maui; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Maui Nui extent extraction; historical extraction parameters require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-roads": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/Transportation/MapServer/5",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": null,
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "County of Maui; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Maui Nui extent extraction; historical extraction parameters require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-flood-hazard": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/Hazards/MapServer/4",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": null,
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "FEMA; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Simplified display geometry; recorded generalization 0.000005 degrees. Historical extraction parameters require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-sea-level-rise": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/Climate/MapServer/45",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "2017 study; 3.2-foot scenario",
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "University of Hawaii SOEST; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Display geometry: maxAllowableOffset 0.00002 degrees, precision 6, simplify 0.00002 degrees; long-term exposure, not a storm or evacuation forecast."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-place-names": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://geodata.hawaii.gov/arcgis/rest/services/HistoricCultural/MapServer/2",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": null,
+      "license": {
+        "id": "LicenseRef-Hawaii-Statewide-GIS-Public-Domain",
+        "url": "https://planning.hawaii.gov/gis/download-gis-data-expanded/",
+        "attribution": "USGS GNIS; Hawaii Statewide GIS Program",
+        "obligations": [
+          "Retain source credit and source disclaimers; no authoritative legal-boundary or current-hazard claim."
+        ]
+      },
+      "processing": {
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ],
+        "description": "Maui Nui extent extraction; historical extraction parameters require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-buildings": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://docs.overturemaps.org/attribution/",
+          "sha256": null,
+          "role": "attribution"
+        },
+        {
+          "url": "s3://overturemaps-us-west-2/release/2026-05-20.0/theme=buildings/type=building/",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "2026-05-20.0",
+      "license": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+        "attribution": "Overture Maps Foundation · © OpenStreetMap contributors",
+        "obligations": [
+          "Credit Overture Maps Foundation and OpenStreetMap contributors, with ODbL notice/link.",
+          "Publicly used adapted databases must comply with ODbL share-alike and corresponding database access obligations; produced works retain attribution."
+        ]
+      },
+      "processing": {
+        "description": "Maui Nui extent extraction; derived building height; 42,674 features.",
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ]
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-hillshade": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://apps.nationalmap.gov/downloader/",
+          "sha256": null,
+          "role": "catalogue"
+        }
+      ],
+      "vintage": null,
+      "license": {
+        "id": "LicenseRef-USGS-Public-Domain",
+        "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+        "attribution": "U.S. Geological Survey, 3D Elevation Program",
+        "obligations": [
+          "Credit USGS; confirm no third-party restrictions in the original tile metadata."
+        ]
+      },
+      "processing": {
+        "description": "Warp to EPSG:3857 at 20 m; hillshade z factor 1.3; six chunks.",
+        "inputTiles": [
+          "n21w156",
+          "n21w157",
+          "n21w158",
+          "n22w157",
+          "n22w158"
+        ],
+        "inputResolution": "1/3 arc-second",
+        "gap": "Exact tile versions and download URLs absent from seed definition."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-terrain": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://apps.nationalmap.gov/downloader/",
+          "sha256": null,
+          "role": "catalogue"
+        }
+      ],
+      "vintage": null,
+      "license": {
+        "id": "LicenseRef-USGS-Public-Domain",
+        "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+        "attribution": "U.S. Geological Survey, 3D Elevation Program",
+        "obligations": [
+          "Credit USGS; confirm no third-party restrictions in the original tile metadata."
+        ]
+      },
+      "processing": {
+        "description": "Warp to EPSG:3857 at 80 m; terrain RGB; two chunks.",
+        "inputTiles": [
+          "n21w156",
+          "n21w157",
+          "n21w158",
+          "n22w157",
+          "n22w158"
+        ],
+        "inputResolution": "1/3 arc-second",
+        "gap": "Exact tile versions and download URLs absent from seed definition."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-imagery": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://naip-usdaonline.hub.arcgis.com/",
+          "sha256": null,
+          "role": "catalogue"
+        }
+      ],
+      "vintage": "2021 Hawaii NAIP, 60 cm",
+      "license": {
+        "id": "LicenseRef-USDA-NAIP-Public-Domain",
+        "url": "https://www.fsa.usda.gov/Internet/FSA_Notice/ap_26.pdf",
+        "attribution": "USDA NAIP; NOAA Digital Coast",
+        "obligations": [
+          "Retain USDA NAIP and NOAA Digital Coast source credit; verify original imagery metadata."
+        ]
+      },
+      "processing": {
+        "description": "Provider VRTs in EPSG:26904 and EPSG:26905; warped to EPSG:3857 at 20 m RGB; 16 chunks.",
+        "gap": "Exact VRT and source tile URLs absent from seed definition."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "maui-basemap": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://build.protomaps.com/20260610.pmtiles",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "2026-06-10",
+      "license": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+        "attribution": "© OpenStreetMap contributors · Protomaps",
+        "obligations": [
+          "Credit OpenStreetMap contributors and Protomaps with ODbL notice/link.",
+          "Adapted database public use remains subject to ODbL share-alike and corresponding database access obligations."
+        ]
+      },
+      "processing": {
+        "description": "go-pmtiles Maui Nui extract.",
+        "extent": [
+          -157.4,
+          20.45,
+          -155.95,
+          21.25
+        ]
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    },
+    "glyphs": {
+      "status": "missing-seed-receipts",
+      "sources": [
+        {
+          "url": "https://github.com/openmaptiles/fonts/tree/v2.0",
+          "sha256": null,
+          "role": "seed-reference"
+        }
+      ],
+      "vintage": "OpenMapTiles fonts v2.0; Noto Sans",
+      "license": {
+        "id": "OFL-1.1",
+        "url": "https://openfontlicense.org/",
+        "attribution": "Noto Sans contributors; OpenMapTiles fonts",
+        "obligations": [
+          "Retain copyright and OFL licence notice when redistributing fonts."
+        ]
+      },
+      "processing": {
+        "description": "NotoSansRegular PBF glyph ranges; exact source and output archives require seed receipts."
+      },
+      "artifact": {
+        "sha256": null
+      },
+      "gap": "Historical source bytes and final seeded artifact checksums were not retained in the seed definition. Retrieve original seed receipts before claiming verification; a new download cannot verify an existing artifact."
+    }
+  }
+}

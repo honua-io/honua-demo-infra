@@ -190,3 +190,38 @@ Generation fetches the pinned STAC seed SQL from raw.githubusercontent.com
 file. The generated source digest is also the value the trusted in-VPC
 operator gate must observe in `honua.demo_seed_revisions`; URL equality alone
 is not evidence that those bytes were applied.
+
+## Source provenance and historical receipt gaps
+
+`source-provenance.v1.json` is the reviewed source/attribution definition for every
+non-STAC service and the glyph asset. Regeneration embeds each entry as
+`provenance` and binds the definition bytes with `sources.sourceProvenanceSha256`.
+This digest verifies the declaration, **not the deployed data**. Existing endpoint
+paths, service IDs and seed counts are preserved. The v1.4 fields are additive.
+
+Each entry records source references, vintage (null when unknown), licence,
+attribution, redistribution obligations, processing and artifact checksum.
+`catalogue`, `attribution` and `seed-reference` URLs are discovery references;
+they are not exact historical input-byte receipts. The current entries are all
+`missing-seed-receipts`, with explicit gaps and null hashes. Do not infer that a
+fresh download proves the bytes already deployed. Recover original input hashes,
+exact tile/VRT versions and seeded output hashes before changing status.
+
+`verified` requires a named vintage, hashed `input` sources and a hashed output;
+it is a source declaration, not a runtime availability check. Validation rejects
+missing coverage, extra entries, malformed hashes, empty credit/obligations and
+unsupported verification claims. Overture buildings and the basemap retain ODbL
+attribution and adapted-database share-alike/access obligations. Font redistribution
+retains OFL notices. Original USGS tile metadata must be checked for third-party
+restrictions before treating those inputs as cleared.
+
+STAC remains collection-scoped: the pinned SQL checksum binds the catalogue seed,
+not the imagery asset bytes. Its collections have different licences (including
+`proprietary`); this change does not clear them for redistribution. Site-owned
+static PMTiles archives remain excluded, as described above.
+
+```bash
+python3 manifest/test_source_provenance.py
+python3 manifest/generate-demo-services.py
+python3 manifest/generate-demo-services.py --check
+```
