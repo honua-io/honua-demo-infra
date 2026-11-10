@@ -17,6 +17,14 @@ honua-server backlog).
 > durable GP jobs, and distributed rate limits; the live apply/canary receipt
 > remains required before that state is described as deployed.
 
+> **Geocoding configuration change — not yet applied:** this stack selects the server's
+> built-in Nominatim (OpenStreetMap, `World` locator) default through the fck-nat egress.
+> The next apply removes the Amazon Location place index, its `geo:*` IAM policy and
+> `Geocoding__*` environment overrides. Until an apply/canary receipt confirms the
+> transition, the Amazon Location applied-state note above remain the last recorded state.
+> After applying, verify that `World/GeocodeServer/findAddressCandidates` reports Nominatim
+> as its provider. See `stacks/aws/README.md` ("Geocoding").
+
 ## Demo B (ops champion) runbooks
 
 `demo-b-ops-runbook.md` (recording runbook for the ops-champion story) and

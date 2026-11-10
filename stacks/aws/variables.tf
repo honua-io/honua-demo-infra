@@ -267,34 +267,6 @@ variable "studio_ai_region" {
 }
 
 # ---------------------------------------------------------------------------
-# Geocoding on Amazon Location Service — replaced the Nominatim provider,
-# which the then-egress-less VPC could not reach (honua-server#2948: every
-# geocode call failed after a consistent ~15.8s outbound-connect timeout).
-# Off by default. When enabled, provisions an Amazon Location place index +
-# Lambda IAM grant (via the aws-serverless module); the service is reached
-# via the fck-nat egress (nat-instance.tf; the geo.places interface endpoint
-# was removed in the 2026-07 cost round).
-# ---------------------------------------------------------------------------
-
-variable "enable_amazon_location_geocoding" {
-  description = "Provision an Amazon Location place index, grant the Lambda role geo:Search*/DescribePlaceIndex on it, and route Geocoding__DefaultProvider to amazon-location (Nominatim disabled). Amazon Location is reached via the fck-nat egress (nat-instance.tf). Off by default."
-  type        = bool
-  default     = false
-}
-
-variable "amazon_location_place_index_name" {
-  description = "Name of the Amazon Location place index. Defaults to '<name_prefix>-<environment>-geocode' when empty."
-  type        = string
-  default     = ""
-}
-
-variable "amazon_location_data_source" {
-  description = "Upstream data provider for the Amazon Location place index: Esri or Here (not OpenStreetMap/Nominatim — this is a full provider swap with different coverage/attribution)."
-  type        = string
-  default     = "Esri"
-}
-
-# ---------------------------------------------------------------------------
 # Cost controls — fck-nat NAT instance (nat-instance.tf) and the monthly AWS
 # Budget alarm (cost-controls.tf). The NAT instance replaced the interface
 # VPC endpoints (~$110/mo of ENI-hours) in 2026-07; see nat-instance.tf for
