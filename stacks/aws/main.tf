@@ -83,6 +83,8 @@ module "honua" {
   image                = var.honua_image
   lambda_architectures = ["x86_64"]
   lambda_memory_size   = var.lambda_memory_size
+  # Rollback by PR: pins the live alias (module: coalesce(lambda_alias_version, new version)).
+  lambda_alias_version = var.lambda_alias_version
 
   # No provisioned concurrency: cold starts are acceptable for a demo.
   # The AOT image keeps cold start latency short (~200–400 ms typical).

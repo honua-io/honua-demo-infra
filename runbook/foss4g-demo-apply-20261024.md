@@ -1,5 +1,7 @@
 # demo.honua.io FOSS4G apply record (2026-10-24)
 
+> **Historical record (superseded 2026-10-27).** Its `aws lambda update-alias` and local `terraform apply` steps are no longer allowed. Changes go through `.github/workflows/terraform.yml`, and rollback is a one-line PR (`runbook/rollback-by-pr.md`).
+
 The operator authorised the apply and the coordinator ran it. It applies honua-demo-infra
 #91 (PMTiles from S3, licensing disabled, staged Redis plumbing, probe) and #92 (tile
 CORS `*`, PostgreSQL pool caps). Before-state: `foss4g-demo-readiness-20261024.md`.

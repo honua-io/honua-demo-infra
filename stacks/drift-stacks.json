@@ -1,8 +1,9 @@
 {
-  "comment": "Every Terraform root under stacks/ and how the nightly drift plan (.github/workflows/drift-plan.yml) and the PR plan/apply workflow (.github/workflows/terraform.yml) treat it. scripts/drift-stacks.py refuses a stacks/ directory that is not listed here. A standing entry tolerates ONE exact provider artifact and must link the issue that removes it.",
+  "comment": "Every Terraform root under stacks/ and how the nightly drift plan (.github/workflows/drift-plan.yml) and the PR plan/apply workflow (.github/workflows/terraform.yml) treat it. scripts/drift-stacks.py refuses a stacks/ directory that is not listed here. apply=true: terraform.yml applies the stack on merge to trunk (the demo environment); any other stack is applied only through its own runbook. A standing entry tolerates ONE exact provider artifact and must link the issue that removes it.",
   "stacks": {
     "aws": {
       "deployed": true,
+      "apply": true,
       "state_key": "demo/aws-demo/terraform.tfstate",
       "var_file": "demo.tfvars",
       "admin_password": true,
@@ -36,12 +37,15 @@
     },
     "aws-candidate-preflight": {
       "deployed": true,
+      "apply": false,
+      "apply_note": "Applied only through scripts/candidate-preflight-plan-apply.sh (runbook/candidate-preflight-v1.md); PR plans show its diff, the apply job never touches it.",
       "state_key": "demo/aws-demo/candidate-preflight.tfstate",
       "prebuild": [],
       "standing": []
     },
     "aws-db-migration-runner": {
       "deployed": true,
+      "apply": false,
       "state_key": "demo/aws-demo/db-migration-runner.tfstate",
       "apply_note": "Applied only through scripts/db-migration-runner-plan-apply.sh (saved, reviewed plan); runtime invocation is a separate gate. The 574c804 runner was applied 2026-10-27 (#108).",
       "prebuild": [

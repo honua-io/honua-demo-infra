@@ -76,3 +76,8 @@ enable_gp_batch                           = false
 # enabling it needs no secret material and no terraform import.
 enable_pro_license = false
 licensing_mode     = "Disabled"
+
+# EMERGENCY ROLLBACK (runbook/rollback-by-pr.md): pin the live alias to an already-published
+# version in a one-line PR, e.g.  lambda_alias_version = "52"  . terraform.yml applies it on
+# merge. Leave unset (null) in normal operation so each apply's new version goes live.
+# lambda_alias_version = "52"

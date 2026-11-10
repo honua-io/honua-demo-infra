@@ -150,15 +150,12 @@ Only this transition adds `protocols.wms` to the public service entries.
 ## Rollback
 
 If readiness, capabilities, map semantics, or existing service probes regress,
-move the alias back to the exact captured version immediately:
+move the alias back to the exact captured version with a one-line PR
+(`lambda_alias_version = "$PREVIOUS_VERSION"` in `stacks/aws/demo.tfvars`),
+applied by `terraform.yml`. See `runbook/rollback-by-pr.md`. Never with
+`aws lambda update-alias`. Then confirm read-only:
 
 ```bash
-cd stacks/aws
-aws lambda update-alias \
-  --region "$AWS_REGION" \
-  --function-name "$FUNCTION_NAME" \
-  --name "$ALIAS_NAME" \
-  --function-version "$PREVIOUS_VERSION"
 test "$(aws lambda get-alias --region "$AWS_REGION" \
   --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" \
   --query FunctionVersion --output text)" = "$PREVIOUS_VERSION"

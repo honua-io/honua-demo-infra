@@ -1,5 +1,7 @@
 # demo.honua.io: upgrade to the 2026.1 rc server image (gate-upgrade dogfood)
 
+> **Historical record (superseded 2026-10-27).** Its `aws lambda update-alias` and local `terraform apply` steps are no longer allowed. Changes go through `.github/workflows/terraform.yml`, and rollback is a one-line PR (`runbook/rollback-by-pr.md`).
+
 Status: PHASE 1 PLAN, written 2026-10-22 from read-only evidence. Nothing in this
 document has been executed. Phase 2 starts only on the coordinator's "go" with the
 final server image. Refs honua-io/honua-release#376.

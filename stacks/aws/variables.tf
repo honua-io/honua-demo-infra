@@ -51,6 +51,18 @@ variable "lambda_memory_size" {
   default     = 2048
 }
 
+variable "lambda_alias_version" {
+  description = <<-EOT
+    Emergency rollback: pin the `live` alias to this already-published Lambda
+    version (for example "52") instead of the version this apply publishes.
+    null (the default) follows the new version. Set it in demo.tfvars in a
+    one-line PR; terraform.yml applies it on merge. See
+    runbook/rollback-by-pr.md. Clear it again in the PR that ships the fix.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "api_throttle_burst_limit" {
   description = "API Gateway burst throttle limit (max concurrent requests). Replaces WAF rate-limiting — HTTP API does not support WAFv2."
   type        = number
