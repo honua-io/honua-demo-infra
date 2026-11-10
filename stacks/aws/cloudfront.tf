@@ -363,42 +363,23 @@ resource "aws_cloudfront_function" "forwarded_host" {
   code = <<-EOT
     function handler(event) {
       var request = event.request;
-      // The public host is an environment surface, not a sample application.
-      // Keep its root useful even when the application has no root endpoint:
-      // status and discovery stay one click away, while developer learning
-      // remains at samples.honua.io. Generate this tiny page at the edge so it
-      // has no Lambda, database, S3, or application-release dependency.
+      // Redirect only the browser entry point; protocol and service URLs keep
+      // reaching the origin. No-store permits a cutover rollback immediately.
       if ((request.method === 'GET' || request.method === 'HEAD') && request.uri === '/') {
-        var response = {
-          statusCode: 200,
-          statusDescription: 'OK',
+        return {
+          statusCode: 307,
+          statusDescription: 'Temporary Redirect',
           headers: {
-            'content-type': { value: 'text/html; charset=utf-8' },
+            'location': { value: 'https://samples.honua.io/state-local/' },
             'cache-control': { value: 'no-store' },
             'content-security-policy': { value: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" },
             'x-content-type-options': { value: 'nosniff' },
             'referrer-policy': { value: 'no-referrer' },
-            // Match the origin's security baseline. honua-server stamps HSTS,
-            // COOP and X-Frame-Options on every application response, but `/`
-            // is answered entirely at the edge and never reaches the origin,
-            // and the default cache behavior carries no response-headers
-            // policy — so without these the root is the one demo.honua.io
-            // response missing them (honua-release#87). The CSP above already
-            // carries frame-ancestors 'none', so x-frame-options here is
-            // legacy-agent parity, not the security control.
-            // scripts/test-edge-root-response.mjs pins this exact set.
             'strict-transport-security': { value: 'max-age=63072000; includeSubDomains; preload' },
             'cross-origin-opener-policy': { value: 'same-origin' },
             'x-frame-options': { value: 'DENY' }
           }
         };
-        if (request.method === 'GET') {
-          response.body = {
-            encoding: 'text',
-            data: '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Honua demo environment</title></head><body><main><h1>Honua demo environment</h1><p>Live status and machine-readable capability discovery for the shared Honua demonstration environment.</p><nav aria-label="Environment links"><ul><li><a href="/healthz/live">Live status</a></li><li><a href="/healthz/ready">Readiness</a></li><li><a href="/api/v1/capabilities/manifest">Runtime capabilities</a></li><li><a href="/demo-services.v1.json">Seeded services</a></li><li><a href="/stac">STAC catalog</a></li><li><a href="https://samples.honua.io/">Developer examples, walkthroughs, and projects</a></li></ul></nav></main></body></html>'
-          };
-        }
-        return response;
       }
       // MCP standalone SSE stream (GET /mcp): this stack cannot serve it —
       // API Gateway HTTP APIs do not stream responses, so the GET hangs at

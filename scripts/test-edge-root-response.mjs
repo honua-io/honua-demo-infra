@@ -56,7 +56,7 @@ test("edge-generated root carries the origin's security baseline", () => {
   const handler = loadHandler();
   const response = handler(edgeRequest("GET", "/"));
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 307);
   const headers = headerValues(response);
 
   for (const [name, value] of Object.entries(ORIGIN_BASELINE)) {
@@ -70,11 +70,11 @@ test("edge-generated root carries the origin's security baseline", () => {
   }
 });
 
-test("root keeps its existing content, caching, and framing controls", () => {
+test("root redirect preserves caching and framing controls", () => {
   const handler = loadHandler();
   const headers = headerValues(handler(edgeRequest("GET", "/")));
 
-  assert.equal(headers["content-type"], "text/html; charset=utf-8");
+  assert.equal(headers.location, "https://samples.honua.io/state-local/");
   assert.equal(headers["cache-control"], "no-store");
   assert.equal(headers["referrer-policy"], "no-referrer");
   assert.match(headers["content-security-policy"], /(^|;\s*)default-src 'none'/u);
@@ -87,25 +87,17 @@ test("HEAD / answers with the same headers and no body", () => {
   const handler = loadHandler();
   const response = handler(edgeRequest("HEAD", "/"));
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 307);
   assert.equal(response.body, undefined, "HEAD must not carry a body");
   assert.deepEqual(headerValues(response), headerValues(handler(edgeRequest("GET", "/"))));
 });
 
-test("GET / still serves the environment landing document", () => {
-  const handler = loadHandler();
-  const body = handler(edgeRequest("GET", "/")).body;
-
-  assert.equal(body.encoding, "text");
-  for (const fragment of [
-    "<!doctype html>",
-    "<h1>Honua demo environment</h1>",
-    'href="/healthz/live"',
-    'href="/demo-services.v1.json"',
-    'href="https://samples.honua.io/"',
-  ]) {
-    assert.ok(body.data.includes(fragment), `landing document lost \`${fragment}\``);
-  }
+test("GET / redirects to the approved static destination without a body", () => {
+  const response = loadHandler()(edgeRequest("GET", "/"));
+  assert.equal(response.statusCode, 307);
+  assert.equal(response.statusDescription, "Temporary Redirect");
+  assert.equal(response.headers.location.value, "https://samples.honua.io/state-local/");
+  assert.equal(response.body, undefined);
 });
 
 test("GET /mcp is still short-circuited to 405 at the edge", () => {
@@ -121,6 +113,11 @@ test("every other request passes through with the public forwarded host", () => 
 
   for (const [method, uri] of [
     ["GET", "/rest/services"],
+    ["GET", "/admin/imports"],
+    ["POST", "/admin/imports"],
+    ["POST", "/"],
+    ["OPTIONS", "/"],
+    ["GET", "/state-local/"],
     ["POST", "/mcp"],
     ["HEAD", "/mcp"],
     ["GET", "/healthz/live"],
