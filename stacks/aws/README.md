@@ -181,12 +181,15 @@ remove `nat-instance.tf`.
 
 ### Geocoding: Nominatim (OpenStreetMap) via the NAT egress
 
-The demo geocoder is the server's built-in default: **Nominatim**
+This unapplied stack configuration selects the server's built-in default: **Nominatim**
 (OpenStreetMap), `GeocodingConfiguration.DefaultProvider = "nominatim"`,
 `LocatorName = "World"` (`/rest/services/World/GeocodeServer`). This stack
 passes no geocoding inputs to the `aws-serverless` module, so the module
 injects no `Geocoding__*` env and provisions no geocoding resources; the
-server defaults apply unchanged.
+server defaults apply unchanged after deployment. The next apply removes the existing
+Amazon Location place index, its `geo:*` IAM policy and `Geocoding__*` overrides.
+Retain the last recorded Amazon Location applied state until an apply/canary receipt
+confirms that `World/GeocodeServer/findAddressCandidates` reports Nominatim as its provider.
 
 Nominatim needs general internet egress. The fck-nat instance above provides
 it; before that NAT existed every geocode call failed after a ~15.8s

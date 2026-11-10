@@ -210,9 +210,7 @@ module "honua" {
   # LocatorName "World"). No geocoding inputs are passed to the module, so it
   # injects no Geocoding__* env and provisions no place index. Nominatim is
   # reached over the general internet egress of the fck-nat instance
-  # (nat-instance.tf). Amazon Location is deliberately NOT used (owner
-  # decision 2026-10-28); do not reintroduce the module's
-  # enable_amazon_location_geocoding input.
+  # (nat-instance.tf).
 
   # Networking — no MANAGED NAT gateway (~$33/mo + data). Egress for the
   # private subnets comes from the demo's own fck-nat t4g.nano instance

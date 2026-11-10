@@ -1,10 +1,12 @@
 # demo.honua.io full-capability runbook (server#1688)
 
-> **Superseded 2026-10-28 (geocoding):** the demo no longer uses Amazon Location. By owner
-> decision the geocoder is the server's built-in default, Nominatim (OpenStreetMap,
-> `World` locator), reached through the fck-nat egress. The Amazon Location inputs were
-> removed from `stacks/aws`; see `stacks/aws/README.md` ("Geocoding"). The Amazon Location
-> material below is kept as history only.
+> **Geocoding configuration change — not yet applied:** this stack selects the server's
+> built-in Nominatim (OpenStreetMap, `World` locator) default through the fck-nat egress.
+> The next apply removes the Amazon Location place index, its `geo:*` IAM policy and
+> `Geocoding__*` environment overrides. Until an apply/canary receipt confirms the
+> transition, the Amazon Location applied-state notes below remain the last recorded state.
+> After applying, verify that `World/GeocodeServer/findAddressCandidates` reports Nominatim
+> as its provider. See `stacks/aws/README.md` ("Geocoding").
 
 Operator runbook to bring `demo.honua.io` to full demonstrable capability across the
 four product pillars. It covers two separable tracks:
