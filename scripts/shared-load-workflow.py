@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 from datetime import datetime, timedelta, timezone
 
 ROOT = Path("artifacts/shared-load")
@@ -22,10 +21,15 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def capture(*args):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+def capture(*args, timeout=120, env=None):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env)
     require(result.returncode == 0, f"{args[0]} operation failed; inspect protected workflow configuration")
     return result.stdout.strip()
+
+
+def sample_env(env):
+    allowed = {"PATH", "HOME", "HONUA_BASE_URL", "HONUA_ADMIN_API_KEY", "HONUA_SAMPLE_IMPORT_URLS_FILE"}
+    return {key: value for key, value in env.items() if key in allowed}
 
 
 def aws(*args):
@@ -49,6 +53,9 @@ def validate(env):
     prior = env.get("PREVIOUS_RUN_ID", "")
     require(re.fullmatch(r"[1-9][0-9]*", prior) and prior != env["GITHUB_RUN_ID"], "Previous run required")
     require(re.fullmatch(r"[a-f0-9]{64}", env.get("PLAN_SHA256", "")), "Reviewed plan digest required")
+    runs = json.loads(capture("gh", "api", f"repos/{env['GITHUB_REPOSITORY']}/actions/workflows/terraform.yml/runs?per_page=100"))
+    require(not any(run["status"] in {"queued", "waiting", "pending", "in_progress"}
+                    for run in runs["workflow_runs"]), "Terraform apply queued or running; retry after it completes")
     repo = env["GITHUB_REPOSITORY"]
     current = json.loads(capture("gh", "api", f"repos/{repo}/actions/runs/{env['GITHUB_RUN_ID']}"))
     previous = json.loads(capture("gh", "api", f"repos/{repo}/actions/runs/{prior}"))
@@ -68,7 +75,7 @@ def verify(env):
             "Artifact revision or approved digest differs")
     capture("node", "--input-type=module", "-e",
             "import {verifyPlan} from './samples-source/scripts/state-local/shared-load.mjs';"
-            "await verifyPlan(process.argv[1],process.argv[2]);", str(ROOT), env["PLAN_SHA256"])
+            "await verifyPlan(process.argv[1],process.argv[2]);", str(ROOT), env["PLAN_SHA256"], env=sample_env(env))
 
 
 def metric(database, name, statistic):
@@ -85,12 +92,12 @@ def metric(database, name, statistic):
     return float(point[statistic])
 
 
-def monitor(database, baseline, enforce=True):
+def monitor(database, baseline, action="stage"):
     connections = metric(database, "DatabaseConnections", "Maximum")
     free = metric(database, "FreeStorageSpace", "Minimum")
     used = max(0, baseline - free)
     print(json.dumps({"connections": connections, "storageGrowthBytes": used}), flush=True)
-    if enforce:
+    if action != "rollback":
         require(connections < 130, "Connection ceiling reached; load stopped")
         require(used < 900_000_000 and free > 2_000_000_000, "Storage guard reached; load stopped")
     return {"connections": connections, "storageGrowthBytes": used}
@@ -129,7 +136,7 @@ def stage_objects(bucket, plan, digest):
 
 
 def claim_generation(bucket, env):
-    key = f"state-local/{env['PLAN_SHA256']}/last-attempt.json"
+    key = "state-local/last-attempt.json"
     with tempfile.TemporaryDirectory() as private:
         filename = Path(private) / "generation.json"
         result = subprocess.run(["aws", "s3api", "get-object", "--bucket", bucket, "--key", key, str(filename)],
@@ -137,28 +144,32 @@ def claim_generation(bucket, env):
         condition = ["--if-none-match", "*"]
         if result.returncode == 0:
             previous = json.loads(filename.read_text())
-            require(previous["runId"] == env["PREVIOUS_RUN_ID"] and previous["samplesSha"] == env["SAMPLES_SHA"],
+            require(previous["runId"] == env["PREVIOUS_RUN_ID"] and previous["samplesSha"] == env["SAMPLES_SHA"]
+                    and previous["planSha256"] == env["PLAN_SHA256"],
                     "Stale artifact refused; use the most recent attempted run's receipts")
             condition = ["--if-match", json.loads(result.stdout)["ETag"]]
         else:
             require("(NoSuchKey)" in result.stderr and env["LOAD_ACTION"] == "stage", "Load generation unavailable")
-        filename.write_text(json.dumps({"runId": env["GITHUB_RUN_ID"], "samplesSha": env["SAMPLES_SHA"]}))
+        filename.write_text(json.dumps({"runId": env["GITHUB_RUN_ID"], "samplesSha": env["SAMPLES_SHA"],
+                                        "planSha256": env["PLAN_SHA256"]}))
         aws("s3api", "put-object", "--bucket", bucket, "--key", key, "--body", str(filename), *condition)
         (ROOT / "generation.json").write_text(filename.read_text())
 
 
-def run_guarded(command, env, database, baseline, enforce):
-    monitor(database, baseline, enforce)
-    child = subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def run_guarded(command, env, monitoring):
+    database, baseline = monitoring
+    action = env["LOAD_ACTION"]
+    monitor(database, baseline, action)
+    child = subprocess.Popen(command, env=sample_env(env), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         while child.poll() is None:
-            monitor(database, baseline, enforce)
+            monitor(database, baseline, action)
             try:
                 child.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 pass
         require(child.returncode == 0, "Loader stopped; retain receipts and reconcile intents before retry")
-        return monitor(database, baseline, enforce)
+        return monitor(database, baseline, action)
     finally:
         if child.poll() is None:
             child.terminate()
@@ -174,7 +185,7 @@ def run(env):
     ROOT.mkdir(parents=True, exist_ok=True)
     command = ["node", str(SAMPLES / "scripts/state-local/shared-load.mjs"), action, str(ROOT)]
     if action == "prepare":
-        result = json.loads(capture(*command))
+        result = json.loads(capture(*command, timeout=1200, env=sample_env(env)))
         (ROOT / "workflow.json").write_text(json.dumps({"samplesSha": env["SAMPLES_SHA"],
                                                        "planSha256": result["planSha256"]}))
         print(json.dumps(result, indent=2))
@@ -189,7 +200,7 @@ def run(env):
         require(action == "stage", "Initial monitoring baseline missing")
         baseline = metric(database, "FreeStorageSpace", "Minimum")
         baseline_file.write_text(json.dumps({"freeBytes": baseline}))
-    monitor(database, baseline, action != "rollback")
+    monitor(database, baseline, action)
     claim_generation(bucket, env)
     with tempfile.TemporaryDirectory() as private:
         if action == "stage":
@@ -198,7 +209,7 @@ def run(env):
             url_file.write_text(json.dumps(urls))
             url_file.chmod(0o600)
             env["HONUA_SAMPLE_IMPORT_URLS_FILE"] = str(url_file)
-        result = run_guarded(command + [digest], env, database, baseline, action != "rollback")
+        result = run_guarded(command + [digest], env, (database, baseline))
         (ROOT / f"{action}-monitor.json").write_text(json.dumps(result))
     print(f"{action} completed; inspect retained deployment receipts")
 
@@ -206,6 +217,9 @@ def run(env):
 if __name__ == "__main__":
     try:
         {"validate": validate, "verify": verify, "run": run}[sys.argv[1]](dict(os.environ))
+    except ValueError as error:
+        print(f"::error::{error}", file=sys.stderr)
+        sys.exit(1)
     except Exception:
         print("::error::Shared load stopped. Inspect retained receipts and protected workflow configuration; do not retry with a fresh artifact.",
               file=sys.stderr)

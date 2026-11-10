@@ -3,7 +3,7 @@
 An operator runs **Load demo dataset** on `trunk`, through the protected
 `demo` environment. It reuses the deployment role, existing object storage,
 database and administrator secret. It creates no infrastructure. The role
-needs `cloudwatch:GetMetricStatistics` in addition to its existing permissions.
+needs `s3:ListBucket` (missing-object detection) and `cloudwatch:GetMetricStatistics` in addition to its existing permissions.
 
 Use one immutable, merged `honua-samples` commit for the entire load:
 
@@ -31,8 +31,10 @@ emergency decisions. Source attribution stays with each layer.
 
 The workflow retains snapshots, import intents and receipts even on failure.
 Never restart with a fresh prepare artifact after an import attempt. Use the
-artifact whose `generation.json` names the latest claimed run. A conditional
-object-store generation marker rejects stale artifacts. A failure before
+artifact whose `generation.json` names the latest claimed run. A single conditional
+object-store generation marker rejects stale artifacts across all plans. A new
+plan requires manual reconciliation and retirement of that marker; preparing
+a fresh snapshot never authorizes another import. A failure before
 claiming a generation leaves the prior generation current. If the artifact
 upload failed after claiming, reconcile the generation and imported data
 before any retry.
@@ -41,8 +43,9 @@ An intent without a deployment receipt means an import may have completed.
 The loader refuses to import it again or roll it back automatically. Inspect
 the server's import state and reconcile that intent before proceeding. A
 connection or monitoring failure does not prove that a server import stopped.
-Keep all artifacts until reconciliation; download them before the seven-day
-retention expires. Imported data and staged source objects remain after rollback.
+Keep all artifacts until reconciliation; download them before the 90-day
+retention expires. After expiry rollback is manual in Console using the saved
+receipts; downloaded artifacts cannot be supplied to this workflow. Imported data and staged source objects remain after rollback.
 
 ## Capacity and credentials
 
@@ -58,3 +61,8 @@ Credentials and signed URLs are masked and stay outside artifacts. Child
 HTTP output is suppressed because failure bodies can contain sensitive data.
 Use retained receipts and the protected environment configuration to diagnose
 failure. Do not paste raw AWS output or signed URLs into issues or logs.
+
+Preparation runs without a protected environment or OIDC permissions. Only the
+load job shares the apply concurrency group. Never queue multiple load dispatches:
+GitHub can cancel a pending apply; inspect Terraform runs and rerun a cancelled
+apply after loading. The load refuses queued or running Terraform runs.
