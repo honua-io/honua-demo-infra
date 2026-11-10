@@ -64,16 +64,14 @@ class ApplyWorkflow(unittest.TestCase):
         self.assertEqual(run(script, {"ROLE_ARN": good, "ADMIN_PASSWORD": ""}).returncode, 1)
         self.assertEqual(run(script, {"ROLE_ARN": good, "ADMIN_PASSWORD": "x"}).returncode, 0)
 
-    def test_module_fetch_requires_scoped_read_credentials(self):
+    def test_public_module_fetch_falls_back_to_workflow_read_credentials(self):
         for job, name in [("plan", "Prebuild, plan"), ("apply", "Prebuild, plan"), ("apply", "Converged")]:
             operation = step(self.wf, job, name)
-            self.assertIn("secrets.HONUA_MODULE_READ_TOKEN", operation["env"]["GH_TOKEN"])
+            self.assertEqual(operation["env"]["GH_TOKEN"], "${{ secrets.HONUA_MODULE_READ_TOKEN || github.token }}")
             self.assertEqual(operation["env"]["GIT_CONFIG_KEY_0"], "credential.https://github.com.helper")
             self.assertEqual(operation["env"]["GIT_CONFIG_VALUE_0"], "!gh auth git-credential")
-            result = run(operation["run"], {"GH_TOKEN": ""})
-            self.assertEqual(result.returncode, 1)
-            self.assertEqual(result.stderr, "")
-            self.assertEqual(result.stdout, "::error::HONUA_MODULE_READ_TOKEN is required to fetch the pinned Terraform module.\n")
+            self.assertNotIn("GH_TOKEN", operation["run"])
+            self.assertEqual(self.wf["jobs"][job]["permissions"], {"contents": "read", "id-token": "write"})
 
     def test_plan_text_is_never_printed(self):
         script = (ROOT / "scripts" / "stack-plan.sh").read_text(encoding="utf-8")
