@@ -1,0 +1,95 @@
+name: Load demo dataset
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [prepare, stage, activate, rollback]
+        default: prepare
+        required: true
+      samples_sha:
+        description: Immutable merged honua-samples commit
+        type: string
+        required: true
+      previous_run_id:
+        description: Latest prepare or failed/successful load run (required after prepare)
+        type: string
+      plan_sha256:
+        description: Reviewed prepare plan digest (required after prepare)
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-apply
+  cancel-in-progress: false
+
+jobs:
+  load:
+    if: github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: demo
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      LOAD_ACTION: ${{ inputs.action }}
+      SAMPLES_SHA: ${{ inputs.samples_sha }}
+      PREVIOUS_RUN_ID: ${{ inputs.previous_run_id }}
+      PLAN_SHA256: ${{ inputs.plan_sha256 }}
+      AWS_REGION: us-west-2
+      AWS_DEFAULT_REGION: us-west-2
+      GH_TOKEN: ${{ github.token }}
+      HONUA_BASE_URL: https://demo.honua.io
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Validate dispatch and previous artifact origin
+        run: python3 scripts/shared-load-workflow.py validate
+
+      - name: Restore the latest receipts, including interrupted stages
+        if: inputs.action != 'prepare'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4.3.0
+        with:
+          name: state-local-shared-load
+          path: artifacts/shared-load
+          run-id: ${{ inputs.previous_run_id }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: honua-io/honua-samples
+          ref: ${{ inputs.samples_sha }}
+          path: samples-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Verify samples revision and approved bytes before credentials
+        run: python3 scripts/shared-load-workflow.py verify
+
+      - name: Configure existing deployment role
+        if: inputs.action != 'prepare'
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.HONUA_DEMO_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Prepare or run the bounded import
+        run: python3 scripts/shared-load-workflow.py run
+
+      - name: Retain snapshots, intents and receipts even after failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
+        with:
+          name: state-local-shared-load
+          path: artifacts/shared-load
+          if-no-files-found: error
+          retention-days: 7
