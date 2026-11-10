@@ -72,7 +72,8 @@ class ApplyWorkflow(unittest.TestCase):
             self.assertEqual(operation["env"]["GIT_CONFIG_VALUE_0"], "!gh auth git-credential")
             result = run(operation["run"], {"GH_TOKEN": ""})
             self.assertEqual(result.returncode, 1)
-            self.assertIn("HONUA_MODULE_READ_TOKEN is required", result.stdout + result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(result.stdout, "::error::HONUA_MODULE_READ_TOKEN is required to fetch the pinned Terraform module.\n")
 
     def test_plan_text_is_never_printed(self):
         script = (ROOT / "scripts" / "stack-plan.sh").read_text(encoding="utf-8")
