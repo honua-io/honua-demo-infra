@@ -24,7 +24,7 @@ PENDING_SCRIPTS = [
     "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
     "Honua.Server.Migrations.140_CreateAiExecutionAdmission.sql",
 ]
-ARCHIVE_SHA256 = "2a8be2ef98433c526876aef2c7bbf28fc31ba4a39835c340879f24873e639511"
+ARCHIVE_SHA256 = "d4f12977293d623283d39ccdc2c5644909e293a39a1054f391d0a59dc3d5f416"
 
 
 def require(value: bool, message: str) -> None:

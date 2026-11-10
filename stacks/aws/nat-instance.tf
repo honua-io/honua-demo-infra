@@ -23,7 +23,7 @@
 # SPOF — accepted for a demo: one instance in one AZ. If the instance (or its
 # AZ) dies, private-subnet egress is down until it is replaced — the public
 # API path (CloudFront -> API Gateway -> Lambda invoke) stays up, but the
-# Lambda loses Secrets Manager / Bedrock / Amazon Location / deploy-control
+# Lambda loses Secrets Manager / Bedrock / Nominatim geocoding / deploy-control
 # reachability. Recovery is `terraform apply -replace=aws_instance.nat`
 # (~2 min) — see the runbook ("Cost & network architecture"). Scale up by
 # setting nat_instance_type (t4g.nano sustains ~5 Gbps burst, far beyond demo

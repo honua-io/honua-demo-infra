@@ -23,9 +23,10 @@ name: Demo Drift Plan
 #
 # Identity: the plan-only OIDC role from honua-iac
 # infrastructure/terraform/bootstrap/aws-drift-plan (output
-# demo_infra_drift_role_arn). It trusts exactly
-# repo:honua-io/honua-demo-infra:environment:demo-drift, and the demo-drift
-# environment allows deployments from trunk only. Configuration (README,
+# demo_infra_drift_role_arn). It trusts exactly the immutable subject
+# repo:honua-io@217718039/honua-demo-infra@1310514636:environment:demo-drift
+# (this repository has use_immutable_subject = true; the name form never
+# matches), and the demo-drift environment allows deployments from trunk only. Configuration (README,
 # "Drift plan"):
 #   environment demo-drift  variable HONUA_DEMO_DRIFT_ROLE_ARN
 #                           secret   HONUA_DEMO_ADMIN_PASSWORD

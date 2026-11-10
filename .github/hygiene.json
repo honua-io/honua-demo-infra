@@ -1,0 +1,14 @@
+{
+  "roots": [
+    ".gitattributes",
+    ".github/",
+    ".gitignore",
+    "AGENTS.md",
+    "README.md",
+    "manifest/",
+    "runbook/",
+    "scripts/",
+    "stacks/"
+  ],
+  "gate_inputs": {}
+}

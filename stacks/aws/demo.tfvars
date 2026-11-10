@@ -49,8 +49,8 @@ enable_studio_ai  = true
 studio_ai_model   = "us.anthropic.claude-sonnet-4-6"
 enable_bedrock_ai = true
 
-# Amazon Location geocoding is ON for the demo (the server's compiled-in default is Nominatim).
-enable_amazon_location_geocoding = true
+# Geocoding uses the server's compiled-in default, Nominatim (OpenStreetMap),
+# reached via the fck-nat egress. Amazon Location is not used.
 
 # Redis backs the public process job queue/result store and the distributed
 # fixed-window request budget. The managed geometry.buffer executor runs in the

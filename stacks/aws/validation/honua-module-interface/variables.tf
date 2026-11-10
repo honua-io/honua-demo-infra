@@ -3,8 +3,6 @@
 # e02ed058bdb65d3a054feec2da8451ede395771f (the current pin).
 variable "additional_env" { type = map(string) }
 variable "admin_password" { type = string }
-variable "amazon_location_data_source" { type = string }
-variable "amazon_location_place_index_name" { type = string }
 variable "api_throttle_burst_limit" { type = number }
 variable "api_throttle_rate_limit" { type = number }
 variable "bedrock_ai_model" { type = string }
@@ -18,7 +16,6 @@ variable "db_instance_class" { type = string }
 variable "db_multi_az" { type = bool }
 variable "db_password" { type = string }
 variable "db_require_ssl" { type = bool }
-variable "enable_amazon_location_geocoding" { type = bool }
 variable "enable_bedrock_ai" { type = bool }
 variable "enable_deploy_control_vpc_endpoints" { type = bool }
 variable "enable_gp_batch" { type = bool }
