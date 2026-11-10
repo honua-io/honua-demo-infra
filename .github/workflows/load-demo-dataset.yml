@@ -86,7 +86,6 @@ jobs:
         run: python3 scripts/shared-load-workflow.py validate
 
       - name: Restore the latest receipts, including interrupted stages
-        if: inputs.action != 'prepare'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: state-local-shared-load
@@ -110,13 +109,12 @@ jobs:
         run: python3 scripts/shared-load-workflow.py verify
 
       - name: Configure existing deployment role
-        if: inputs.action != 'prepare'
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.HONUA_DEMO_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Prepare or run the bounded import
+      - name: Run the bounded stage, activate or rollback
         run: python3 scripts/shared-load-workflow.py run
 
       - name: Retain snapshots, intents and receipts even after failure
