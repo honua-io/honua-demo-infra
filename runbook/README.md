@@ -21,7 +21,7 @@ honua-server backlog).
 > built-in Nominatim (OpenStreetMap, `World` locator) default through the fck-nat egress.
 > The next apply removes the Amazon Location place index, its `geo:*` IAM policy and
 > `Geocoding__*` environment overrides. Until an apply/canary receipt confirms the
-> transition, the Amazon Location applied-state notes below remain the last recorded state.
+> transition, the Amazon Location applied-state note above remain the last recorded state.
 > After applying, verify that `World/GeocodeServer/findAddressCandidates` reports Nominatim
 > as its provider. See `stacks/aws/README.md` ("Geocoding").
 
