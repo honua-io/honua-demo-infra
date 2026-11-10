@@ -70,9 +70,8 @@ class ApplyWorkflow(unittest.TestCase):
             self.assertEqual(operation["env"]["GH_TOKEN"], "${{ secrets.HONUA_MODULE_READ_TOKEN || github.token }}")
             self.assertEqual(operation["env"]["GIT_CONFIG_KEY_0"], "credential.https://github.com.helper")
             self.assertEqual(operation["env"]["GIT_CONFIG_VALUE_0"], "!gh auth git-credential")
-            self.assertNotIn('if [[ -z "$GH_TOKEN" ]]', operation["run"])
-            self.assertNotIn("HONUA_MODULE_READ_TOKEN is required", operation["run"])
-            self.assertEqual(self.wf["permissions"]["contents"], "read")
+            self.assertNotIn("GH_TOKEN", operation["run"])
+            self.assertEqual(self.wf["jobs"][job]["permissions"], {"contents": "read", "id-token": "write"})
 
     def test_plan_text_is_never_printed(self):
         script = (ROOT / "scripts" / "stack-plan.sh").read_text(encoding="utf-8")
