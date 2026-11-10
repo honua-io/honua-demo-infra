@@ -64,6 +64,14 @@ class ApplyWorkflow(unittest.TestCase):
         self.assertEqual(run(script, {"ROLE_ARN": good, "ADMIN_PASSWORD": ""}).returncode, 1)
         self.assertEqual(run(script, {"ROLE_ARN": good, "ADMIN_PASSWORD": "x"}).returncode, 0)
 
+    def test_module_fetch_requires_scoped_read_credentials(self):
+        for job, name in [("plan", "Prebuild, plan"), ("apply", "Prebuild, plan"), ("apply", "Converged")]:
+            operation = step(self.wf, job, name)
+            self.assertIn("secrets.HONUA_MODULE_READ_TOKEN", operation["env"]["GH_TOKEN"])
+            self.assertEqual(operation["env"]["GIT_CONFIG_KEY_0"], "credential.https://github.com.helper")
+            self.assertEqual(operation["env"]["GIT_CONFIG_VALUE_0"], "!gh auth git-credential")
+            self.assertEqual(run(operation["run"], {"GH_TOKEN": ""}).returncode, 1)
+
     def test_plan_text_is_never_printed(self):
         script = (ROOT / "scripts" / "stack-plan.sh").read_text(encoding="utf-8")
         self.assertIn('>"$out/plan.txt"', script)

@@ -133,8 +133,17 @@ jobs:
 
       - name: Prebuild, plan, env budget, report
         if: ${{ matrix.deployed }}
+        env:
+          GH_TOKEN: ${{ secrets.HONUA_MODULE_READ_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
         run: |
           set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::HONUA_MODULE_READ_TOKEN is required to fetch the pinned Terraform module."
+            exit 1
+          fi
           if [[ "$(python3 scripts/drift-stacks.py --get "$STACK" admin_password)" == "true" ]]; then
             # PR plans compare against the live value (the plan-only role may
             # read the Terraform-managed demo secrets); the nightly drift plan
@@ -260,9 +269,17 @@ jobs:
       - name: Prebuild, plan, env budget (locked)
         id: plan
         env:
+          GH_TOKEN: ${{ secrets.HONUA_MODULE_READ_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
           TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::HONUA_MODULE_READ_TOKEN is required to fetch the pinned Terraform module."
+            exit 1
+          fi
           scripts/stack-plan.sh aws "$RUNNER_TEMP/plan"
           cat "$RUNNER_TEMP/plan/report.md" >> "$GITHUB_STEP_SUMMARY"
           echo "status=$(cat "$RUNNER_TEMP/plan/status")" >> "$GITHUB_OUTPUT"
@@ -279,9 +296,17 @@ jobs:
       - name: Converged (re-plan must be clean)
         if: steps.plan.outputs.status == 'changes'
         env:
+          GH_TOKEN: ${{ secrets.HONUA_MODULE_READ_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
           TF_VAR_honua_admin_password: ${{ secrets.HONUA_DEMO_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::HONUA_MODULE_READ_TOKEN is required to fetch the pinned Terraform module."
+            exit 1
+          fi
           scripts/stack-plan.sh aws "$RUNNER_TEMP/after"
           {
             echo

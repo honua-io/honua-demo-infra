@@ -316,14 +316,19 @@ except the S3 state lock files.
 
 4. `demo-plan`: no branch policy, because PRs run there. Set variable
    `HONUA_DEMO_PLAN_ROLE_ARN` to the same plan-only role. The PR plan reads the
-   live admin password from Secrets Manager, so it needs no secret here. Any
+   live admin password from Secrets Manager. Add secret
+   `HONUA_MODULE_READ_TOKEN`: a fine-grained machine token with read-only
+   Contents access to the pinned module repository; the default workflow token
+   cannot fetch cross-repository modules. Any
    writer who can push a branch can run a read-only plan with this role,
    including reading state. Add required reviewers to `demo-plan` if that is
    too open.
 5. `demo`: required reviewers, deployment-branch policy `trunk` only. Set
    variable `HONUA_DEMO_DEPLOY_ROLE_ARN` (honua-iac `bootstrap/aws-demo-deploy`,
    output `role_arn`) and secret `HONUA_DEMO_ADMIN_PASSWORD` (from `pass`, as
-   above).
+   above). Add the same `HONUA_MODULE_READ_TOKEN` secret here. Terraform
+   commands use a process-scoped Git credential helper; no credential URL or
+   credential file is written. Missing module credentials stop before planning.
 
 ## Related
 
