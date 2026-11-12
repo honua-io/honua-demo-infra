@@ -134,3 +134,16 @@ output "studio_ai_model" {
   description = "Bedrock model id the Studio AI proxy is configured to use (null unless enable_studio_ai)."
   value       = var.enable_studio_ai ? var.studio_ai_model : null
 }
+
+# Reused by the public demo Launch Stack (honua-marketplace
+# aws/cloudformation/container-product/demo): ExistingVpcId and two
+# ExistingPrivateSubnetIds in different supported AZs. Outputs only.
+output "vpc_id" {
+  description = "Demo VPC, reused by the Launch Stack demo."
+  value       = module.honua.vpc_id
+}
+
+output "private_subnet_ids" {
+  description = "Demo private subnets (egress via fck-nat), reused by the Launch Stack demo."
+  value       = module.honua.private_subnet_ids
+}
