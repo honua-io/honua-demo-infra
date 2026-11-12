@@ -195,7 +195,7 @@ Live settings, read with `aws lambda get-function-configuration` on
 | `Limits__Edits__MaxFeaturesPerEdit` / `MaxEditsPerTransaction` / `MaxPayloadSize` | 500 / 2500 / 25 MB (defaults) | Yes. They cap one OData `$batch` changeset, and `$batch` is also anonymous. |
 
 What a visitor can do:
-- About 60 requests per minute per IP. Through `$batch`, a single request can carry many inserts.
+- About 300 requests per minute per IP. Through `$batch`, a single request can carry many inserts.
 - Add free-text notes and names (≤ the field lengths) that other visitors then see.
 - Write enum values outside `trail|park|harbor|facility` / `ok|needs_attention|urgent`.
   - The managed copy does not inherit the typed table's CHECK constraints.
@@ -204,7 +204,7 @@ What a visitor can do:
 - Nothing outside the layer is reachable. The source table and every other service are untouched (verified locally: `public.maui_inspections` unchanged after edits on the copy).
 
 **Recommendation:**
-- Keep the existing 60/min per-IP budget as the cap and do **not** add a separate write budget for this.
+- Keep the existing 300/min per-IP budget as the cap and do **not** add a separate write budget for this.
   - The server has no per-route write budget to configure.
   - Lowering the global budget would hurt the read-heavy demo pages that share it.
 - The real control is the reset. Run `reset-inspections-scratch.sh --apply`:

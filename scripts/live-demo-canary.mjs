@@ -261,8 +261,8 @@ export function selectGovernedGpProcess(manifest) {
     throw new Error("geometry.buffer contract must use the scoped demo-key X-API-Key profile");
   }
   if (process.requestBudget?.resetPolicy !== "fixed-window" ||
-      process.requestBudget?.requestsPerWindow !== 60 || process.requestBudget?.windowSeconds !== 60) {
-    throw new Error("geometry.buffer contract must carry the deployed 60/minute fixed-window budget");
+      process.requestBudget?.requestsPerWindow !== 300 || process.requestBudget?.windowSeconds !== 60) {
+    throw new Error("geometry.buffer contract must carry the deployed 300/minute fixed-window budget");
   }
   if (!/^[0-9a-f]{64}$/u.test(process.canary?.expectedSha256 ?? "")) {
     throw new Error("geometry.buffer contract must pin an exact canary output SHA-256");

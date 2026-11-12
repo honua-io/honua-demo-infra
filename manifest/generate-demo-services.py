@@ -156,7 +156,7 @@ def public_processes() -> list[dict]:
             },
             "requestBudget": {
                 "scope": "demo-api-key/global",
-                "requestsPerWindow": 60,
+                "requestsPerWindow": 300,
                 "windowSeconds": 60,
                 "resetPolicy": "fixed-window",
                 "responseHeaders": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],

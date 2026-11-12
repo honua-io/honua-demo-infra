@@ -125,7 +125,7 @@ Top level:
 - `X-API-Key` using a separately rotated `demo-process-execute` key with only
   the canonical `process:*:execute` grant. The key is never published in this manifest or in canary
   receipts.
-- A Redis-backed, per-subject global fixed window of 60 requests/minute. The
+- A Redis-backed, per-subject global fixed window of 300 requests/minute. The
   canary requires the limit/remaining/reset response headers and binds both
   sync and async output bytes to the checked-in SHA-256.
 
