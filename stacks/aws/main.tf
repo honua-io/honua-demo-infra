@@ -148,21 +148,10 @@ module "honua" {
   vpc_cidr                    = local.vpc_cidr
   db_additional_ingress_cidrs = [local.vpc_cidr]
 
-  # Redis — gated on var.enable_redis (default off). honua-server hard-requires
-  # a durable distributed feature-change event store whenever
-  # ASPNETCORE_ENVIRONMENT=Production, so /healthz/ready returns 503 without it
-  # (see README → "Known limitation"). When enabled the module creates an in-VPC
-  # ElastiCache Redis (cache.t3.micro by default) and — critically — adds the
-  # Lambda's 6379 egress rule as a CIDR rule (the VPC CIDR), NOT a
-  # security-group-reference rule. A SG-reference egress rule did NOT work in
-  # this VPC; the module already does the right thing because redis_create wires
-  # redis_egress_cidrs = [vpc_cidr]. The connection string lands in a dedicated
-  # Secrets Manager secret and is injected as ConnectionStrings__redis.
-  # wire_redis_connection=false hands the Redis objects to redis.tf and keeps the
-  # module from injecting ConnectionStrings__redis (honua-server#6500/#6487).
-  # Wiring it back (MapServer/ImageServer exports need Redis-coordinated temp
-  # storage quotas) also needs operation_key_ring_certificate_secret_arn; the
-  # steps and the ready-to-flip diff are in runbook/exports-redis-prereq.md.
+  # Optional Redis provisioning and connection injection are disabled in the
+  # demo preset. enable_redis=true with wire_redis_connection=false retains an
+  # unwired cache through redis.tf; both false remove it. Keep the generic
+  # module contract and migration addresses for existing state.
   redis_enabled   = var.enable_redis && var.wire_redis_connection
   redis_node_type = var.redis_node_type
   redis_port      = 6379
@@ -273,7 +262,7 @@ module "honua" {
     # variable: keep the planned total under 4096 (scripts/check-lambda-env-budget.py).
     # The public process contract is authenticated with a separately rotated,
     # process:*:execute-scoped demo key. Rate limiting partitions by that key and
-    # uses Redis so Lambda replicas share one fixed one-minute window.
+    # uses a process-local window without Redis; the API Gateway throttle remains.
     # PostgreSQL connection budget (2026-10-24, 53300 "remaining connection
     # slots are reserved" under parallel FeatureServer bursts). db.t4g.small
     # max_connections = LEAST(DBInstanceClassMemory/9531392, 5000), about 180,

@@ -52,25 +52,17 @@ enable_bedrock_ai = true
 # Geocoding uses the server's compiled-in default, Nominatim (OpenStreetMap),
 # reached via the fck-nat egress. Amazon Location is not used.
 
-# Redis backs the public process job queue/result store and the distributed
-# fixed-window request budget. The managed geometry.buffer executor runs in the
-# serving Lambda; Batch remains disabled for this bounded public process.
-enable_redis = true
-# Redis is WIRED into the serving Lambda again (ConnectionStrings__redis + the operation
-# key-ring certificate reference, honua-server#6500). It was first wired on 2026-10-24 (#98)
-# and rolled back by hand the same day because the serving process died silently inside
-# warm containers. Root cause (honua-server#6558, fixed in honua-server#6644): after a
-# Lambda freeze/thaw the admin API-key index backfill let a Redis TaskCanceledException
-# escape, StopHost stopped the host, and the frozen sandbox left a listener-less process
-# that the Lambda Web Adapter answered with "layers::panic" for ~8 minutes. The image below
-# carries that fix plus a guard that exits a stopping host so Lambda recycles the sandbox.
-# The key-ring PKCS#12 lives in the operator-owned secret below (created per
-# runbook/exports-redis-prereq.md; never managed by Terraform, never delete it: it is the
-# only key that can read the Redis key ring). Wiring also closes honua-server#6487 and
-# unblocks MapServer/ImageServer exports, OGC process execution and jobs.
-wire_redis_connection                     = true
-operation_key_ring_certificate_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/operation-key-ring-GDtfsQ"
-enable_gp_batch                           = false
+# Founder-directed Redis removal (2026-11-13): disable both provisioning and
+# connection injection. This removes the managed cache, its connection secret,
+# Redis egress and operation-key-ring IAM/env wiring in the normal saved plan.
+# Preserve the operator-owned key-ring secret documented in the historical
+# runbook/exports-redis-prereq.md; Terraform does not own that secret.
+# Before applying, follow runbook/remove-demo-redis.md: the old image pinned above
+# still needs Redis for durable process jobs. Bind a compatible image and canary
+# evidence to the same reviewed deployment; do not weaken the existing canary.
+enable_redis          = false
+wire_redis_connection = false
+enable_gp_batch       = false
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.

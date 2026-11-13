@@ -107,13 +107,13 @@ variable "gp_batch_image" {
 # ---------------------------------------------------------------------------
 
 variable "enable_redis" {
-  description = "Provision an in-VPC ElastiCache Redis (honua-demo-demo-redis) and inject ConnectionStrings__redis. honua-server requires a durable feature-change event store in Production; without Redis /healthz/ready returns 503. The Lambda's 6379 egress rule is added as a CIDR rule (the VPC CIDR) — a SG-reference egress rule does not work in this VPC."
+  description = "Provision an optional in-VPC ElastiCache Redis. Connection injection is controlled separately by wire_redis_connection. The demo disables both flags; setting enable_redis=false removes the managed cache."
   type        = bool
   default     = false
 }
 
 variable "wire_redis_connection" {
-  description = "Inject the Redis connection string into the serving Lambda. false keeps the ElastiCache objects (owned by redis.tf) but leaves ConnectionStrings__redis out of the function environment; the demo sets false for the 2026-10-22 rc cutover (honua-server#6500, #6487). Only meaningful with enable_redis."
+  description = "Inject the Redis connection string into the serving Lambda when enable_redis=true. With enable_redis=true, false retains an unwired cache owned by redis.tf. With both flags false, neither a cache nor connection wiring is retained."
   type        = bool
   default     = true
 }
