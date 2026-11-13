@@ -8,7 +8,8 @@
       "var_file": "demo.tfvars",
       "admin_password": true,
       "prebuild": [
-        "python3 stacks/aws/postgis-bootstrap/build.py --check"
+        "python3 stacks/aws/postgis-bootstrap/build.py --check",
+        "python3 scripts/fetch-static-data.py"
       ],
       "standing": [
         {

@@ -100,6 +100,20 @@ resource "aws_s3_bucket_policy" "demo_data_fonts_public" {
             "AWS:SourceArn" = aws_cloudfront_distribution.demo.arn
           }
         }
+      },
+      {
+        # Versioned static demo data (static-data.tf), read by the same
+        # distribution through Origin Access Control under /demo-data/*.
+        Sid       = "CloudFrontReadStaticData"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.demo_data.arn}/${local.static_data_key_prefix}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.demo.arn
+          }
+        }
       }
     ]
   })

@@ -64,6 +64,9 @@ jobs:
         # allowlist, key mapping and preflight CORS.
         run: node --test scripts/test-edge-pmtiles-rewrite.mjs
 
+      - name: Validate static demo data preflight contract
+        run: node --test scripts/test-edge-static-data-preflight.mjs
+
       - name: Validate in-VPC STAC seed renderer
         run: |
           python3 scripts/test-render-demo-stac-seed.py

@@ -36,6 +36,7 @@ on:
       - "scripts/plan-report.py"
       - "scripts/drift-stacks.py"
       - "scripts/check-lambda-env-budget.py"
+      - "scripts/fetch-static-data.py"
       - ".github/workflows/terraform.yml"
   push:
     branches: [trunk]
@@ -45,6 +46,7 @@ on:
       - "scripts/plan-report.py"
       - "scripts/drift-stacks.py"
       - "scripts/check-lambda-env-budget.py"
+      - "scripts/fetch-static-data.py"
       - ".github/workflows/terraform.yml"
   workflow_dispatch: {}
 

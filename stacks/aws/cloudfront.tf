@@ -563,6 +563,27 @@ resource "aws_cloudfront_distribution" "demo" {
     }
   }
 
+  # Versioned static demo data from S3 (static-data.tf): byte-exact ranges,
+  # one-year cache, preflights answered at the edge.
+  ordered_cache_behavior {
+    path_pattern     = local.static_data_path_pattern
+    target_origin_id = local.pmtiles_s3_origin_id
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD"]
+
+    cache_policy_id            = aws_cloudfront_cache_policy.static_data.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.static_data.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.static_data_preflight.arn
+    }
+  }
+
   # PMTiles archives from S3. MUST stay ahead of the /api/v1/tiles/* entry in
   # the dynamic block below: CloudFront evaluates ordered behaviors in order,
   # and the first match wins.
