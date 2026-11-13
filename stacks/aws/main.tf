@@ -292,7 +292,7 @@ module "honua" {
     Limits__Connections__MaxConcurrentQueries  = "3"
 
     RateLimiting__Enabled                      = "true"
-    RateLimiting__GlobalRequestsPerMinute      = "60"
+    RateLimiting__GlobalRequestsPerMinute      = "300"
     Geoprocessing__Executors__MaxArtifactBytes = "1048576"
     # Allow the API Gateway custom domain as a valid host
     HostValidation__AllowedHosts__1 = "demo.honua.io"

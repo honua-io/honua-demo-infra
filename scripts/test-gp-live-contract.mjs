@@ -36,7 +36,7 @@ test("generated manifest governs only the bounded geometry.buffer process", asyn
   assert.equal(process.lifecycle.dismissConformanceClaimed, false);
   assert.deepEqual(process.requestBudget, {
     scope: "demo-api-key/global",
-    requestsPerWindow: 60,
+    requestsPerWindow: 300,
     windowSeconds: 60,
     resetPolicy: "fixed-window",
     responseHeaders: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
@@ -113,8 +113,8 @@ async function createHarness({ corruptSync = false } = {}) {
     });
 
     const rateHeaders = {
-      "x-ratelimit-limit": "60",
-      "x-ratelimit-remaining": "59",
+      "x-ratelimit-limit": "300",
+      "x-ratelimit-remaining": "299",
       "x-ratelimit-reset": "1893456000",
     };
     const send = (status, payload, contentType = "application/json", headers = {}) => {
@@ -205,7 +205,7 @@ function fixtureManifest() {
     output: { name: "outputFeatureLayer", kind: "FeatureLayer", mediaType: "application/geo+json" },
     requestBudget: {
       scope: "demo-api-key/global",
-      requestsPerWindow: 60,
+      requestsPerWindow: 300,
       windowSeconds: 60,
       resetPolicy: "fixed-window",
     },
