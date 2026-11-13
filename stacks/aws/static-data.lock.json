@@ -1,0 +1,67 @@
+{
+  "comment": "Static demo data served by the demo CDN under /demo-data/<prefix>/. Each archive is a release asset pinned by SHA-256; scripts/fetch-static-data.py downloads, verifies and extracts it before every plan, and static-data.tf uploads exactly the files listed here. A changed archive gets a new prefix, so published paths stay immutable.",
+  "archives": {
+    "maui-island-display/2026-11-11": {
+      "url": "https://github.com/honua-io/honua-samples/releases/download/maui-island-display-2026-11-11/maui-island-display.tar.gz",
+      "sha256": "653d52c17f460ed5ae9d227ff14a92ed6aad4b6a4b75d975602e3084c16094b5",
+      "files": {
+        "contours.pmtiles": {
+          "bytes": 10229368,
+          "sha256": "df5d290f32011874491d4068eed04bf74ed662532e8e4fbca899c9b31a512b95",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "dfirm.pmtiles": {
+          "bytes": 4824988,
+          "sha256": "5f25e2f91dc014567b342ad0f837226f787e3bdd4d8eb05228893589c96aa34c",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "parcels.pmtiles": {
+          "bytes": 18494778,
+          "sha256": "49aaa9188e2ab22bf6fc098a669d5e29be03a2e91a89eebfacacb9891f443f54",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "roads.pmtiles": {
+          "bytes": 2233213,
+          "sha256": "38d63aafb6c730a4ecaac6a3dc5150845bf09b62303ab4b12dc2d98013ecdb7e",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "tsunami.pmtiles": {
+          "bytes": 1529539,
+          "sha256": "66af8bc3c1b14bedf0a2b60ed2fee183f2d4dfc82ad7f63ec5011b86c7278c2b",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "zoning.pmtiles": {
+          "bytes": 5286007,
+          "sha256": "3c64aa64478522c99610f23d63d231f56d017a0fedbdca8774a88a7b60021b73",
+          "content_type": "application/vnd.pmtiles"
+        }
+      }
+    },
+    "publications/maui-county-parcels/20261113T122054Z": {
+      "url": "https://github.com/honua-io/honua-samples/releases/download/maui-county-parcels-20261113T122054Z/maui-county-parcels-20261113T122054Z.tar.gz",
+      "sha256": "c16f2e98d50c854c215d05124dc4cb8c1b389a241ab2f14e3444961be697aaa4",
+      "files": {
+        "descriptor.json": {
+          "bytes": 4640,
+          "sha256": "6dff1cfb6cc228e96443e3588da157ee693fdceb7100133df3bc6fe7d88c389f",
+          "content_type": "application/json"
+        },
+        "parcels.parquet": {
+          "bytes": 10179292,
+          "sha256": "abf7eb620e16ec1f60564a36a20c2bec0bff170f81e3d1716bfe088d302e9043",
+          "content_type": "application/vnd.apache.parquet"
+        },
+        "parcels.pmtiles": {
+          "bytes": 9215843,
+          "sha256": "775a1885fcbef944d2d83bcb66ec01d7bfaec4bd71e3c7a963318cdaf9bbd752",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "stac/maui-county-parcels.json": {
+          "bytes": 2247,
+          "sha256": "c4f2c987bf5a19bbc90d5c3c056cb84f6639f14c4624dcd36f68a3857edd833b",
+          "content_type": "application/json"
+        }
+      }
+    }
+  }
+}

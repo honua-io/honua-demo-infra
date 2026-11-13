@@ -16,3 +16,5 @@ stacks/aws-candidate-preflight/candidate-preflight.zip
 # Governed database-migration runner build/package artifacts.
 stacks/aws-db-migration-runner/build/
 stacks/aws-db-migration-runner/db-migration-runner.zip
+# Static demo data fetched from pinned release archives before every plan.
+stacks/aws/.static-data/
