@@ -291,6 +291,11 @@ module "honua" {
     Limits__Connections__MaxConnectionPoolSize = "3"
     Limits__Connections__MaxConcurrentQueries  = "3"
 
+    # Dense Maui parcel tiles exceed the server's default response limit:
+    # complete z10/z13 replays measured 725981/687760 bytes. Keep this demo-only
+    # override bounded at 1 MiB; do not truncate features to fit the default.
+    Limits__Tiles__MaxTileSize = "1048576"
+
     RateLimiting__Enabled                      = "true"
     RateLimiting__GlobalRequestsPerMinute      = "300"
     Geoprocessing__Executors__MaxArtifactBytes = "1048576"
