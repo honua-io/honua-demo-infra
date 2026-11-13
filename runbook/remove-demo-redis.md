@@ -21,8 +21,11 @@ The server Redis-removal owner retains ownership of those runtime changes.
 ## Saved plan and normal deployment
 
 Use `.github/workflows/terraform.yml`; no local apply or AWS CLI operations.
-Review its PR plan before merge, and the protected deployment's saved plan
-before human approval. Expect removal of the managed Redis replication group,
+Review its read-only PR plan before merge. The protected `demo` environment
+requires human approval before the apply job starts; that job then creates and
+applies its saved plan without a second approval. Approve that job only after
+reviewing the PR plan and confirming the image prerequisite. Inspect its plan
+report and convergence result after execution. Expect removal of the managed Redis replication group,
 subnet group, security group, generated auth password, connection secret/version,
 Redis Lambda egress and operation-key-ring IAM policy. Confirm the serving
 Lambda no longer has `ConnectionStrings__redis` or
