@@ -1,11 +1,9 @@
 ###############################################################################
 # ElastiCache Redis ownership when it is NOT wired into the serving Lambda
-# (var.wire_redis_connection = false). The demo sets it to true (wired on 2026-10-24 in #98,
-# unwired in #100 after honua-server#6558, re-wired once the fix shipped), so the module
-# owns the six objects and the resources below are count = 0; the moved blocks at the
-# bottom record the hand-back. #100 was never applied, so state already holds the objects
-# at the module addresses and these blocks move nothing. The file stays so the flip can be
-# reversed in a reviewed change.
+# (var.wire_redis_connection = false). The demo now disables both provisioning
+# and wiring; see runbook/remove-demo-redis.md for the compatible-image gate.
+# The generic resources and historical moved blocks remain for existing state.
+# The wired module owns the six objects until the reviewed removal is applied.
 #
 # Why this file exists
 # --------------------
@@ -34,7 +32,7 @@
 
 # ---------------------------------------------------------------------------
 # Operation key-ring certificate delivery for the WIRED case (honua-server#6500).
-# Inert while wire_redis_connection = false (the demo today): no env var, no
+# Inert while wire_redis_connection = false or enable_redis = false: no env var, no
 # IAM grant. When Redis is wired the Lambda receives only the secret
 # reference; the server resolves it with the function role at startup and
 # writes the PKCS#12 to a private temp file. The secret is operator-owned and

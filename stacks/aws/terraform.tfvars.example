@@ -51,16 +51,12 @@ route53_zone_id = "ZXXXXXXXXXXXXXXXXX"
 # sequence that adopts the already-live resources before any plan/apply.
 # ---------------------------------------------------------------------------
 
-# Redis — in-VPC ElastiCache. KEEP OFF for now: the aws-serverless module wires
-# ConnectionStrings__redis as an aws:secretsmanager: reference, but honua-server
-# resolves such references only for the Postgres connection, not for Redis
-# (Program.cs feeds the raw value to StackExchange's ConfigurationOptions.Parse) —
-# a version deployed with this ON crash-loops at startup ("Redis durable
-# coordination is required..."). Re-enable once honua-server supports secret
-# references for the Redis connection string (tracked in the server repo) or the
-# module gains an inline-string mode. The live env has never had Redis wired.
-# enable_redis    = true
-# redis_node_type = "cache.t3.micro"
+# Redis is optional. The demo removal preset disables both provisioning and
+# wiring; use a compatible serving image before applying that preset.
+# See runbook/remove-demo-redis.md for deployment prerequisites and plan review.
+# enable_redis          = false
+# wire_redis_connection = false
+# redis_node_type       = "cache.t3.micro"
 
 # Pro license via Secrets Manager. This is the ONLY line needed: the signed
 # envelope is staged out-of-band in Secrets Manager and adopted by ARN

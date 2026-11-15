@@ -88,12 +88,11 @@ local/hand-managed state, despite that having been true in the past (older
 revisions of the stack's own README describe a since-fixed state predating
 honua-iac#122).
 
-**Known drift**: Pro is adopted by ARN and Bedrock remains the only live
-out-of-band add-on. The legacy Redis replication group/subnet group/security
-group no longer exist. The 2026.1 preset deliberately enables Redis as a new
-managed resource for durable GP jobs and distributed request limits; the
-reviewed plan must show creates, never imports of the obsolete identities.
-`stacks/aws/README.md` → "Pro + AI demo drift" records the read-only evidence.
+**Redis removal (2026-11-13):** the demo preset disables provisioning and
+connection injection. Follow [the removal runbook](runbook/remove-demo-redis.md)
+for the compatible-image prerequisite, saved-plan review and deployment proof.
+The migration evidence below records an earlier state; its Redis-create
+instructions are superseded by this removal.
 
 ## Migration proof (honua-iac#126)
 
@@ -127,10 +126,9 @@ checkout, and confirmed:
   the state's last real apply (a sensitivity-marking behavior change on
   `environment.variables`), not a config difference.
 
-**Operator rule for the 2026.1 candidate**: do not import the deleted Redis
-identities. Supply the real `honua_admin_password`, review a saved plan that
-creates the new Redis resources and keeps Batch disabled, apply that exact
-plan, then bind readiness and GP canary evidence to the resulting candidate.
+**Current operator rule:** use the normal workflow and the Redis removal
+runbook. Do not import or recreate legacy Redis identities. Preserve the
+operator-owned key-ring secret and reject unrelated database replacement.
 
 ## Plan and apply
 

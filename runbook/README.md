@@ -13,9 +13,9 @@ honua-server backlog).
 > Applied-state notes beyond the runbook: geocoding infra (place index +
 > `geo.places` endpoint) is live and serving is on v35 — see
 > stacks/aws/vpc-endpoints.tf and honua-demo-infra#11 for the remaining
-> enablement items. The 2026.1 candidate now enables Redis for readiness,
-> durable GP jobs, and distributed rate limits; the live apply/canary receipt
-> remains required before that state is described as deployed.
+> enablement items. For the current Redis removal and compatible-image gate,
+> follow [Remove the demo Redis cache](remove-demo-redis.md). A saved-plan
+> apply and process canary remain required before removal is called deployed.
 
 > **Geocoding configuration change — not yet applied:** this stack selects the server's
 > built-in Nominatim (OpenStreetMap, `World` locator) default through the fck-nat egress.
@@ -108,7 +108,7 @@ needed — do not float on `trunk`.
 `foss4g-demo-readiness-20261024.md` records the observed live state before the
 FOSS4G NA booth (PMTiles 404, empty MapServer/ImageServer exports, Pro
 licensing) with CloudWatch evidence and the probe output.
-`exports-redis-prereq.md` is the operator procedure for wiring Redis so
-exports work again: the one key-ring certificate secret to create and the
-ready-to-flip Terraform diff. `foss4g-demo-apply-20261024.md` records the
+`exports-redis-prereq.md` preserves the historical Redis/key-ring setup record.
+Do not use it to re-enable Redis during routine recovery; the current procedure
+is [Remove the demo Redis cache](remove-demo-redis.md). `foss4g-demo-apply-20261024.md` records the
 2026-10-24 apply (#91 + #92), the post-apply probe and the H3 501 finding.
