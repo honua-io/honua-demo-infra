@@ -62,6 +62,32 @@
           "content_type": "application/json"
         }
       }
+    },
+    "publications/maui-county-parcels/20261117T170941Z": {
+      "url": "https://github.com/honua-io/honua-samples/releases/download/maui-county-parcels-20261117T170941Z/maui-county-parcels-20261117T170941Z.tar.gz",
+      "sha256": "005fae7f0d4ab3e21c9aa108d89315a02143d07c0715251c7bb53495ca9f101f",
+      "files": {
+        "descriptor.json": {
+          "bytes": 5850,
+          "sha256": "b6fc58ff47e2b099bf10b4075199602f6b8ad5e6cf12cb12d89ea15b356fccc7",
+          "content_type": "application/json"
+        },
+        "parcels.parquet": {
+          "bytes": 11287868,
+          "sha256": "2d30f8ccd359e9229f530a780fd9db0028dc157ea5ef48e91a5deaa86a0d2f85",
+          "content_type": "application/vnd.apache.parquet"
+        },
+        "parcels.pmtiles": {
+          "bytes": 14708588,
+          "sha256": "871e44fb53e1e1c23752b5405e72f427a17a05b56589e50f9f667ec64682c52c",
+          "content_type": "application/vnd.pmtiles"
+        },
+        "stac/maui-county-parcels.json": {
+          "bytes": 2734,
+          "sha256": "8cbbc713f8e4a1a86b1e8060e95a844963a50cc4621aa212cb7221552bb7d1c2",
+          "content_type": "application/json"
+        }
+      }
     }
   }
 }
