@@ -38,11 +38,14 @@ region                         = "us-west-2"
 route53_zone_id                = "Z089181827C9GKIKHXUTT"
 stac_seed_metadata_environment = "Production"
 
-# The serving image: the amd64 Lambda AOT build of honua-server trunk 574c804176d9 (contains
-# honua-server#6644, the #6558 fix) published by "Build & Publish Platform Images" run
-# 40540495543 to this region's ECR (tag trunk-574c804-lambda-aot-amd64). The function
-# architecture is x86_64 in main.tf and must match. Digest-pinned; bump with the server pin.
-honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
+# The serving image: the Redis-free amd64 Lambda AOT build of honua-server trunk 99c422646c4c,
+# published by "Build & Publish Platform Images" run 44958072387 to this region's ECR (tag
+# trunk-99c4226-lambda-aot-amd64; this is its runnable linux/amd64 child, the attested parent
+# is sha256:13c99531...). It keeps durable process jobs and package drafts in Postgres, so it
+# serves without Redis. It needs the 99c4226 migration set: apply this only after the governed
+# runner receipt (runbook/db-migrations-99c4226.md). The function architecture is x86_64 in
+# main.tf and must match. Digest-pinned; bump with the server pin.
+honua_image = "585192672263.dkr.ecr.us-west-2.amazonaws.com/honua-server@sha256:2ef00dc750c8222ed01694f52371bfd3e7b17cd12378ad6f2281efdde2bd2e76"
 
 # Studio AI — the demo runs Bedrock-backed generation.
 enable_studio_ai  = true
@@ -52,17 +55,19 @@ enable_bedrock_ai = true
 # Geocoding uses the server's compiled-in default, Nominatim (OpenStreetMap),
 # reached via the fck-nat egress. Amazon Location is not used.
 
-# Founder-directed Redis removal (2026-11-13): disable both provisioning and
-# connection injection. This removes the managed cache, its connection secret,
-# Redis egress and operation-key-ring IAM/env wiring in the normal saved plan.
-# Preserve the operator-owned key-ring secret documented in the historical
-# runbook/exports-redis-prereq.md; Terraform does not own that secret.
-# Before applying, follow runbook/remove-demo-redis.md: the old image pinned above
-# still needs Redis for durable process jobs. Bind a compatible image and canary
-# evidence to the same reviewed deployment; do not weaken the existing canary.
+# Founder-directed Redis removal (2026-11-13, applied in #132): keep both
+# provisioning and connection injection disabled. The managed cache, its
+# connection secret and Redis egress stay removed; only the preserved
+# operator-owned key-ring secret below is wired for Postgres durable jobs.
 enable_redis          = false
 wire_redis_connection = false
 enable_gp_batch       = false
+
+# The Redis-free image keeps the operation key ring in the system database and refuses to
+# start in Production without the key-ring certificate, so the operator-owned certificate
+# preserved by the Redis removal is wired again on its own (Pkcs12 secret reference plus a
+# GetSecretValue grant on exactly this ARN; no Redis).
+operation_key_ring_certificate_secret_arn = "arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/operation-key-ring-GDtfsQ"
 
 # Pro is adopted BY ARN — the module creates no secret and never reads the licence envelope, so
 # enabling it needs no secret material and no terraform import.

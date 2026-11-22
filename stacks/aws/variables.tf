@@ -118,16 +118,16 @@ variable "wire_redis_connection" {
   default     = true
 }
 
-# Redis operation key-ring certificate (honua-server#6500). A Redis-connected
-# Production server composes the durable operation secret channel and refuses
-# to start without this certificate. Lambda cannot mount a file, so the server
+# Operation key-ring certificate (honua-server#6500). A Production server
+# keeping durable operation secrets in Postgres or Redis refuses to start
+# without this certificate. Lambda cannot mount a file, so the server
 # resolves Operations__SecretChannel__KeyRingCertificatePkcs12 =
 # aws:secretsmanager:<arn> at startup (StartupConfigurationHelpers.
 # EnsureKeyRingCertificateMaterializedAsync, present in rc.1 199bce7). The
 # secret is OPERATOR-OWNED and never in Terraform state: see
 # runbook/exports-redis-prereq.md for how to create it.
 variable "operation_key_ring_certificate_secret_arn" {
-  description = "ARN of the EXISTING operator-owned Secrets Manager secret holding the Redis operation key-ring PKCS#12 bundle (base64 PKCS#12, or JSON {\"pkcs12\":\"<base64>\",\"password\":\"...\"}). Required when enable_redis and wire_redis_connection are both true; injected into the Lambda only as an aws:secretsmanager: reference, never as a value. Empty while Redis is unwired."
+  description = "ARN of the EXISTING operator-owned Secrets Manager secret holding the operation key-ring PKCS#12 bundle (base64 PKCS#12, or JSON {\"pkcs12\":\"<base64>\",\"password\":\"...\"}). Required for any Production image that keeps the key ring in Postgres or Redis; injected into the Lambda (with a GetSecretValue grant on exactly this ARN) only as an aws:secretsmanager: reference, never as a value, whenever it is set."
   type        = string
   default     = ""
 

@@ -31,29 +31,34 @@
 ###############################################################################
 
 # ---------------------------------------------------------------------------
-# Operation key-ring certificate delivery for the WIRED case (honua-server#6500).
-# Inert while wire_redis_connection = false or enable_redis = false: no env var, no
-# IAM grant. When Redis is wired the Lambda receives only the secret
-# reference; the server resolves it with the function role at startup and
-# writes the PKCS#12 to a private temp file. The secret is operator-owned and
-# created out of band (runbook/exports-redis-prereq.md); Terraform never reads
-# it. ~95 bytes of the 4096-byte Lambda environment budget.
+# Operation key-ring certificate delivery (honua-server#6500).
+# Inert while operation_key_ring_certificate_secret_arn = "": no env var, no
+# IAM grant. When set, the Lambda receives only the secret reference; the
+# server resolves it with the function role at startup and writes the PKCS#12
+# to a private temp file. The secret is operator-owned and created out of band
+# (runbook/exports-redis-prereq.md); Terraform never reads it. ~109 bytes of
+# the 4096-byte Lambda environment budget.
 # ---------------------------------------------------------------------------
 
 locals {
-  redis_wired = var.enable_redis && var.wire_redis_connection
   # arn:aws:secretsmanager:<region>:<acct>:secret:<name>-<6-char suffix> -> <name>
   operation_key_ring_secret_name = var.operation_key_ring_certificate_secret_arn == "" ? "" : regex("^arn:aws:secretsmanager:[^:]+:[0-9]{12}:secret:(.+)-[A-Za-z0-9]{6}$", var.operation_key_ring_certificate_secret_arn)[0]
-  operation_key_ring_environment = local.redis_wired ? {
-    # NAME form (same account and region), not the ARN: 54 bytes shorter, which
-    # the 4096-byte Lambda environment needs once Redis is wired. The server
-    # resolves either form; the IAM grant below still names the exact ARN.
+  # Redis-free servers (honua-server after the Postgres job substrate) keep the
+  # operation key ring in the system database and refuse to start in Production
+  # without this certificate whenever a Postgres DefaultConnection is set
+  # (OperationSecretKeyRingProtection.RequiresDurableChannelCertificate), so the
+  # certificate is wired whenever its ARN is set, independent of Redis.
+  operation_key_ring_wired       = var.operation_key_ring_certificate_secret_arn != ""
+  operation_key_ring_environment = local.operation_key_ring_wired ? {
+    # NAME form (same account and region), not the ARN: 54 bytes shorter of the
+    # 4096-byte Lambda environment. The server resolves either form; the IAM
+    # grant below still names the exact ARN.
     Operations__SecretChannel__KeyRingCertificatePkcs12 = "aws:secretsmanager:${local.operation_key_ring_secret_name}"
   } : {}
 }
 
 resource "aws_iam_role_policy" "lambda_operation_key_ring" {
-  count = local.redis_wired ? 1 : 0
+  count = local.operation_key_ring_wired ? 1 : 0
   name  = "${var.name_prefix}-${var.environment}-operation-key-ring"
   role  = local.honua_lambda_role_name
 
