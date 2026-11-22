@@ -1,6 +1,6 @@
 ###############################################################################
-# Immutable, no-trigger, migrations-only runner for the honua-server 574c804
-# pending set (Honua.Postgres 008, Honua.Server 136-140).
+# Immutable, no-trigger, migrations-only runner for the honua-server 99c4226
+# pending set (69 Honua.Server scripts, 141-224; one Contract script, 183).
 #
 # This root is deliberately isolated from primary application and preflight
 # state. It never manages RDS, the application Lambda, aliases, seed helpers,
@@ -43,7 +43,7 @@ locals {
   vpc_id             = "vpc-0ac1893d15caf97b8"
   vpc_cidr           = "10.0.0.0/16"
   private_subnet_ids = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
-  function_name      = "honua-demo-demo-db-migration-574c804"
+  function_name      = "honua-demo-demo-db-migration-99c4226"
   role_name          = "${local.function_name}-role"
   log_group_name     = "/aws/lambda/${local.function_name}"
   log_group_arn      = "arn:aws:logs:${local.region}:${local.account_id}:log-group:${local.log_group_name}"
@@ -82,7 +82,7 @@ resource "aws_iam_role" "runner" {
 }
 
 resource "aws_iam_role_policy" "runner" {
-  name = "fixed-db-migration-574c804"
+  name = "fixed-db-migration-99c4226"
   role = aws_iam_role.runner.id
 
   policy = jsonencode({
@@ -173,7 +173,7 @@ resource "aws_lambda_function" "runner" {
       EXPECTED_EXECUTED_SET_SHA256    = local.executed_sha256
       EXPECTED_PENDING_SET_SHA256     = local.pending_set_sha256
       EXPECTED_SOURCE_COMMIT          = local.source_commit
-      MIGRATION_OPERATION             = "apply-574c804"
+      MIGRATION_OPERATION             = "apply-99c4226"
       SOURCE_HANDLER_SHA256           = local.handler_sha256
       SOURCE_MANIFEST_SHA256          = local.manifest_sha256
     }
@@ -194,11 +194,11 @@ resource "aws_lambda_function" "runner" {
 }
 
 output "db_migration_runner_qualified_arn" {
-  description = "Immutable qualified ARN for the fixed 574c804 runner; never invoke an unqualified ARN."
+  description = "Immutable qualified ARN for the fixed 99c4226 runner; never invoke an unqualified ARN."
   value       = aws_lambda_function.runner.qualified_arn
 }
 
 output "db_migration_runner_version" {
-  description = "Immutable published version of the fixed 574c804 runner."
+  description = "Immutable published version of the fixed 99c4226 runner."
   value       = aws_lambda_function.runner.version
 }

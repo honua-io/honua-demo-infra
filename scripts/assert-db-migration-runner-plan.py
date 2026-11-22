@@ -6,7 +6,7 @@ from pathlib import Path
 
 MANAGED={"aws_cloudwatch_log_group.runner","aws_iam_role.runner","aws_iam_role_policy.runner","aws_security_group.runner","aws_lambda_function.runner"}
 DATA={"data.aws_iam_policy_document.assume","data.aws_secretsmanager_secret.db_connection"}
-ARCHIVE_BASE64_SHA256="1PEpdyk9YjKD05zNwsVkSQnik6OaEFTzkdClncPV9BY="
+ARCHIVE_BASE64_SHA256="IhyqYeKMcW/KS1KGJnovA3wpJ9BaxHPJMY03vgMZmC0="
 def req(v,m):
     if not v: raise RuntimeError(m)
 def main():
@@ -16,7 +16,13 @@ def main():
     for k in ("actions","action_invocations","action_triggers"): req(not plan.get(k),f"plan contains {k}")
     changes={x["address"]:x for x in plan.get("resource_changes",[])}
     req(set(changes)==MANAGED,f"managed plan graph drifted: {sorted(changes)}")
-    req(all(x["change"]["actions"]==["create"] for x in changes.values()),"runner deployment is not exact create-only")
+    # A new pending set renames the four named runner resources while the prefix-named security
+    # group stays unchanged (no-op) against an existing isolated state; an empty state creates all 5.
+    sg_actions=tuple(changes["aws_security_group.runner"]["change"]["actions"])
+    named_actions={tuple(changes[a]["change"]["actions"]) for a in MANAGED - {"aws_security_group.runner"}}
+    valid_create=named_actions=={("create",)} and sg_actions==("create",)
+    valid_replace=named_actions=={("delete","create")} and sg_actions in (("no-op",),("delete","create"))
+    req(valid_create or valid_replace,f"runner deployment is not an exact create or replacement: named={sorted(named_actions)} sg={sg_actions}")
     cfg=plan["configuration"]["root_module"]["resources"]
     req({x["address"] for x in cfg}==MANAGED|DATA,"configuration graph drifted")
     req(not any(x.get("provider_config_key","") != "aws" for x in cfg),"provider alias drifted")
@@ -28,7 +34,11 @@ def main():
     req(fn["publish"] is True and fn["reserved_concurrent_executions"]==1 and fn["timeout"]==900,"runner execution bounds drifted")
     req(fn["architectures"]==["arm64"] and fn["runtime"]=="python3.13" and fn["handler"]=="handler.handler","runner runtime drifted")
     req(fn["filename"]=="./db-migration-runner.zip" and fn["source_code_hash"]==ARCHIVE_BASE64_SHA256,"runner canonical archive digest drifted")
-    req(len(fn["vpc_config"])==1 and len(fn["vpc_config"][0]["subnet_ids"])==3 and "security_group_ids" not in fn["vpc_config"][0],"runner VPC planned values drifted")
+    if sg_actions==("no-op",):
+        sg_id=changes["aws_security_group.runner"]["change"]["after"].get("id")
+        req(type(sg_id) is str and sg_id.startswith("sg-") and len(fn["vpc_config"])==1 and len(fn["vpc_config"][0]["subnet_ids"])==3 and fn["vpc_config"][0].get("security_group_ids")==[sg_id],"runner VPC planned values drifted")
+    else:
+        req(len(fn["vpc_config"])==1 and len(fn["vpc_config"][0]["subnet_ids"])==3 and "security_group_ids" not in fn["vpc_config"][0],"runner VPC planned values drifted")
     vpc_expression=configured["aws_lambda_function.runner"]["expressions"]["vpc_config"]
     req(vpc_expression==[{"security_group_ids":{"references":["aws_security_group.runner.id","aws_security_group.runner"]},"subnet_ids":{"references":["local.private_subnet_ids"]}}],"runner VPC configuration reference drifted")
     req(set(plan.get("output_changes",{}))=={"db_migration_runner_qualified_arn","db_migration_runner_version"},"output set drifted")

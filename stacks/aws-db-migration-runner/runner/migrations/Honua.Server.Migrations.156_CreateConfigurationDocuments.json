@@ -1,0 +1,20 @@
+{
+  "name": "Honua.Server.Migrations.156_CreateConfigurationDocuments.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".configuration_generation (\n    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),\n    generation BIGINT NOT NULL DEFAULT 0 CHECK (generation >= 0)\n)",
+    "INSERT INTO \"honua\".configuration_generation (singleton) VALUES (TRUE) ON CONFLICT DO NOTHING",
+    "CREATE TABLE IF NOT EXISTS \"honua\".configuration_documents (\n    kind TEXT COLLATE \"C\" NOT NULL,\n    key TEXT COLLATE \"C\" NOT NULL,\n    payload BYTEA NOT NULL,\n    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),\n    PRIMARY KEY (kind, key)\n)",
+    "CREATE OR REPLACE FUNCTION \"honua\".advance_configuration_generation() RETURNS trigger\nLANGUAGE plpgsql AS $$\nBEGIN\n    UPDATE \"honua\".configuration_generation SET generation = generation + 1 WHERE singleton;\n    RETURN NULL;\nEND;\n$$",
+    "CREATE OR REPLACE TRIGGER configuration_documents_generation AFTER INSERT OR UPDATE OR DELETE\n    ON \"honua\".configuration_documents FOR EACH ROW\n    EXECUTE FUNCTION \"honua\".advance_configuration_generation()",
+    "CREATE OR REPLACE TRIGGER metadata_current_generation AFTER INSERT OR UPDATE OR DELETE\n    ON \"honua\".metadata_v2_current FOR EACH ROW\n    EXECUTE FUNCTION \"honua\".advance_configuration_generation()"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.156_CreateConfigurationDocuments.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "6FD2E5884067FAC0A868954FF1E3513DCBE0D6184088A146589F3D59A5453715",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.configuration_generation (\n    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),\n    generation BIGINT NOT NULL DEFAULT 0 CHECK (generation >= 0)\n);\nINSERT INTO $HonuaSchema$.configuration_generation (singleton) VALUES (TRUE) ON CONFLICT DO NOTHING;\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.configuration_documents (\n    kind TEXT COLLATE \"C\" NOT NULL,\n    key TEXT COLLATE \"C\" NOT NULL,\n    payload BYTEA NOT NULL,\n    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),\n    PRIMARY KEY (kind, key)\n);\n\nCREATE OR REPLACE FUNCTION $HonuaSchema$.advance_configuration_generation() RETURNS trigger\nLANGUAGE plpgsql AS $$\nBEGIN\n    UPDATE $HonuaSchema$.configuration_generation SET generation = generation + 1 WHERE singleton;\n    RETURN NULL;\nEND;\n$$;\nCREATE OR REPLACE TRIGGER configuration_documents_generation AFTER INSERT OR UPDATE OR DELETE\n    ON $HonuaSchema$.configuration_documents FOR EACH ROW\n    EXECUTE FUNCTION $HonuaSchema$.advance_configuration_generation();\n\nCREATE OR REPLACE TRIGGER metadata_current_generation AFTER INSERT OR UPDATE OR DELETE\n    ON $HonuaSchema$.metadata_v2_current FOR EACH ROW\n    EXECUTE FUNCTION $HonuaSchema$.advance_configuration_generation();\n"
+  }
+}

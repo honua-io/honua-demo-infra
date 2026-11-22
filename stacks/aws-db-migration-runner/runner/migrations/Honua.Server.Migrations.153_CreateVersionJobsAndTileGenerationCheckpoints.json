@@ -1,0 +1,20 @@
+{
+  "name": "Honua.Server.Migrations.153_CreateVersionJobsAndTileGenerationCheckpoints.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Branch-version reconcile and post jobs (ADR-0082 row D5). stage is 0 pending, 1 running and\n-- 2 finished; a save only ever raises it.\nCREATE TABLE IF NOT EXISTS \"honua\".version_jobs (\n    job_id     UUID PRIMARY KEY,\n    stage      SMALLINT NOT NULL CHECK (stage BETWEEN 0 AND 2),\n    record     JSON NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS idx_version_jobs_expires\n    ON \"honua\".version_jobs (expires_at)",
+    "-- Resume points of tile-cache seed and warm generations (ADR-0082 row D6).\nCREATE TABLE IF NOT EXISTS \"honua\".tile_generation_checkpoints (\n    generation_id TEXT COLLATE \"C\" PRIMARY KEY CHECK (length(generation_id) BETWEEN 1 AND 512),\n    record        JSON NOT NULL,\n    expires_at    TIMESTAMPTZ NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS idx_tile_generation_checkpoints_expires\n    ON \"honua\".tile_generation_checkpoints (expires_at)",
+    "COMMENT ON TABLE \"honua\".version_jobs IS 'Branch-version reconcile and post jobs; stage is derived from the status in record and only ever rises.'",
+    "COMMENT ON TABLE \"honua\".tile_generation_checkpoints IS 'The last completed metatile block of each tile-cache generation, from which a retry resumes.'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.153_CreateVersionJobsAndTileGenerationCheckpoints.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "661CDF7CB48D541DC9A406CB8D73022D3A0A78AA22F5A158751A26D9B9BDFBA2",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Branch-version reconcile and post jobs (ADR-0082 row D5). stage is 0 pending, 1 running and\n-- 2 finished; a save only ever raises it.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.version_jobs (\n    job_id     UUID PRIMARY KEY,\n    stage      SMALLINT NOT NULL CHECK (stage BETWEEN 0 AND 2),\n    record     JSON NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL\n);\nCREATE INDEX IF NOT EXISTS idx_version_jobs_expires\n    ON $HonuaSchema$.version_jobs (expires_at);\n\n-- Resume points of tile-cache seed and warm generations (ADR-0082 row D6).\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.tile_generation_checkpoints (\n    generation_id TEXT COLLATE \"C\" PRIMARY KEY CHECK (length(generation_id) BETWEEN 1 AND 512),\n    record        JSON NOT NULL,\n    expires_at    TIMESTAMPTZ NOT NULL\n);\nCREATE INDEX IF NOT EXISTS idx_tile_generation_checkpoints_expires\n    ON $HonuaSchema$.tile_generation_checkpoints (expires_at);\n\nCOMMENT ON TABLE $HonuaSchema$.version_jobs IS 'Branch-version reconcile and post jobs; stage is derived from the status in record and only ever rises.';\nCOMMENT ON TABLE $HonuaSchema$.tile_generation_checkpoints IS 'The last completed metatile block of each tile-cache generation, from which a retry resumes.';\n"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Honua.Server.Migrations.207_CreateAnalysisReports.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".analysis_reports (\n    job_id TEXT COLLATE \"C\" NOT NULL,\n    contract_version TEXT COLLATE \"C\" NOT NULL,\n    body JSON NOT NULL,\n    stored_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (job_id, contract_version)\n)",
+    "CREATE INDEX IF NOT EXISTS idx_analysis_reports_expiry\n    ON \"honua\".analysis_reports (expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_analysis_reports_stored\n    ON \"honua\".analysis_reports (stored_at, job_id, contract_version)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.207_CreateAnalysisReports.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "5D38EF4822C5C2AE6F9904C3EA5468865C651BB585A2E8DE3C35C215C3EA2506",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.analysis_reports (\n    job_id TEXT COLLATE \"C\" NOT NULL,\n    contract_version TEXT COLLATE \"C\" NOT NULL,\n    body JSON NOT NULL,\n    stored_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (job_id, contract_version)\n);\n\nCREATE INDEX IF NOT EXISTS idx_analysis_reports_expiry\n    ON $HonuaSchema$.analysis_reports (expires_at);\nCREATE INDEX IF NOT EXISTS idx_analysis_reports_stored\n    ON $HonuaSchema$.analysis_reports (stored_at, job_id, contract_version);\n"
+  }
+}

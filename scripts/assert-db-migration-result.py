@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "stacks/aws-db-migration-runner/runner/migration-manifest.v2.json").read_text(encoding="utf-8"))
 NAMES = [entry["name"] for entry in MANIFEST["scripts"]]
 SHA = re.compile(r"^[0-9a-f]{64}$")
-EXPECTED_RUNNER_CODE_SHA256 = "1PEpdyk9YjKD05zNwsVkSQnik6OaEFTzkdClncPV9BY="
+EXPECTED_RUNNER_CODE_SHA256 = "IhyqYeKMcW/KS1KGJnovA3wpJ9BaxHPJMY03vgMZmC0="
 
 
 def require(value: bool, message: str) -> None:
@@ -33,10 +33,10 @@ def sha(path: Path) -> str:
 
 def expected_payload() -> dict:
     return {
-        "schemaVersion": "honua-db-migration-result-v2", "operation": "apply-574c804", "status": "passed",
+        "schemaVersion": "honua-db-migration-result-v2", "operation": "apply-99c4226", "status": "passed",
         "sourceCommit": MANIFEST["sourceCommit"], "candidateImageDigest": MANIFEST["candidateImageDigest"],
         "migration": {"executedScriptsSha256": MANIFEST["executedScriptsSha256"], "appliedScriptCount": len(NAMES),
-          "appliedScripts": NAMES, "contractScripts": [], "contractApprovalNonce": None, "pendingScripts": [],
+          "appliedScripts": NAMES, "contractScripts": [entry["name"] for entry in MANIFEST["scripts"] if entry["phase"] == "Contract"], "contractApprovalNonce": MANIFEST["contractApprovalNonce"], "pendingScripts": [],
           "pendingScriptsSha256": MANIFEST["pendingScriptsSha256"], "readerCompatibilityDeclarations": len(NAMES),
           "journalContinuous": True},
     }

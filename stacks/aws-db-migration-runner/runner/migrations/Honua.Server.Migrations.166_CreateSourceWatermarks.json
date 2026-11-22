@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.166_CreateSourceWatermarks.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Source progress is retained until explicitly cleared by its pipeline.\nCREATE TABLE IF NOT EXISTS \"honua\".source_watermarks (\n    pipeline_id TEXT COLLATE \"C\" NOT NULL,\n    source_id TEXT COLLATE \"C\" NOT NULL,\n    record JSONB NOT NULL,\n    -- PostgreSQL timestamps have microsecond precision; source progress can differ by one .NET tick.\n    timestamp_ticks BIGINT,\n    PRIMARY KEY (pipeline_id, source_id)\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.166_CreateSourceWatermarks.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "DA8948EDAAE8D5B1B059AFE63578E46741351EEF01361B4AD154E1490C5ECCDF",
+    "minReaderSchema": 0,
+    "scriptText": "-- Source progress is retained until explicitly cleared by its pipeline.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.source_watermarks (\n    pipeline_id TEXT COLLATE \"C\" NOT NULL,\n    source_id TEXT COLLATE \"C\" NOT NULL,\n    record JSONB NOT NULL,\n    -- PostgreSQL timestamps have microsecond precision; source progress can differ by one .NET tick.\n    timestamp_ticks BIGINT,\n    PRIMARY KEY (pipeline_id, source_id)\n);\n"
+  }
+}

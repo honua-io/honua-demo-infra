@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.152_IndexAdminApiKeyExpiry.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- The retention sweep deletes expired approved-operation credentials by this index (ADR-0082 row B12).\nCREATE INDEX IF NOT EXISTS idx_admin_api_keys_expires\n    ON \"honua\".admin_api_keys (expires_at) WHERE expires_at IS NOT NULL"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.152_IndexAdminApiKeyExpiry.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "4B6D42BFC5B8AF791EBA9D3C5592F9AB4DB16B1BA2BC9E02889D26F7482D02E8",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- The retention sweep deletes expired approved-operation credentials by this index (ADR-0082 row B12).\nCREATE INDEX IF NOT EXISTS idx_admin_api_keys_expires\n    ON $HonuaSchema$.admin_api_keys (expires_at) WHERE expires_at IS NOT NULL;\n"
+  }
+}

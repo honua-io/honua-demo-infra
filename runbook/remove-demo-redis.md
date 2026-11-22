@@ -8,15 +8,21 @@ migration addresses remain available for existing state.
 
 ## Deployment prerequisite
 
-The committed serving image is server `574c804176d9`, published before the
-Postgres durable-job changes. It supports Redis-absent startup and explicit
-node-local event storage, but still composes durable process jobs from Redis.
-Removing Redis with that image would lose the existing async process journey.
-Use an already-published, approved Lambda AOT amd64 image with the required
-Postgres-backed job substrate and Redis-free operation/key protection support.
-Record its source and digest in the same deployment change. Do not select an
-unverified image, disable assertions, or treat startup readiness alone as proof.
-The server Redis-removal owner retains ownership of those runtime changes.
+The Redis removal is applied (terraform run 44871357160), but the serving
+image is still server `574c804176d9`, published before the Postgres
+durable-job changes. It starts without Redis but still composes durable
+process jobs and package drafts from Redis, so Studio package drafts answer
+503. The compatible image is the Redis-free amd64 Lambda AOT build of trunk
+`99c422646c4c` (`trunk-99c4226-lambda-aot-amd64`,
+`sha256:2ef00dc750c8222ed01694f52371bfd3e7b17cd12378ad6f2281efdde2bd2e76`,
+"Build & Publish Platform Images" run 44958072387). It needs 69 migrations the
+demo database does not have, so it goes live only after the governed runner
+applies them: follow [Migrations for honua-server 99c4226](db-migrations-99c4226.md),
+then the `honua_image` repin (which also re-wires the preserved operator-owned
+operation key-ring secret independent of Redis, since Postgres durable jobs
+require it in Production). Do not select an unverified image,
+disable assertions, or treat startup readiness alone as proof. The server
+Redis-removal owner retains ownership of those runtime changes.
 
 ## Saved plan and normal deployment
 

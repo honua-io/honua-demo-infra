@@ -1,8 +1,8 @@
 {
   "schemaVersion": "honua-db-migration-runner-manifest-v2",
-  "operation": "apply-574c804",
-  "sourceCommit": "574c804176d969550a8e3002e0ebcc5b12df6893",
-  "candidateImageDigest": "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e",
+  "operation": "apply-99c4226",
+  "sourceCommit": "99c422646c4cd246a73e9b65efd00e9e36724587",
+  "candidateImageDigest": "sha256:2ef00dc750c8222ed01694f52371bfd3e7b17cd12378ad6f2281efdde2bd2e76",
   "executedScripts": [
     "Honua.Postgres.Migrations.001_CreateRasterTables.sql",
     "Honua.Postgres.Migrations.002_AddRasterAcquisitionDate.sql",
@@ -11,6 +11,7 @@
     "Honua.Postgres.Migrations.005_CompleteLateRasterProvisioning.sql",
     "Honua.Postgres.Migrations.006_AddRasterTileRendererProvenance.sql",
     "Honua.Postgres.Migrations.007_AddRasterSecondBandAlpha.sql",
+    "Honua.Postgres.Migrations.008_AddRasterSamplingFunctions.sql",
     "Honua.Server.Migrations.001_CreateHonuaSchema.sql",
     "Honua.Server.Migrations.002_CreateAttachmentsTable.sql",
     "Honua.Server.Migrations.003_CreateRelationshipsTable.sql",
@@ -161,47 +162,430 @@
     "Honua.Server.Migrations.132_IndexManagedWorkspaceStreamRetention.sql",
     "Honua.Server.Migrations.133_CreatePortalSharing.sql",
     "Honua.Server.Migrations.134_VersionCanonicalDeployments.sql",
-    "Honua.Server.Migrations.135_RecordMigrationReaderCompatibility.sql"
+    "Honua.Server.Migrations.135_RecordMigrationReaderCompatibility.sql",
+    "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
+    "Honua.Server.Migrations.137_CaptureFeatureChangeCommittedImage.sql",
+    "Honua.Server.Migrations.138_CreateJobArtifactImportReceipt.sql",
+    "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
+    "Honua.Server.Migrations.140_CreateAiExecutionAdmission.sql"
   ],
-  "executedScriptsSha256": "9b9cbb998176d159b278e5a57515aeaed3e37c490943585089a6e974cb02cc33",
+  "executedScriptsSha256": "b5bbb10c11ce58f33b6a1d92e4228544fa9728c30b75192f36770f4cf5dd8903",
   "scripts": [
     {
-      "name": "Honua.Postgres.Migrations.008_AddRasterSamplingFunctions.sql",
-      "file": "Honua.Postgres.Migrations.008_AddRasterSamplingFunctions.json",
+      "name": "Honua.Server.Migrations.141_CreateImportedDatasetSpatialMetadata.sql",
+      "file": "Honua.Server.Migrations.141_CreateImportedDatasetSpatialMetadata.json",
       "phase": "Expand",
-      "sha256": "26b85f588ce78d4439a5bc557bc133b6b175ee4a2df29a21de7ea038acc7bf5e"
+      "sha256": "450bbe2efcd1ec02ad8dbc894adcb365063ba878974842ab0790d2449958d794"
     },
     {
-      "name": "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
-      "file": "Honua.Server.Migrations.136_CreateAdminApiKeys.json",
+      "name": "Honua.Server.Migrations.142_CreateAiFinancialAccounting.sql",
+      "file": "Honua.Server.Migrations.142_CreateAiFinancialAccounting.json",
       "phase": "Expand",
-      "sha256": "73fefd2c005553d711e36b2aa511b89ee68d925ca70a1cb12a5a11afecf08231"
+      "sha256": "07d4acf0b45248c7844cf178d486ee1009f869c24cf205bffd0bf6d9cca369df"
     },
     {
-      "name": "Honua.Server.Migrations.137_CaptureFeatureChangeCommittedImage.sql",
-      "file": "Honua.Server.Migrations.137_CaptureFeatureChangeCommittedImage.json",
+      "name": "Honua.Server.Migrations.143_PromoteImportTypedColumns.sql",
+      "file": "Honua.Server.Migrations.143_PromoteImportTypedColumns.json",
       "phase": "Expand",
-      "sha256": "65460ffebde5c103ee935e7a573624956848bc346c7d5e84d4eb81c9167e3806"
+      "sha256": "0ea6abc162638595e3885aaf39f9869fa6ef97d3f9b35c3759ba01d23d88e5c4"
     },
     {
-      "name": "Honua.Server.Migrations.138_CreateJobArtifactImportReceipt.sql",
-      "file": "Honua.Server.Migrations.138_CreateJobArtifactImportReceipt.json",
+      "name": "Honua.Server.Migrations.144_RenameGeoServicesRestSourceKind.sql",
+      "file": "Honua.Server.Migrations.144_RenameGeoServicesRestSourceKind.json",
       "phase": "Expand",
-      "sha256": "93700d3ee92cf874c93bf26f84e01307e717dc15efd51cec0017958439acd611"
+      "sha256": "f9155e8f60f2866795227d5053d0ef84ca158894c1194298ef6ee3e31bbbf177"
     },
     {
-      "name": "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
-      "file": "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.json",
+      "name": "Honua.Server.Migrations.145_ProtectImportDependencies.sql",
+      "file": "Honua.Server.Migrations.145_ProtectImportDependencies.json",
       "phase": "Expand",
-      "sha256": "3bbe524be063f742adb7716d08cd6783a2e8e5933f9e5bf47c0a90c09234d855"
+      "sha256": "ce6145b33480a4099f253f7287dfa5f20313fcb5f4a4229ba12e1b4c6f8c2da5"
     },
     {
-      "name": "Honua.Server.Migrations.140_CreateAiExecutionAdmission.sql",
-      "file": "Honua.Server.Migrations.140_CreateAiExecutionAdmission.json",
+      "name": "Honua.Server.Migrations.146_AddMigrationBatchPublicationTarget.sql",
+      "file": "Honua.Server.Migrations.146_AddMigrationBatchPublicationTarget.json",
       "phase": "Expand",
-      "sha256": "ee630df804b2055a64d14625b76013ae5b0967cf1db698b8ee3fe6e26360be47"
+      "sha256": "a92f80a7efa52087ccf6aee54af9039c52bf7c22fd2f9e45fded005e26aa2ea0"
+    },
+    {
+      "name": "Honua.Server.Migrations.147_CreateJobSubstrate.sql",
+      "file": "Honua.Server.Migrations.147_CreateJobSubstrate.json",
+      "phase": "Expand",
+      "sha256": "4c1f26976bc100427154ae08b11a5df6b09531989c60d7934351837f03d72a24"
+    },
+    {
+      "name": "Honua.Server.Migrations.148_CreateControlPlaneState.sql",
+      "file": "Honua.Server.Migrations.148_CreateControlPlaneState.json",
+      "phase": "Expand",
+      "sha256": "5f172a88069c47856e22fd701ba3035044318a4c3be0c37983ef7d704116a18b"
+    },
+    {
+      "name": "Honua.Server.Migrations.149_CreateSecurityState.sql",
+      "file": "Honua.Server.Migrations.149_CreateSecurityState.json",
+      "phase": "Expand",
+      "sha256": "1f040c75f22460c2dd7ab92a9b1f82572a31fc057aa80f0ac939ad7b6dd96f98"
+    },
+    {
+      "name": "Honua.Server.Migrations.150_CreateOAuthClientsAndOperationProgress.sql",
+      "file": "Honua.Server.Migrations.150_CreateOAuthClientsAndOperationProgress.json",
+      "phase": "Expand",
+      "sha256": "6a5dcaf23d0a1ce58df070320e9ec8b4f8db0c71ea5c2b4528513ee959d95d9d"
+    },
+    {
+      "name": "Honua.Server.Migrations.151_CreateCdnReleaseRecord.sql",
+      "file": "Honua.Server.Migrations.151_CreateCdnReleaseRecord.json",
+      "phase": "Expand",
+      "sha256": "0226eb31b86ddbacb8b849a1a844ce6da803cff15a527136c56c5ac1b147c17f"
+    },
+    {
+      "name": "Honua.Server.Migrations.152_IndexAdminApiKeyExpiry.sql",
+      "file": "Honua.Server.Migrations.152_IndexAdminApiKeyExpiry.json",
+      "phase": "Expand",
+      "sha256": "881f5dbf6818156364900a2f68630755cc16b64f28c779d6258ef20d3acf5092"
+    },
+    {
+      "name": "Honua.Server.Migrations.153_CreateVersionJobsAndTileGenerationCheckpoints.sql",
+      "file": "Honua.Server.Migrations.153_CreateVersionJobsAndTileGenerationCheckpoints.json",
+      "phase": "Expand",
+      "sha256": "dfff14c739e8e1810c4401996c96860d0ffdd1d1814c66972de12b16989f1baf"
+    },
+    {
+      "name": "Honua.Server.Migrations.154_CreatePackageDraftsAndMcpSessions.sql",
+      "file": "Honua.Server.Migrations.154_CreatePackageDraftsAndMcpSessions.json",
+      "phase": "Expand",
+      "sha256": "b5e49de19c866c383d651cd63e99daaeee90a06dc9d40941fc87075eb9a2de00"
+    },
+    {
+      "name": "Honua.Server.Migrations.155_CreateAgentWorkspaceIdentities.sql",
+      "file": "Honua.Server.Migrations.155_CreateAgentWorkspaceIdentities.json",
+      "phase": "Expand",
+      "sha256": "83cb510ebb426ff549489ebe317d1f5588f315f5f1b059ddf3e23e31e1dd8d74"
+    },
+    {
+      "name": "Honua.Server.Migrations.155_CreateMetadataFieldHistory.sql",
+      "file": "Honua.Server.Migrations.155_CreateMetadataFieldHistory.json",
+      "phase": "Expand",
+      "sha256": "28b8e5e84c62d8f59261acbbd229e7d8cc5e2e609c7ee62d8fcf67ef40b56f6e"
+    },
+    {
+      "name": "Honua.Server.Migrations.156_CreateConfigurationDocuments.sql",
+      "file": "Honua.Server.Migrations.156_CreateConfigurationDocuments.json",
+      "phase": "Expand",
+      "sha256": "a1a79ece6e986e0a587d9be58d3b6b41e1e3ff615136e2ed1d5625cd8a6d8a28"
+    },
+    {
+      "name": "Honua.Server.Migrations.157_FeatureChangeRealtimeStream.sql",
+      "file": "Honua.Server.Migrations.157_FeatureChangeRealtimeStream.json",
+      "phase": "Expand",
+      "sha256": "d57e63827d6a7da7dda2bdef4e28b8909bfb83af4fa30d1d4e39950f09b1835d"
+    },
+    {
+      "name": "Honua.Server.Migrations.158_CreateRealtimeEventLog.sql",
+      "file": "Honua.Server.Migrations.158_CreateRealtimeEventLog.json",
+      "phase": "Expand",
+      "sha256": "4ab618d42e10356e7f9d522657f5a6a593a877a3b36402eb6a7aeca82b6ca970"
+    },
+    {
+      "name": "Honua.Server.Migrations.161_CreateOpsExternalEvents.sql",
+      "file": "Honua.Server.Migrations.161_CreateOpsExternalEvents.json",
+      "phase": "Expand",
+      "sha256": "ed75b3e72d97f24a57dbadb4de99ae168872e0ddf39ec8ea5bdea51ac64801b4"
+    },
+    {
+      "name": "Honua.Server.Migrations.161_CreateOpsNotificationSchedules.sql",
+      "file": "Honua.Server.Migrations.161_CreateOpsNotificationSchedules.json",
+      "phase": "Expand",
+      "sha256": "faa7d426787db92dcd89efd13d604e56cffb7fe767d389071ac7668101e26139"
+    },
+    {
+      "name": "Honua.Server.Migrations.161_PublishSavedMapOperationsToRealtime.sql",
+      "file": "Honua.Server.Migrations.161_PublishSavedMapOperationsToRealtime.json",
+      "phase": "Expand",
+      "sha256": "0bbca41ac8993a254025b0dc7dafae1ae98ca9e4f26c9e2676896cfe07f58135"
+    },
+    {
+      "name": "Honua.Server.Migrations.162_CreateCatalogActivationWatches.sql",
+      "file": "Honua.Server.Migrations.162_CreateCatalogActivationWatches.json",
+      "phase": "Expand",
+      "sha256": "836caa594def2a474f6730952d36e71e9b79b46364c62fd3e0ad2e3c4de67915"
+    },
+    {
+      "name": "Honua.Server.Migrations.162_CreateStudioDraftRevisions.sql",
+      "file": "Honua.Server.Migrations.162_CreateStudioDraftRevisions.json",
+      "phase": "Expand",
+      "sha256": "cc0a1675d2c3fb959394662013818130badf2e0b4ac82c83fe1a68351a7a6076"
+    },
+    {
+      "name": "Honua.Server.Migrations.163_CreateCdnDeploymentPurges.sql",
+      "file": "Honua.Server.Migrations.163_CreateCdnDeploymentPurges.json",
+      "phase": "Expand",
+      "sha256": "773b988188dddf3a12112c035fe1a36b5da1239d90b242233b4218e8661cbc54"
+    },
+    {
+      "name": "Honua.Server.Migrations.165_CreateExternalLayerChanges.sql",
+      "file": "Honua.Server.Migrations.165_CreateExternalLayerChanges.json",
+      "phase": "Expand",
+      "sha256": "db0db7b95700814bd02ae3044c264a9c028130bf94a3d64f8e4e84f30ddc2c96"
+    },
+    {
+      "name": "Honua.Server.Migrations.166_CreateSourceWatermarks.sql",
+      "file": "Honua.Server.Migrations.166_CreateSourceWatermarks.json",
+      "phase": "Expand",
+      "sha256": "fbb28454e835ff1ffa6bb28250c50f804fdad9dfe6bf9182421c79d4299f0419"
+    },
+    {
+      "name": "Honua.Server.Migrations.167_CreateWorkflowStores.sql",
+      "file": "Honua.Server.Migrations.167_CreateWorkflowStores.json",
+      "phase": "Expand",
+      "sha256": "7703117043e99303ebbbd9e844dea0be9fba09998469695c7ebe96718fdea358"
+    },
+    {
+      "name": "Honua.Server.Migrations.168_AddAgentAuditActor.sql",
+      "file": "Honua.Server.Migrations.168_AddAgentAuditActor.json",
+      "phase": "Expand",
+      "sha256": "247271944ea031e477c473428be397388587946b41a338055bcb4cafab226572"
+    },
+    {
+      "name": "Honua.Server.Migrations.169_CreateOpsIncidentObservations.sql",
+      "file": "Honua.Server.Migrations.169_CreateOpsIncidentObservations.json",
+      "phase": "Expand",
+      "sha256": "9fa914722e882500eef0314ea85d4ee1b8748eb5c7351451b40dfaee1bbb40a8"
+    },
+    {
+      "name": "Honua.Server.Migrations.170_CreateAiMonthlyActorSpend.sql",
+      "file": "Honua.Server.Migrations.170_CreateAiMonthlyActorSpend.json",
+      "phase": "Expand",
+      "sha256": "e2f8672b66ad74c187f5ddadc4eb2e97754ce3ee08bd50ef3e0992af1f091e5a"
+    },
+    {
+      "name": "Honua.Server.Migrations.171_CaptureObservationRealtimeEvents.sql",
+      "file": "Honua.Server.Migrations.171_CaptureObservationRealtimeEvents.json",
+      "phase": "Expand",
+      "sha256": "550ea32b1b15786bee3466a7ac9836b622c200db67b4beab9eff62fc0bf0bb76"
+    },
+    {
+      "name": "Honua.Server.Migrations.172_CreateOpsIncidentEpisodes.sql",
+      "file": "Honua.Server.Migrations.172_CreateOpsIncidentEpisodes.json",
+      "phase": "Expand",
+      "sha256": "fbbaba2960a7c07fcddf9dc0ba3751570d684ade102315b956a3a265b1b7e650"
+    },
+    {
+      "name": "Honua.Server.Migrations.174_CreateOperationProposalBatches.sql",
+      "file": "Honua.Server.Migrations.174_CreateOperationProposalBatches.json",
+      "phase": "Expand",
+      "sha256": "b60669069fd0174ef8ccebe78b975f3457698e4610411538eeef8458a0d80d25"
+    },
+    {
+      "name": "Honua.Server.Migrations.175_CreateRealtimeJobCatalogTriggers.sql",
+      "file": "Honua.Server.Migrations.175_CreateRealtimeJobCatalogTriggers.json",
+      "phase": "Expand",
+      "sha256": "6b0cdfc518109dba2e65ecc5bc19bbfe662308b5ea9d038b7e3e1cedede4e229"
+    },
+    {
+      "name": "Honua.Server.Migrations.176_CreateRemoteImportCommitReceipt.sql",
+      "file": "Honua.Server.Migrations.176_CreateRemoteImportCommitReceipt.json",
+      "phase": "Expand",
+      "sha256": "8221cc5437d7f3295090ac6554914d2295567ecc1161e2cea9ff6f4932ffa8bc"
+    },
+    {
+      "name": "Honua.Server.Migrations.180_CreateFeatureLocks.sql",
+      "file": "Honua.Server.Migrations.180_CreateFeatureLocks.json",
+      "phase": "Expand",
+      "sha256": "7037d84135d4615483e6482a8e2263ddd38a36d31add700ffd61853273db6294"
+    },
+    {
+      "name": "Honua.Server.Migrations.181_CreateAttachmentUploadSessions.sql",
+      "file": "Honua.Server.Migrations.181_CreateAttachmentUploadSessions.json",
+      "phase": "Expand",
+      "sha256": "eda58d5b959d476800e78b8241c09b49b32701ad8fc41caf0ff850cd5e3316f9"
+    },
+    {
+      "name": "Honua.Server.Migrations.182_CreateAttachmentNativeMetadata.sql",
+      "file": "Honua.Server.Migrations.182_CreateAttachmentNativeMetadata.json",
+      "phase": "Expand",
+      "sha256": "4aff470ea722729ec46a2d0c9c93b18ce944cf505262e64ec5cd6c5c738a6374"
+    },
+    {
+      "name": "Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql",
+      "file": "Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.json",
+      "phase": "Contract",
+      "sha256": "ec3a27847bc11338d20091c554ab59246c3a6e8b96a0fe4e4793ccbe86b44cfb"
+    },
+    {
+      "name": "Honua.Server.Migrations.186_ExpandMetadataV2Vocabulary.sql",
+      "file": "Honua.Server.Migrations.186_ExpandMetadataV2Vocabulary.json",
+      "phase": "Expand",
+      "sha256": "a0ec645e354c3dc2a8e5087d61963af80737146c824dbb5078c95645d26b66c5"
+    },
+    {
+      "name": "Honua.Server.Migrations.189_AssignFeatureChangeTransactionId.sql",
+      "file": "Honua.Server.Migrations.189_AssignFeatureChangeTransactionId.json",
+      "phase": "Expand",
+      "sha256": "89e05679b9d551bae224800fbed1b31981879f68aad163e6011f5ee8eebc5f03"
+    },
+    {
+      "name": "Honua.Server.Migrations.191_CreateCdnPurgeBudget.sql",
+      "file": "Honua.Server.Migrations.191_CreateCdnPurgeBudget.json",
+      "phase": "Expand",
+      "sha256": "1f99f49186569bbffa4438617e7068ae3f0e4f20b69b6866c021262baf29994d"
+    },
+    {
+      "name": "Honua.Server.Migrations.192_CreateWfsStoredQueries.sql",
+      "file": "Honua.Server.Migrations.192_CreateWfsStoredQueries.json",
+      "phase": "Expand",
+      "sha256": "b5c78dee99c2f5b3b8d1e9a8988f8b5d8628f8bd1f23df1186c10a31024d5989"
+    },
+    {
+      "name": "Honua.Server.Migrations.193_AllowIncidentInvestigationReferences.sql",
+      "file": "Honua.Server.Migrations.193_AllowIncidentInvestigationReferences.json",
+      "phase": "Expand",
+      "sha256": "f6e90fef7e36cc0a38a62ae586081c876df112c520e576329866207c52d83ecb"
+    },
+    {
+      "name": "Honua.Server.Migrations.194_CaptureFeatureOperationEvidence.sql",
+      "file": "Honua.Server.Migrations.194_CaptureFeatureOperationEvidence.json",
+      "phase": "Expand",
+      "sha256": "39768cf6bf54a394f98fbab018c1e7a82b3f2623bb19331b9c119c9cda6ef266"
+    },
+    {
+      "name": "Honua.Server.Migrations.195_AddGrpcReceiptOperationEvidence.sql",
+      "file": "Honua.Server.Migrations.195_AddGrpcReceiptOperationEvidence.json",
+      "phase": "Expand",
+      "sha256": "a7ec25cf33007669d9a6944f2a9920ff6825546a6d170cf92649a0244cb9aa44"
+    },
+    {
+      "name": "Honua.Server.Migrations.198_EnforceMetadataGlobalIdUniqueness.sql",
+      "file": "Honua.Server.Migrations.198_EnforceMetadataGlobalIdUniqueness.json",
+      "phase": "Expand",
+      "sha256": "1c8ef2ab50a0992726b36f32732111bf2ae413b0f33845d567eb3481bac38150"
+    },
+    {
+      "name": "Honua.Server.Migrations.199_AddAnalysisContentTenantOwnership.sql",
+      "file": "Honua.Server.Migrations.199_AddAnalysisContentTenantOwnership.json",
+      "phase": "Expand",
+      "sha256": "b4c566267408dd0396eed6ed36252cb890b516ead21c6e56d575ad582e5fcf06"
+    },
+    {
+      "name": "Honua.Server.Migrations.200_ExpandAdminApiKeyStorage.sql",
+      "file": "Honua.Server.Migrations.200_ExpandAdminApiKeyStorage.json",
+      "phase": "Expand",
+      "sha256": "7a4a2440d958d2a6622a4653853c57898b15f72ae93848619a55fb1a37dabb17"
+    },
+    {
+      "name": "Honua.Server.Migrations.201_CreateEmbedKeyUsage.sql",
+      "file": "Honua.Server.Migrations.201_CreateEmbedKeyUsage.json",
+      "phase": "Expand",
+      "sha256": "40557c1fb060b15512bf28b4d815f38b6252ed4ac2bbc1a829a99ecfe63be286"
+    },
+    {
+      "name": "Honua.Server.Migrations.204_CreateAttachmentUploadCleanupLedger.sql",
+      "file": "Honua.Server.Migrations.204_CreateAttachmentUploadCleanupLedger.json",
+      "phase": "Expand",
+      "sha256": "46267d025cf48bec0d158a12eb27f7a42075f118a7b37b136d5bc35a8b88a478"
+    },
+    {
+      "name": "Honua.Server.Migrations.205_AddAttachmentPublicationScope.sql",
+      "file": "Honua.Server.Migrations.205_AddAttachmentPublicationScope.json",
+      "phase": "Expand",
+      "sha256": "328eee94e93c1bf6e3e52f1cd5591f33621f6a669100580f25f652ea158b51ba"
+    },
+    {
+      "name": "Honua.Server.Migrations.206_CreateAttachmentCleanupRetries.sql",
+      "file": "Honua.Server.Migrations.206_CreateAttachmentCleanupRetries.json",
+      "phase": "Expand",
+      "sha256": "1dd35b2eace5a22c0344b19475d82aa654db806aaf55c096c785ea500c4d9677"
+    },
+    {
+      "name": "Honua.Server.Migrations.207_CreateAnalysisReports.sql",
+      "file": "Honua.Server.Migrations.207_CreateAnalysisReports.json",
+      "phase": "Expand",
+      "sha256": "088ea092f77ee63975f5df98fd6b8b568b8b9d7210bb20773d9d87b1d6314479"
+    },
+    {
+      "name": "Honua.Server.Migrations.208_CreateOAuthScopeCatalogue.sql",
+      "file": "Honua.Server.Migrations.208_CreateOAuthScopeCatalogue.json",
+      "phase": "Expand",
+      "sha256": "7bf764c9351f173e341707edcce136b3512373dc882e178b400b09a58a2c32c7"
+    },
+    {
+      "name": "Honua.Server.Migrations.212_CreateConfigurationDocumentRevisions.sql",
+      "file": "Honua.Server.Migrations.212_CreateConfigurationDocumentRevisions.json",
+      "phase": "Expand",
+      "sha256": "4fba19de63f13b7bf8c9cbd57c864db46984c106fb90baa30b6e68d57dade7b5"
+    },
+    {
+      "name": "Honua.Server.Migrations.213_CreateFeatureChangeReadHorizon.sql",
+      "file": "Honua.Server.Migrations.213_CreateFeatureChangeReadHorizon.json",
+      "phase": "Expand",
+      "sha256": "bcc026c0e47c28a38902de7429bf526b57321bd710388bec55ef5b273c8f1348"
+    },
+    {
+      "name": "Honua.Server.Migrations.214_StageFeatureChangePrefixPublisher.sql",
+      "file": "Honua.Server.Migrations.214_StageFeatureChangePrefixPublisher.json",
+      "phase": "Expand",
+      "sha256": "6ae1bc7a5d54804b313f0d53911e21ff843c4236aab95ca8aac2512a6bb96e05"
+    },
+    {
+      "name": "Honua.Server.Migrations.215_AddConsoleAccessEnvironmentOwnership.sql",
+      "file": "Honua.Server.Migrations.215_AddConsoleAccessEnvironmentOwnership.json",
+      "phase": "Expand",
+      "sha256": "edaedcbbd1d2e60495b696580d45de26b4f4695883b8f617da8ca625abdccb5f"
+    },
+    {
+      "name": "Honua.Server.Migrations.216_AdvanceConfigurationGenerationOnSceneAndPolicyChanges.sql",
+      "file": "Honua.Server.Migrations.216_AdvanceConfigurationGenerationOnSceneAndPolicyChanges.json",
+      "phase": "Expand",
+      "sha256": "aeaf0cc9aeef7163eb9705ba9e34d0ec6bb871cd0f42b016dc8d3952a2941126"
+    },
+    {
+      "name": "Honua.Server.Migrations.217_CreateAiIncidentSpend.sql",
+      "file": "Honua.Server.Migrations.217_CreateAiIncidentSpend.json",
+      "phase": "Expand",
+      "sha256": "7eb834c92cf385d9ba05ceefdde7619ae141e398b8518c186928b8dd26ea9246"
+    },
+    {
+      "name": "Honua.Server.Migrations.218_CreateAssetTaskCore.sql",
+      "file": "Honua.Server.Migrations.218_CreateAssetTaskCore.json",
+      "phase": "Expand",
+      "sha256": "b6dc5d86f0ee6d778d1e1bb49a47e849c60a49994513ce492ee9b3f4b7bf75bb"
+    },
+    {
+      "name": "Honua.Server.Migrations.219_SkipGlobalIdIndexesOfPublishingLayers.sql",
+      "file": "Honua.Server.Migrations.219_SkipGlobalIdIndexesOfPublishingLayers.json",
+      "phase": "Expand",
+      "sha256": "07f6b9029b8192968bd7752f84ed7a6002a8f75f2ec8316a7e63161a5d03ff51"
+    },
+    {
+      "name": "Honua.Server.Migrations.220_AddPolicyRestrictions.sql",
+      "file": "Honua.Server.Migrations.220_AddPolicyRestrictions.json",
+      "phase": "Expand",
+      "sha256": "d987746cce792b982060e3da46aaa53cd1d3101cb075f663d299673184cc76af"
+    },
+    {
+      "name": "Honua.Server.Migrations.221_CreateProposalEvidenceConsumptions.sql",
+      "file": "Honua.Server.Migrations.221_CreateProposalEvidenceConsumptions.json",
+      "phase": "Expand",
+      "sha256": "94f707e56ecc0ae483f5eb5246ad64b6e1955668f0caaa9161f002aba7406b70"
+    },
+    {
+      "name": "Honua.Server.Migrations.222_CreateObjectStorageConnections.sql",
+      "file": "Honua.Server.Migrations.222_CreateObjectStorageConnections.json",
+      "phase": "Expand",
+      "sha256": "d48b8d88940b12fda52b52279b24dcb055b52bb26954d98488ae856fefde5b5e"
+    },
+    {
+      "name": "Honua.Server.Migrations.223_AddCloudRasterDecodeMetadata.sql",
+      "file": "Honua.Server.Migrations.223_AddCloudRasterDecodeMetadata.json",
+      "phase": "Expand",
+      "sha256": "48f39c709e00408f282fff9cc891b69e14c83cde36b5e09e7bc1031b865cb2a0"
+    },
+    {
+      "name": "Honua.Server.Migrations.224_CreateRealtimeSecurityTriggers.sql",
+      "file": "Honua.Server.Migrations.224_CreateRealtimeSecurityTriggers.json",
+      "phase": "Expand",
+      "sha256": "e98f5833bfc73b47f80150ad43822874dcfbf41ddad2b74a60ab307e99768cb8"
     }
   ],
-  "pendingScriptsSha256": "ed316a74359ebf8a72348159955745ab3032fbfe035c4453dda826c0ce7ac6a3",
-  "contractApprovalNonce": null
+  "pendingScriptsSha256": "0727b14c42422add2eaa88e45ee1f8be5e70762a1faf7405bd9fca7216197ecb",
+  "contractApprovalNonce": "bc2202c7644b6d7f"
 }

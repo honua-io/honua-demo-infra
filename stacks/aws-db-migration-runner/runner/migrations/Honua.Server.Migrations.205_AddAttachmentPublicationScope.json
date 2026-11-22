@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.205_AddAttachmentPublicationScope.sql",
+  "phase": "Expand",
+  "commands": [
+    "ALTER TABLE \"honua\".attachment_upload_sessions\n    ADD COLUMN IF NOT EXISTS published_layer_id INTEGER\n    CHECK (published_layer_id >= 0)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.205_AddAttachmentPublicationScope.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "C719708F5018C76417D3CACFF624A3757BEE46325B948077ED594FCCF1719AAC",
+    "minReaderSchema": 0,
+    "scriptText": "ALTER TABLE $HonuaSchema$.attachment_upload_sessions\n    ADD COLUMN IF NOT EXISTS published_layer_id INTEGER\n    CHECK (published_layer_id >= 0);\n"
+  }
+}

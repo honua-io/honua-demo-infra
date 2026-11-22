@@ -14,8 +14,9 @@ honua-server backlog).
 > `geo.places` endpoint) is live and serving is on v35 — see
 > stacks/aws/vpc-endpoints.tf and honua-demo-infra#11 for the remaining
 > enablement items. For the current Redis removal and compatible-image gate,
-> follow [Remove the demo Redis cache](remove-demo-redis.md). A saved-plan
-> apply and process canary remain required before removal is called deployed.
+> follow [Remove the demo Redis cache](remove-demo-redis.md); the Redis-free
+> image goes live only after [Migrations for honua-server 99c4226](db-migrations-99c4226.md).
+> A saved-plan apply and process canary remain required before removal is called deployed.
 
 > **Geocoding configuration change — not yet applied:** this stack selects the server's
 > built-in Nominatim (OpenStreetMap, `World` locator) default through the fck-nat egress.

@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.220_AddPolicyRestrictions.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nALTER TABLE honua.rbac_rls_policies\n    ADD COLUMN IF NOT EXISTS filter_expression TEXT,\n    ADD COLUMN IF NOT EXISTS area_geometry TEXT"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.220_AddPolicyRestrictions.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "15DF065FA82C114C7F30CA69BE1A08BC39095CA1A426CEF1A45E64CA1C39A842",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nALTER TABLE honua.rbac_rls_policies\n    ADD COLUMN IF NOT EXISTS filter_expression TEXT,\n    ADD COLUMN IF NOT EXISTS area_geometry TEXT;\n"
+  }
+}

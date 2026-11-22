@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.180_CreateFeatureLocks.sql",
+  "phase": "Expand",
+  "commands": [
+    "CREATE TABLE IF NOT EXISTS \"honua\".feature_locks (\n    service_name TEXT COLLATE \"C\" NOT NULL,\n    layer_id INTEGER NOT NULL,\n    feature_id TEXT COLLATE \"C\" NOT NULL,\n    body JSONB NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (service_name, layer_id, feature_id)\n)",
+    "CREATE INDEX IF NOT EXISTS idx_feature_locks_expires_at ON \"honua\".feature_locks (expires_at)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.180_CreateFeatureLocks.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "BD92384CCF4F0EC607FAABFB14A6D34809B745CD3BE640ACFFD222E09C089E80",
+    "minReaderSchema": 0,
+    "scriptText": "CREATE TABLE IF NOT EXISTS $HonuaSchema$.feature_locks (\n    service_name TEXT COLLATE \"C\" NOT NULL,\n    layer_id INTEGER NOT NULL,\n    feature_id TEXT COLLATE \"C\" NOT NULL,\n    body JSONB NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (service_name, layer_id, feature_id)\n);\nCREATE INDEX IF NOT EXISTS idx_feature_locks_expires_at ON $HonuaSchema$.feature_locks (expires_at);\n"
+  }
+}

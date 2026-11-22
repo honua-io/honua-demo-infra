@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.151_CreateCdnReleaseRecord.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS honua.cdn_release_record (\n    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),\n    release_id TEXT NOT NULL,\n    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.151_CreateCdnReleaseRecord.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "50EA83D1CECEB488AEDE4523BC08B4B6A3B7986583B560C420BCAECA0738DAC6",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS honua.cdn_release_record (\n    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),\n    release_id TEXT NOT NULL,\n    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n"
+  }
+}

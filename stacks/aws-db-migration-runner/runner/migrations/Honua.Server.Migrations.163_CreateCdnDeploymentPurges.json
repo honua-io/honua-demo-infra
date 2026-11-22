@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.163_CreateCdnDeploymentPurges.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".cdn_deployment_purges (\n    cluster_arn TEXT COLLATE \"C\" NOT NULL,\n    service_arn TEXT COLLATE \"C\" NOT NULL,\n    deployment_id TEXT COLLATE \"C\" NOT NULL,\n    task_definition_arn TEXT NOT NULL,\n    event_id TEXT COLLATE \"C\" NOT NULL,\n    purge_completed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),\n    PRIMARY KEY (cluster_arn, service_arn, deployment_id),\n    UNIQUE (cluster_arn, service_arn, event_id)\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.163_CreateCdnDeploymentPurges.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "D53D86A25241FBA239D2A14113341B22C8467CCF4C33EBE3725DEF0C207DEDA4",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.cdn_deployment_purges (\n    cluster_arn TEXT COLLATE \"C\" NOT NULL,\n    service_arn TEXT COLLATE \"C\" NOT NULL,\n    deployment_id TEXT COLLATE \"C\" NOT NULL,\n    task_definition_arn TEXT NOT NULL,\n    event_id TEXT COLLATE \"C\" NOT NULL,\n    purge_completed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),\n    PRIMARY KEY (cluster_arn, service_arn, deployment_id),\n    UNIQUE (cluster_arn, service_arn, event_id)\n);\n"
+  }
+}

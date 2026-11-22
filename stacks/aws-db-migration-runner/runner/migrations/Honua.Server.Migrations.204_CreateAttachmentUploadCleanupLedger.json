@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.204_CreateAttachmentUploadCleanupLedger.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Keep cleanup intent after an uncommitted session expires. An object write can\n-- finish after its database connection is lost, including after the first delete.\n-- Retain these small tombstones and periodically retry the deterministic object\n-- key; deleting a missing object does not prove that an in-flight write has ended.\nCREATE TABLE IF NOT EXISTS \"honua\".attachment_upload_cleanup_ledger (\n    session_id UUID PRIMARY KEY,\n    layer_id INTEGER NOT NULL CHECK (layer_id >= 0),\n    feature_id BIGINT NOT NULL,\n    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()\n)",
+    "CREATE INDEX IF NOT EXISTS idx_attachment_upload_cleanup_ledger_due\n    ON \"honua\".attachment_upload_cleanup_ledger (next_attempt_at, session_id)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.204_CreateAttachmentUploadCleanupLedger.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "B8E488B96E3691C1A944D5486ED174D69C4C380BB8E29415459AEC97C634793F",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Keep cleanup intent after an uncommitted session expires. An object write can\n-- finish after its database connection is lost, including after the first delete.\n-- Retain these small tombstones and periodically retry the deterministic object\n-- key; deleting a missing object does not prove that an in-flight write has ended.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.attachment_upload_cleanup_ledger (\n    session_id UUID PRIMARY KEY,\n    layer_id INTEGER NOT NULL CHECK (layer_id >= 0),\n    feature_id BIGINT NOT NULL,\n    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE INDEX IF NOT EXISTS idx_attachment_upload_cleanup_ledger_due\n    ON $HonuaSchema$.attachment_upload_cleanup_ledger (next_attempt_at, session_id);\n"
+  }
+}

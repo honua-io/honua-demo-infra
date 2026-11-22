@@ -1,0 +1,22 @@
+{
+  "name": "Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql",
+  "phase": "Contract",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- honua:compatibility-review reason=removes only optional feature indexes; reader SQL and constraints are unchanged\nDROP INDEX IF EXISTS public.idx_features_attributes_gin",
+    "DROP INDEX IF EXISTS public.idx_features_attributes_keys",
+    "DROP INDEX IF EXISTS public.idx_features_geometry_nn",
+    "DROP INDEX IF EXISTS public.idx_features_geometry_3d",
+    "DROP INDEX IF EXISTS public.idx_features_envelope",
+    "DROP INDEX IF EXISTS public.idx_features_attr_dates",
+    "DROP INDEX IF EXISTS public.idx_features_attr_timestamps",
+    "DROP INDEX IF EXISTS public.idx_features_temporal_attrs"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql",
+    "declarationFormat": 1,
+    "classification": "contract",
+    "scriptSha256": "8FA24E8BA3C540117E5CE6061374AC6DF6525CF91F195BDDBCEDE38F65FBB9DD",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- honua:compatibility-review reason=removes only optional feature indexes; reader SQL and constraints are unchanged\nDROP INDEX IF EXISTS public.idx_features_attributes_gin;\nDROP INDEX IF EXISTS public.idx_features_attributes_keys;\nDROP INDEX IF EXISTS public.idx_features_geometry_nn;\nDROP INDEX IF EXISTS public.idx_features_geometry_3d;\nDROP INDEX IF EXISTS public.idx_features_envelope;\nDROP INDEX IF EXISTS public.idx_features_attr_dates;\nDROP INDEX IF EXISTS public.idx_features_attr_timestamps;\nDROP INDEX IF EXISTS public.idx_features_temporal_attrs;\n"
+  }
+}

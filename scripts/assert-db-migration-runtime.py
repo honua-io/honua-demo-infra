@@ -14,19 +14,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "stacks" / "aws-db-migration-runner" / "runner"
 MANIFEST = json.loads((RUNNER / "migration-manifest.v2.json").read_text(encoding="utf-8"))
-ARCHIVE_BASE64_SHA256 = "1PEpdyk9YjKD05zNwsVkSQnik6OaEFTzkdClncPV9BY="
+ARCHIVE_BASE64_SHA256 = "IhyqYeKMcW/KS1KGJnovA3wpJ9BaxHPJMY03vgMZmC0="
 ACCOUNT = "585192672263"
 REGION = "us-west-2"
-RUNNER_NAME = "honua-demo-demo-db-migration-574c804"
+RUNNER_NAME = "honua-demo-demo-db-migration-99c4226"
 RUNNER_ARN = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:{RUNNER_NAME}"
 RUNNER_ROLE = f"arn:aws:iam::{ACCOUNT}:role/{RUNNER_NAME}-role"
 VPC_ID = "vpc-0ac1893d15caf97b8"
 SUBNETS = ["subnet-042ddf313d8ae1b17", "subnet-095cc7be2b14464f5", "subnet-0fd43d4ab39f4ff00"]
-MIGRATION_SOURCE_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
+MIGRATION_SOURCE_IMAGE_DIGEST = "sha256:2ef00dc750c8222ed01694f52371bfd3e7b17cd12378ad6f2281efdde2bd2e76"
 SERVING_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
-SERVING_VERSION = "54"
-SERVING_REVISION = "8b14c978-a9b1-4ef1-a7d8-c1b9d7879178"
-LIVE_REVISION = "e729b0ba-3572-4dec-aa6a-b45c5a6487eb"
+# The live version is resolved from the alias at invocation time (the Redis-removal apply published
+# new versions that the lane role cannot read). The serving image digest stays pinned, and the
+# runtime receipt freezes the exact version/revision pair so the post-audit fails on any movement.
+VERSION = re.compile(r"^[1-9][0-9]*$")
+REVISION = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 SG = re.compile(r"^sg-[0-9a-f]{17}$")
 SECRET_ARN = re.compile(r"^arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-[A-Za-z0-9]{6}$")
 STATE_ADDRESSES = {
@@ -119,13 +121,14 @@ def sanitize_runner(raw: dict, pins: dict) -> dict:
     req(security_groups == [pins["securityGroupId"]], "runner security group drifted")
     environment = config.get("Environment", {}).get("Variables")
     req(type(environment) is dict and environment.get("DB_SECRET_ARN") == pins["dbSecretArn"], "runner secret reference drifted")
+    req(MANIFEST["candidateImageDigest"] == MIGRATION_SOURCE_IMAGE_DIGEST, "manifest candidate image digest drifted")
     expected_environment = {
         "DB_SECRET_ARN": environment["DB_SECRET_ARN"],
         "EXPECTED_CANDIDATE_IMAGE_DIGEST": MIGRATION_SOURCE_IMAGE_DIGEST,
         "EXPECTED_EXECUTED_SET_SHA256": MANIFEST["executedScriptsSha256"],
         "EXPECTED_PENDING_SET_SHA256": MANIFEST["pendingScriptsSha256"],
         "EXPECTED_SOURCE_COMMIT": MANIFEST["sourceCommit"],
-        "MIGRATION_OPERATION": "apply-574c804",
+        "MIGRATION_OPERATION": "apply-99c4226",
         "SOURCE_HANDLER_SHA256": hashlib.sha256((RUNNER / "handler.py").read_bytes()).hexdigest(),
         "SOURCE_MANIFEST_SHA256": hashlib.sha256((RUNNER / "migration-manifest.v2.json").read_bytes()).hexdigest(),
     }
@@ -146,9 +149,11 @@ def sanitize_runner(raw: dict, pins: dict) -> dict:
 def sanitize_serving(raw: dict) -> dict:
     config, code = raw.get("Configuration"), raw.get("Code")
     req(type(config) is dict and type(code) is dict, "serving response missing")
-    arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{SERVING_VERSION}"
+    version = config.get("Version")
+    req(type(version) is str and VERSION.fullmatch(version) is not None, "serving version is not qualified")
+    arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{version}"
     req(config.get("FunctionName") == "honua-demo-demo-honua" and config.get("FunctionArn") == arn, "serving identity drifted")
-    req(config.get("Version") == SERVING_VERSION and config.get("RevisionId") == SERVING_REVISION, "serving version drifted")
+    req(type(config.get("RevisionId")) is str and REVISION.fullmatch(config["RevisionId"]) is not None, "serving revision missing")
     req(config.get("Architectures") == ["x86_64"] and config.get("MemorySize") == 2048 and config.get("Timeout") == 60, "serving runtime bounds drifted")
     resolved = code.get("ResolvedImageUri", "")
     req(type(resolved) is str and resolved.endswith(f"@{SERVING_IMAGE_DIGEST}"), "serving digest drifted")
@@ -157,17 +162,18 @@ def sanitize_serving(raw: dict) -> dict:
     req(environment.get("ControlPlane__DeployTargets__0__RequiresOutOfBandMigrations", "").lower() == "true", "serving out-of-band migration contract drifted")
     req(environment.get("ControlPlane__DeployTargets__0__ArtifactReference", "").endswith(f"@{SERVING_IMAGE_DIGEST}"), "serving artifact reference drifted")
     return {"schema":"honua-db-migration-function-audit-v1", "kind":"serving", "functionArn":arn,
-            "version":SERVING_VERSION, "revisionId":config["RevisionId"], "resolvedImageDigest":SERVING_IMAGE_DIGEST,
+            "version":version, "revisionId":config["RevisionId"], "resolvedImageDigest":SERVING_IMAGE_DIGEST,
             "skipMigrations":True, "requiresOutOfBandMigrations":True,
             "architectures":["x86_64"], "memorySize":2048, "timeout":60}
 
 
 def sanitize_live(raw: dict) -> dict:
     req(raw.get("AliasArn") == f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:live", "live ARN drifted")
-    req(raw.get("Name") == "live" and raw.get("FunctionVersion") == SERVING_VERSION, "live alias drifted")
-    req(raw.get("RevisionId") == LIVE_REVISION and not raw.get("RoutingConfig"), "live routing/revision drifted")
+    version = raw.get("FunctionVersion")
+    req(raw.get("Name") == "live" and type(version) is str and VERSION.fullmatch(version) is not None, "live alias drifted")
+    req(type(raw.get("RevisionId")) is str and REVISION.fullmatch(raw["RevisionId"]) is not None and not raw.get("RoutingConfig"), "live routing/revision drifted")
     return {"schema":"honua-db-migration-function-audit-v1", "kind":"live", "aliasArn":raw["AliasArn"],
-            "name":"live", "functionVersion":SERVING_VERSION, "revisionId":raw["RevisionId"], "routing":{}}
+            "name":"live", "functionVersion":version, "revisionId":raw["RevisionId"], "routing":{}}
 
 
 SANITIZERS = {"serving": sanitize_serving, "live": sanitize_live}
@@ -193,12 +199,14 @@ def build(args: argparse.Namespace) -> dict:
     req(runner["timeout"] == 900 and runner["reservedConcurrentExecutions"] == 1 and runner["architectures"] == ["arm64"], "runner bounds evidence drifted")
     req(runner["functionArn"] == pins["runnerQualifiedArn"] and runner["version"] == pins["runnerVersion"], "runner state identity binding drifted")
     req(runner["vpcId"] == VPC_ID and runner["subnetIds"] == SUBNETS and runner["securityGroupIds"] == [pins["securityGroupId"]], "runner VPC evidence drifted")
-    req(serving == {"schema":"honua-db-migration-function-audit-v1","kind":"serving","functionArn":f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{SERVING_VERSION}","version":SERVING_VERSION,"revisionId":SERVING_REVISION,"resolvedImageDigest":SERVING_IMAGE_DIGEST,"skipMigrations":True,"requiresOutOfBandMigrations":True,"architectures":["x86_64"],"memorySize":2048,"timeout":60}, "serving evidence drifted")
-    req(live["functionVersion"] == SERVING_VERSION and live["revisionId"] == LIVE_REVISION and live["routing"] == {}, "live evidence drifted")
+    serving_version = serving.get("version")
+    req(type(serving_version) is str and VERSION.fullmatch(serving_version) is not None and type(serving.get("revisionId")) is str and REVISION.fullmatch(serving["revisionId"]) is not None, "serving version evidence drifted")
+    req(serving == {"schema":"honua-db-migration-function-audit-v1","kind":"serving","functionArn":f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:honua-demo-demo-honua:{serving_version}","version":serving_version,"revisionId":serving["revisionId"],"resolvedImageDigest":SERVING_IMAGE_DIGEST,"skipMigrations":True,"requiresOutOfBandMigrations":True,"architectures":["x86_64"],"memorySize":2048,"timeout":60}, "serving evidence drifted")
+    req(live["functionVersion"] == serving_version and live["routing"] == {}, "live alias does not route to the audited serving version")
     exact_keys(db, {"DBInstanceIdentifier","DBInstanceArn","DbiResourceId","DBInstanceStatus","Engine","EngineVersion","StorageEncrypted","KmsKeyId"}, "DB evidence")
     req(db == {"DBInstanceIdentifier":"honua-demo-demo-postgres","DBInstanceArn":"arn:aws:rds:us-west-2:585192672263:db:honua-demo-demo-postgres","DbiResourceId":"db-WNTITZLSHMDLINGEGSB6TEZQYI","DBInstanceStatus":"available","Engine":"postgres","EngineVersion":"15.17","StorageEncrypted":True,"KmsKeyId":"arn:aws:kms:us-west-2:585192672263:key/4bccd8dc-27dc-4390-9393-bd2dfad9cbc8"}, "DB identity/status drifted")
     req(type(state.get("lineage")) is str and type(state.get("serial")) is int, "state identity missing")
-    return {"schema":"honua-db-migration-runtime-receipt-v1","qualifiedArn":runner["functionArn"],"version":runner["version"],"revisionId":runner["revisionId"],"codeSha256":runner["codeSha256"],"environmentSha256":runner["environmentSha256"],"securityGroupId":pins["securityGroupId"],"dbSecretArn":pins["dbSecretArn"],"stateIdentitySha256":pins["stateIdentitySha256"],"stateLineage":state["lineage"],"stateSerial":state["serial"],"servingVersion":SERVING_VERSION,"liveVersion":SERVING_VERSION,"runnerSha256":sha(args.runner),"servingSha256":sha(args.serving),"liveSha256":sha(args.live),"dbSha256":sha(args.db)}
+    return {"schema":"honua-db-migration-runtime-receipt-v1","qualifiedArn":runner["functionArn"],"version":runner["version"],"revisionId":runner["revisionId"],"codeSha256":runner["codeSha256"],"environmentSha256":runner["environmentSha256"],"securityGroupId":pins["securityGroupId"],"dbSecretArn":pins["dbSecretArn"],"stateIdentitySha256":pins["stateIdentitySha256"],"stateLineage":state["lineage"],"stateSerial":state["serial"],"servingVersion":serving_version,"servingRevisionId":serving["revisionId"],"liveVersion":live["functionVersion"],"liveRevisionId":live["revisionId"],"runnerSha256":sha(args.runner),"servingSha256":sha(args.serving),"liveSha256":sha(args.live),"dbSha256":sha(args.db)}
 
 
 def verify(expected: dict, actual: dict) -> None:

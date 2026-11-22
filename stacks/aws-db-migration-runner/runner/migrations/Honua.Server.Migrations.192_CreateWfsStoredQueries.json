@@ -1,0 +1,17 @@
+{
+  "name": "Honua.Server.Migrations.192_CreateWfsStoredQueries.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".wfs_stored_queries (\n    scope TEXT COLLATE \"C\" NOT NULL,\n    query_id TEXT COLLATE \"C\" NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    definition JSON NOT NULL\n)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_wfs_stored_queries_scope_query\n    ON \"honua\".wfs_stored_queries (scope, query_id)",
+    "COMMENT ON TABLE \"honua\".wfs_stored_queries IS\n    'WFS managed stored queries; query_id uses .NET invariant uppercase normalization for case-insensitive identity.'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.192_CreateWfsStoredQueries.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "1B8F648D77DA38F578799B12468567F2B9D032D418C805CFD576DE9DBC9B0341",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.wfs_stored_queries (\n    scope TEXT COLLATE \"C\" NOT NULL,\n    query_id TEXT COLLATE \"C\" NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    definition JSON NOT NULL\n);\n\nCREATE UNIQUE INDEX IF NOT EXISTS idx_wfs_stored_queries_scope_query\n    ON $HonuaSchema$.wfs_stored_queries (scope, query_id);\n\nCOMMENT ON TABLE $HonuaSchema$.wfs_stored_queries IS\n    'WFS managed stored queries; query_id uses .NET invariant uppercase normalization for case-insensitive identity.';\n"
+  }
+}

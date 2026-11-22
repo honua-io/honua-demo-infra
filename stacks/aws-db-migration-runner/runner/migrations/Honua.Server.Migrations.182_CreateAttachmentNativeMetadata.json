@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.182_CreateAttachmentNativeMetadata.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Native descriptors preserve keyword boundaries and verified content digests.\n-- Physical attachment tables can live outside the metadata schema. The provider\n-- binds every read to the resolved physical authority, parent and storage path;\n-- an older descriptor must never describe bytes replaced through another API.\nCREATE TABLE IF NOT EXISTS \"honua\".attachment_native_metadata (\n    attachment_authority TEXT COLLATE \"C\" NOT NULL CHECK (octet_length(attachment_authority) BETWEEN 1 AND 512),\n    attachment_id BIGINT NOT NULL CHECK (attachment_id > 0),\n    layer_id INTEGER NOT NULL CHECK (layer_id >= 0),\n    feature_id BIGINT NOT NULL,\n    storage_path TEXT COLLATE \"C\" NOT NULL CHECK (octet_length(storage_path) > 0),\n    keywords TEXT[] NOT NULL DEFAULT '{}' CHECK (\n        array_ndims(keywords) = 1 AND array_position(keywords, NULL) IS NULL),\n    content_sha256 BYTEA NOT NULL CHECK (octet_length(content_sha256) = 32),\n    global_id UUID NOT NULL DEFAULT gen_random_uuid(),\n    PRIMARY KEY (attachment_authority, attachment_id),\n    UNIQUE (attachment_authority, global_id)\n)",
+    "CREATE INDEX IF NOT EXISTS idx_attachment_native_metadata_parent\n    ON \"honua\".attachment_native_metadata (attachment_authority, layer_id, feature_id)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.182_CreateAttachmentNativeMetadata.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "DD1B2F272146A441F9A3B7D97D3195E951C25DA253D0D9FC10FB9C82AB3DB142",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Native descriptors preserve keyword boundaries and verified content digests.\n-- Physical attachment tables can live outside the metadata schema. The provider\n-- binds every read to the resolved physical authority, parent and storage path;\n-- an older descriptor must never describe bytes replaced through another API.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.attachment_native_metadata (\n    attachment_authority TEXT COLLATE \"C\" NOT NULL CHECK (octet_length(attachment_authority) BETWEEN 1 AND 512),\n    attachment_id BIGINT NOT NULL CHECK (attachment_id > 0),\n    layer_id INTEGER NOT NULL CHECK (layer_id >= 0),\n    feature_id BIGINT NOT NULL,\n    storage_path TEXT COLLATE \"C\" NOT NULL CHECK (octet_length(storage_path) > 0),\n    keywords TEXT[] NOT NULL DEFAULT '{}' CHECK (\n        array_ndims(keywords) = 1 AND array_position(keywords, NULL) IS NULL),\n    content_sha256 BYTEA NOT NULL CHECK (octet_length(content_sha256) = 32),\n    global_id UUID NOT NULL DEFAULT gen_random_uuid(),\n    PRIMARY KEY (attachment_authority, attachment_id),\n    UNIQUE (attachment_authority, global_id)\n);\n\nCREATE INDEX IF NOT EXISTS idx_attachment_native_metadata_parent\n    ON $HonuaSchema$.attachment_native_metadata (attachment_authority, layer_id, feature_id);\n"
+  }
+}

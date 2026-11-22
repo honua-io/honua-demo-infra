@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.223_AddCloudRasterDecodeMetadata.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- A COG scan records how its samples decode (bit depth, predictor, byte order, photometric\n-- interpretation, planar configuration) and its GDAL NoData value, so reads from the catalog\n-- decode and skip NoData exactly as the scan saw them. Rows scanned before this migration keep\n-- NULLs, which read back as the previous defaults until the COG is scanned again. Additive only.\nALTER TABLE honua.cloud_raster_catalog\n    ADD COLUMN IF NOT EXISTS bits_per_sample INTEGER,\n    ADD COLUMN IF NOT EXISTS predictor INTEGER,\n    ADD COLUMN IF NOT EXISTS is_little_endian BOOLEAN,\n    ADD COLUMN IF NOT EXISTS photometric_interpretation INTEGER,\n    ADD COLUMN IF NOT EXISTS planar_configuration INTEGER,\n    ADD COLUMN IF NOT EXISTS nodata TEXT"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.223_AddCloudRasterDecodeMetadata.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "0E895A4662BD761CA94B8598C6AAE379C50202F12DEDF853E9A6A30570F28E77",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- A COG scan records how its samples decode (bit depth, predictor, byte order, photometric\n-- interpretation, planar configuration) and its GDAL NoData value, so reads from the catalog\n-- decode and skip NoData exactly as the scan saw them. Rows scanned before this migration keep\n-- NULLs, which read back as the previous defaults until the COG is scanned again. Additive only.\nALTER TABLE honua.cloud_raster_catalog\n    ADD COLUMN IF NOT EXISTS bits_per_sample INTEGER,\n    ADD COLUMN IF NOT EXISTS predictor INTEGER,\n    ADD COLUMN IF NOT EXISTS is_little_endian BOOLEAN,\n    ADD COLUMN IF NOT EXISTS photometric_interpretation INTEGER,\n    ADD COLUMN IF NOT EXISTS planar_configuration INTEGER,\n    ADD COLUMN IF NOT EXISTS nodata TEXT;\n"
+  }
+}

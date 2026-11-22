@@ -3,10 +3,9 @@ set -euo pipefail
 
 if [[ $# -ne 2 ]]; then echo "usage: $0 GOVERNANCE_SHA DEPLOYMENT_EVIDENCE_DIR" >&2; exit 64; fi
 readonly GOVERNANCE_SHA="$1" DEPLOYMENT_EVIDENCE_DIR="$2"
-readonly SNAPSHOT_ID="honua-demo-pre-574c804-ed316a743591"
+readonly SNAPSHOT_ID="honua-demo-pre-99c4226-0727b14c4242"
 readonly DB_ID="honua-demo-demo-postgres"
-readonly SERVING_ARN="arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:54"
-readonly EVIDENCE_DIR="$HOME/.honua-runtime-proof/db-migration-574c804-$GOVERNANCE_SHA"
+readonly EVIDENCE_DIR="$HOME/.honua-runtime-proof/db-migration-99c4226-$GOVERNANCE_SHA"
 export AWS_MAX_ATTEMPTS=1 AWS_RETRY_MODE=standard
 [[ "$GOVERNANCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 cd "$(git rev-parse --show-toplevel)"
@@ -16,8 +15,17 @@ readonly STATE="$DEPLOYMENT_EVIDENCE_DIR/postapply-state.json"
 readonly OUTPUT="$DEPLOYMENT_EVIDENCE_DIR/postapply-output.json"
 readonly QUALIFIED_ARN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["db_migration_runner_qualified_arn"]["value"])' "$OUTPUT")"
 readonly VERSION="${QUALIFIED_ARN##*:}"
-[[ "$QUALIFIED_ARN" =~ ^arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-574c804:[1-9][0-9]*$ ]]
+[[ "$QUALIFIED_ARN" =~ ^arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-db-migration-99c4226:[1-9][0-9]*$ ]]
+# The set contains a Contract script (183 drop-index). The operator grants the server's one-shot
+# approval explicitly; it must equal the reviewed manifest nonce or nothing runs.
+readonly CONTRACT_NONCE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["contractApprovalNonce"])' stacks/aws-db-migration-runner/runner/migration-manifest.v2.json)"
+[[ "$CONTRACT_NONCE" =~ ^[0-9a-f]{16,64}$ && "${APPROVE_CONTRACT_MIGRATIONS:-}" == "$CONTRACT_NONCE" ]] || { echo "set APPROVE_CONTRACT_MIGRATIONS to the reviewed contractApprovalNonce" >&2; exit 65; }
 test ! -e "$EVIDENCE_DIR"; mkdir -p "$EVIDENCE_DIR"
+# The serving version is whatever `live` routes to now; the audit requires it to serve the pinned
+# pre-cutover image, and the runtime receipt freezes that version/revision for the post-audit.
+SERVING_VERSION="$(aws lambda get-alias --function-name honua-demo-demo-honua --name live --query FunctionVersion --output text)"
+[[ "$SERVING_VERSION" =~ ^[1-9][0-9]*$ ]]
+readonly SERVING_ARN="arn:aws:lambda:us-west-2:585192672263:function:honua-demo-demo-honua:$SERVING_VERSION"
 
 audit() {
   local prefix="$1" status=0
@@ -39,13 +47,13 @@ set +o noclobber
 
 # Existing snapshot identity is a terminal replay guard, never an idempotent reuse.
 if aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" --query 'DBSnapshots[0].{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,Status:Status}' > "$EVIDENCE_DIR/existing-snapshot.json" 2> "$EVIDENCE_DIR/existing-snapshot.stderr"; then exit 1; fi
-aws rds create-db-snapshot --db-instance-identifier "$DB_ID" --db-snapshot-identifier "$SNAPSHOT_ID" --tags Key=HonuaMigration,Value=574c804 Key=PendingScriptsSha256,Value=ed316a74359ebf8a72348159955745ab3032fbfe035c4453dda826c0ce7ac6a3 --query 'DBSnapshot.{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,DBInstanceIdentifier:DBInstanceIdentifier,DbiResourceId:DbiResourceId,Status:Status,SnapshotType:SnapshotType,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId,TagList:TagList}' > "$EVIDENCE_DIR/snapshot-created.json"
+aws rds create-db-snapshot --db-instance-identifier "$DB_ID" --db-snapshot-identifier "$SNAPSHOT_ID" --tags Key=HonuaMigration,Value=99c4226 Key=PendingScriptsSha256,Value=0727b14c42422add2eaa88e45ee1f8be5e70762a1faf7405bd9fca7216197ecb --query 'DBSnapshot.{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,DBInstanceIdentifier:DBInstanceIdentifier,DbiResourceId:DbiResourceId,Status:Status,SnapshotType:SnapshotType,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId,TagList:TagList}' > "$EVIDENCE_DIR/snapshot-created.json"
 aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAPSHOT_ID"
 aws rds describe-db-snapshots --db-snapshot-identifier "$SNAPSHOT_ID" --query 'DBSnapshots[0].{DBSnapshotIdentifier:DBSnapshotIdentifier,DBSnapshotArn:DBSnapshotArn,DBInstanceIdentifier:DBInstanceIdentifier,DbiResourceId:DbiResourceId,Status:Status,SnapshotType:SnapshotType,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId,TagList:TagList}' > "$EVIDENCE_DIR/snapshot.json"
 python3 scripts/assert-db-migration-snapshot.py "$EVIDENCE_DIR/snapshot.json"
 
 status=0
-aws lambda invoke --function-name "$QUALIFIED_ARN" --cli-binary-format raw-in-base64-out --invocation-type RequestResponse --log-type None --payload '{"operation":"apply-574c804"}' "$EVIDENCE_DIR/payload.json" > "$EVIDENCE_DIR/metadata.json" || status=1
+aws lambda invoke --function-name "$QUALIFIED_ARN" --cli-binary-format raw-in-base64-out --invocation-type RequestResponse --log-type None --payload "{\"operation\":\"apply-99c4226\",\"approveContractMigrations\":\"$CONTRACT_NONCE\"}" "$EVIDENCE_DIR/payload.json" > "$EVIDENCE_DIR/metadata.json" || status=1
 python3 scripts/assert-db-migration-result.py create --metadata "$EVIDENCE_DIR/metadata.json" --payload "$EVIDENCE_DIR/payload.json" --snapshot "$EVIDENCE_DIR/snapshot.json" --runtime "$EVIDENCE_DIR/runtime.json" --receipt "$EVIDENCE_DIR/invocation-receipt.json" || status=1
 audit post || status=1
 python3 scripts/assert-db-migration-runtime.py verify --runner "$EVIDENCE_DIR/post-runner.json" --serving "$EVIDENCE_DIR/post-serving.json" --live "$EVIDENCE_DIR/post-live.json" --db "$EVIDENCE_DIR/post-db.json" --state "$STATE" --receipt "$EVIDENCE_DIR/runtime.json" || status=1

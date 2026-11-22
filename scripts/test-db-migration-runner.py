@@ -3,7 +3,7 @@
 import importlib.util,json,os,sys,types,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; SOURCE=ROOT/"stacks/aws-db-migration-runner/runner"; MANIFEST_PATH=SOURCE/"migration-manifest.v2.json"; MANIFEST=json.loads(MANIFEST_PATH.read_text())
-OP="apply-574c804"; NAMES=[entry["name"] for entry in MANIFEST["scripts"]]
+OP="apply-99c4226"; NAMES=[entry["name"] for entry in MANIFEST["scripts"]]
 class Connection:
  def __init__(self,journal=None,fail=None,raster=True,reader_table=True):
   self.journal=list(journal) if journal is not None else list(reversed(MANIFEST["executedScripts"])); self.calls=[]; self.fail=fail; self.raster=raster; self.reader_table=reader_table; self.declarations={}
@@ -28,7 +28,7 @@ class Tests(unittest.TestCase):
   spec=importlib.util.spec_from_file_location("runner_handler",SOURCE/"handler.py"); self.m=importlib.util.module_from_spec(spec); spec.loader.exec_module(self.m)
   os.environ.update({"DB_SECRET_ARN":"arn:aws:secretsmanager:us-west-2:585192672263:secret:honua-demo-demo/connection-string-Ab12Cd","EXPECTED_SOURCE_COMMIT":MANIFEST["sourceCommit"],"EXPECTED_CANDIDATE_IMAGE_DIGEST":MANIFEST["candidateImageDigest"],"EXPECTED_EXECUTED_SET_SHA256":MANIFEST["executedScriptsSha256"],"EXPECTED_PENDING_SET_SHA256":MANIFEST["pendingScriptsSha256"],"MIGRATION_OPERATION":OP,"SOURCE_HANDLER_SHA256":self.m._sha((SOURCE/"handler.py").read_bytes()),"SOURCE_MANIFEST_SHA256":self.m._sha(MANIFEST_PATH.read_bytes())})
   self.m.ssl.create_default_context=lambda **_:types.SimpleNamespace(check_hostname=True,verify_mode=None)
- def go(self,event=None): return self.m.handler(event if event is not None else {"operation":OP},None)
+ def go(self,event=None): return self.m.handler(event if event is not None else {"operation":OP,"approveContractMigrations":MANIFEST["contractApprovalNonce"]},None)
  def test_success_is_exact_ordered_and_transactional(self):
   out=self.go(); self.assertEqual(out["status"],"passed",out); self.assertEqual(out["migration"]["appliedScripts"],NAMES); self.assertEqual(self.c.journal[-len(NAMES):],NAMES)
   self.assertEqual(self.c.calls[0],"SET search_path TO public"); self.assertIn("COMMIT",self.c.calls); self.assertNotIn("ROLLBACK",self.c.calls); self.assertNotIn("password",json.dumps(out).lower())
@@ -40,7 +40,7 @@ class Tests(unittest.TestCase):
  def test_journal_order_is_not_part_of_the_baseline_but_membership_is(self):
   self.c.journal=list(MANIFEST["executedScripts"]); self.assertEqual(self.go()["status"],"passed")
  def test_extra_request_rejected_without_connect(self):
-  out=self.go({"operation":OP,"sql":"DROP"}); self.assertEqual(out["failure"],"invalid-request"); self.assertEqual(self.c.calls,[])
+  out=self.go({"operation":OP,"sql":"DROP"}); self.assertEqual(out["failure"],"contract-approval-required"); self.assertEqual(self.c.calls,[])
   out=self.go({"operation":"apply-092-105"}); self.assertEqual(out["failure"],"invalid-request"); self.assertEqual(self.c.calls,[])
  def test_replay_rejected_and_rolled_back(self):
   self.c.journal+=NAMES; out=self.go(); self.assertEqual(out["failure"],"migration-replay-rejected"); self.assertIn("ROLLBACK",self.c.calls)
@@ -50,7 +50,9 @@ class Tests(unittest.TestCase):
    with self.subTest(size=len(journal)):
     self.c=Connection(journal); out=self.go(); self.assertEqual(out["failure"],"journal-before-boundary-drift"); self.assertEqual(out["detail"],{"missingScripts":missing,"unexpectedScripts":unexpected}); self.assertIn("ROLLBACK",self.c.calls); self.assertFalse(any("INSERT" in c for c in self.c.calls))
  def test_missing_raster_extension_fails_before_any_script(self):
-  self.c=Connection(raster=False); out=self.go(); self.assertEqual(out["failure"],"postgis-raster-missing"); self.assertFalse(any("INSERT" in c for c in self.c.calls))
+  # The 99c4226 set holds no provider (raster) script, so the raster gate must not apply to it.
+  self.assertFalse(any(name.startswith("Honua.Postgres.Migrations.") for name in NAMES))
+  self.c=Connection(raster=False); out=self.go(); self.assertEqual(out["status"],"passed"); self.assertFalse(any("pg_extension" in c for c in self.c.calls))
  def test_missing_reader_table_fails_before_any_script(self):
   self.c=Connection(reader_table=False); out=self.go(); self.assertEqual(out["failure"],"reader-compatibility-table-missing"); self.assertFalse(any("INSERT" in c for c in self.c.calls))
  def test_conflicting_existing_declaration_rolls_back(self):
@@ -64,6 +66,10 @@ class Tests(unittest.TestCase):
     original=os.environ[key]; os.environ[key]="0"*40; out=self.go(); os.environ[key]=original
     self.assertIn(out["failure"],{"immutable-environment-drift","manifest-source-drift"}); self.assertEqual(self.c.calls,[])
  def test_contract_approval_is_required_only_when_the_manifest_names_one(self):
-  self.assertIsNone(MANIFEST["contractApprovalNonce"])
-  out=self.go({"operation":OP,"approveContractMigrations":"cdbcc0afc96cae7f"}); self.assertEqual(out["failure"],"invalid-request"); self.assertEqual(self.c.calls,[])
+  nonce=MANIFEST["contractApprovalNonce"]; self.assertEqual(nonce,"bc2202c7644b6d7f")
+  self.assertEqual([e["name"] for e in MANIFEST["scripts"] if e["phase"]=="Contract"],["Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql"])
+  for event in ({"operation":OP},{"operation":OP,"approveContractMigrations":"cdbcc0afc96cae7f"},{"operation":OP,"approveContractMigrations":nonce,"extra":1}):
+   out=self.go(event); self.assertEqual(out["failure"],"contract-approval-required"); self.assertEqual(out["detail"],{"contractApprovalNonce":nonce}); self.assertEqual(self.c.calls,[])
+  out=self.go({"operation":OP,"approveContractMigrations":nonce.upper()+" "}); self.assertEqual(out["status"],"passed")
+  self.assertEqual(out["migration"]["contractScripts"],["Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql"])
 if __name__=="__main__": unittest.main()

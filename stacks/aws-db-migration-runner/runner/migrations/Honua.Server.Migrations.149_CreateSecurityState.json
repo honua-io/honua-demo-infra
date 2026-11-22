@@ -1,0 +1,23 @@
+{
+  "name": "Honua.Server.Migrations.149_CreateSecurityState.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Security state with expiry (ADR-0082 group B). Bearer values and client keys are stored only as\n-- SHA-256 digests.\nCREATE TABLE IF NOT EXISTS \"honua\".security_tokens (\n    kind       TEXT COLLATE \"C\" NOT NULL,\n    token_hash BYTEA NOT NULL CHECK (octet_length(token_hash) = 32),\n    payload    BYTEA NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (kind, token_hash)\n)",
+    "CREATE INDEX IF NOT EXISTS idx_security_tokens_expires\n    ON \"honua\".security_tokens (expires_at)",
+    "CREATE TABLE IF NOT EXISTS \"honua\".token_replay (\n    replay_key TEXT COLLATE \"C\" PRIMARY KEY CHECK (length(replay_key) BETWEEN 1 AND 512),\n    marker     TEXT NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS idx_token_replay_expires\n    ON \"honua\".token_replay (expires_at)",
+    "CREATE TABLE IF NOT EXISTS \"honua\".idempotency_reservations (\n    scope_hash        BYTEA PRIMARY KEY CHECK (octet_length(scope_hash) = 32),\n    reservation_token TEXT NOT NULL,\n    receipt           BYTEA,\n    expires_at        TIMESTAMPTZ NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS idx_idempotency_reservations_expires\n    ON \"honua\".idempotency_reservations (expires_at)",
+    "COMMENT ON TABLE \"honua\".security_tokens IS 'Sessions, tokens, one-time codes and revocation markers by kind; a one-time value is deleted by the statement that returns it.'",
+    "COMMENT ON TABLE \"honua\".token_replay IS 'Token and assertion identifiers already presented, with the surface or continuation they are bound to.'",
+    "COMMENT ON TABLE \"honua\".idempotency_reservations IS 'Edit idempotency: a reservation has no receipt; a completed request keeps its receipt until expiry.'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.149_CreateSecurityState.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "CB12CE0AB9DFA39E3CB97258B5BC786D5A113E66E411E6E73231D2F86BA85F48",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Security state with expiry (ADR-0082 group B). Bearer values and client keys are stored only as\n-- SHA-256 digests.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.security_tokens (\n    kind       TEXT COLLATE \"C\" NOT NULL,\n    token_hash BYTEA NOT NULL CHECK (octet_length(token_hash) = 32),\n    payload    BYTEA NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (kind, token_hash)\n);\nCREATE INDEX IF NOT EXISTS idx_security_tokens_expires\n    ON $HonuaSchema$.security_tokens (expires_at);\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.token_replay (\n    replay_key TEXT COLLATE \"C\" PRIMARY KEY CHECK (length(replay_key) BETWEEN 1 AND 512),\n    marker     TEXT NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL\n);\nCREATE INDEX IF NOT EXISTS idx_token_replay_expires\n    ON $HonuaSchema$.token_replay (expires_at);\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.idempotency_reservations (\n    scope_hash        BYTEA PRIMARY KEY CHECK (octet_length(scope_hash) = 32),\n    reservation_token TEXT NOT NULL,\n    receipt           BYTEA,\n    expires_at        TIMESTAMPTZ NOT NULL\n);\nCREATE INDEX IF NOT EXISTS idx_idempotency_reservations_expires\n    ON $HonuaSchema$.idempotency_reservations (expires_at);\n\nCOMMENT ON TABLE $HonuaSchema$.security_tokens IS 'Sessions, tokens, one-time codes and revocation markers by kind; a one-time value is deleted by the statement that returns it.';\nCOMMENT ON TABLE $HonuaSchema$.token_replay IS 'Token and assertion identifiers already presented, with the surface or continuation they are bound to.';\nCOMMENT ON TABLE $HonuaSchema$.idempotency_reservations IS 'Edit idempotency: a reservation has no receipt; a completed request keeps its receipt until expiry.';\n"
+  }
+}
