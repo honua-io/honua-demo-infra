@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # One-job equivalence proof: governed runner handler vs honua-server's own runner, from the same baseline.
 set -uo pipefail
 root=$PWD; out=$root/artifacts/harness; mkdir -p "$out"; here=$root/tests/dotnet/Honua.Server.Tests/ZzHarness
