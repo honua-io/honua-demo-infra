@@ -483,9 +483,10 @@ moving `honua_image` to an image that includes the setting.
 ### Redis removal and durable public process jobs
 
 Redis-absent startup is supported, but the pinned `574c804176d9` serving image
-still uses Redis for durable public process jobs. Apply the removal only with
-an approved compatible Lambda image; see
-[Remove the demo Redis cache](../../runbook/remove-demo-redis.md).
+still uses Redis for durable public process jobs. The compatible Redis-free
+image (`99c4226`) needs the governed migration runner first; see
+[Remove the demo Redis cache](../../runbook/remove-demo-redis.md) and
+[Migrations for honua-server 99c4226](../../runbook/db-migrations-99c4226.md).
 The scheduled canary keeps readiness, sync execution, async job/result identity
 and response headers as one release gate. Without Redis, rate-limit windows are
 local to each execution environment.

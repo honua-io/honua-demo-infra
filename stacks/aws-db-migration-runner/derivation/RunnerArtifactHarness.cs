@@ -5,7 +5,6 @@ using DbUp.Builder;
 using DbUp.Engine;
 using Honua.Core.Features.Infrastructure.Migrations;
 using Honua.Db.Postgres.Features.Infrastructure.Migrations;
-using Honua.Db.Postgres.Features.Raster;
 using Xunit;
 
 namespace Honua.Server.Tests.ZzHarness;
@@ -17,8 +16,8 @@ public sealed class RunnerArtifactHarness
     {
         var output = Environment.GetEnvironmentVariable("HARNESS_OUT");
         if (string.IsNullOrEmpty(output)) return;
-        var pending = Environment.GetEnvironmentVariable("HARNESS_PENDING")!.Split(',');
-        var serverAssembly = typeof(Honua.Server.EndpointRegistry).Assembly;
+        var baseline = File.ReadAllLines(Environment.GetEnvironmentVariable("HARNESS_BASELINE")!).Where(l => l.Length > 0).ToHashSet();
+        var serverAssembly = typeof(Honua.Server.Startup.ServerCoreSchemaMigrations).Assembly;
         var upgrader = PostgresDatabaseMigrationRunner.BuildUpgrader(
             "Host=127.0.0.1;Database=x;Username=x;Password=x",
             serverAssembly,
@@ -30,9 +29,12 @@ public sealed class RunnerArtifactHarness
         var config = (UpgradeConfiguration)typeof(UpgradeEngine).GetFields(BindingFlags.NonPublic | BindingFlags.Instance).Single(f => f.FieldType == typeof(UpgradeConfiguration)).GetValue(upgrader)!;
         var executor = config.ScriptExecutor;
         var preprocess = executor.GetType().GetMethod("PreprocessScriptContents", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var known = discovered.Select(s => s.Name).ToArray();
+        var missingFromDiscovery = baseline.Where(b => !known.Contains(b)).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var order = known.Where(n => !baseline.Contains(n)).ToArray();
         var scripts = new List<object>();
         var classifications = new List<MigrationScriptClassification>();
-        foreach (var name in pending)
+        foreach (var name in order)
         {
             var script = discovered.Single(s => s.Name == name);
             var rendered = (string)preprocess.Invoke(executor, [script, new Dictionary<string, string>(config.Variables)])!;
@@ -50,9 +52,7 @@ public sealed class RunnerArtifactHarness
                 declaration,
             });
         }
-        var order = discovered.Select(s => s.Name).Where(pending.Contains).ToArray();
-        var known = discovered.Select(s => s.Name).ToArray();
         var nonce = PostgresDatabaseMigrationRunner.ComputeApprovalNonce(classifications, []);
-        File.WriteAllText(output, JsonSerializer.Serialize(new { order, known, nonce, scripts }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(output, JsonSerializer.Serialize(new { order, known, missingFromDiscovery, nonce, scripts }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.201_CreateEmbedKeyUsage.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Embed key use, shared by every task: the request count of the current rate window and the last use.\n-- The keys themselves are configuration documents; use is not configuration and advances no generation.\nCREATE TABLE IF NOT EXISTS \"honua\".embed_key_usage (\n    key_id            UUID PRIMARY KEY,\n    window_started_at TIMESTAMPTZ NOT NULL,\n    request_count     INTEGER NOT NULL CHECK (request_count > 0),\n    last_used_at      TIMESTAMPTZ NOT NULL\n)",
+    "COMMENT ON TABLE \"honua\".embed_key_usage IS 'Per embed key: requests counted in the current rate window and the time of the last request, across all tasks.'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.201_CreateEmbedKeyUsage.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "A90E5D793AA1791BCD1B6A44B5F5E9DC249A2B3BB4C3839D454872C33F94F772",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Embed key use, shared by every task: the request count of the current rate window and the last use.\n-- The keys themselves are configuration documents; use is not configuration and advances no generation.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.embed_key_usage (\n    key_id            UUID PRIMARY KEY,\n    window_started_at TIMESTAMPTZ NOT NULL,\n    request_count     INTEGER NOT NULL CHECK (request_count > 0),\n    last_used_at      TIMESTAMPTZ NOT NULL\n);\n\nCOMMENT ON TABLE $HonuaSchema$.embed_key_usage IS 'Per embed key: requests counted in the current rate window and the time of the last request, across all tasks.';\n"
+  }
+}

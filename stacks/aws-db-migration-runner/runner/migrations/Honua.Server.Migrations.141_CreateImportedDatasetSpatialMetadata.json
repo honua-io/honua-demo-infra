@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.141_CreateImportedDatasetSpatialMetadata.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Imported dataset facts exist before publication. Relation OID and geometry attnum prevent\n-- stale name-based metadata from attaching to an externally dropped/recreated relation/column.\nCREATE TABLE IF NOT EXISTS \"honua\".imported_dataset_spatial_metadata (\n    schema_name text NOT NULL,\n    table_name text NOT NULL,\n    geometry_column text NOT NULL,\n    relation_oid oid NOT NULL,\n    geometry_attnum smallint NOT NULL CHECK (geometry_attnum > 0),\n    storage_srid integer NOT NULL CHECK (storage_srid > 0),\n    coordinate_epoch double precision,\n    updated_at timestamptz NOT NULL DEFAULT now(),\n    PRIMARY KEY (schema_name, table_name, geometry_column),\n    CHECK (char_length(schema_name) BETWEEN 1 AND 63),\n    CHECK (char_length(table_name) BETWEEN 1 AND 63),\n    CHECK (char_length(geometry_column) BETWEEN 1 AND 63),\n    CHECK (coordinate_epoch IS NULL OR\n        (coordinate_epoch > '-Infinity'::double precision AND coordinate_epoch < 'Infinity'::double precision))\n)",
+    "COMMENT ON TABLE \"honua\".imported_dataset_spatial_metadata IS\n    'Identity-bound import storage CRS and epoch; written with import rows and projected into existing Metadata v2 on publication.'"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.141_CreateImportedDatasetSpatialMetadata.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "3D81526B9B3664732B7701AF1B80BFE71D496C9A035926B67ABD701AEF2BDDA2",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Imported dataset facts exist before publication. Relation OID and geometry attnum prevent\n-- stale name-based metadata from attaching to an externally dropped/recreated relation/column.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.imported_dataset_spatial_metadata (\n    schema_name text NOT NULL,\n    table_name text NOT NULL,\n    geometry_column text NOT NULL,\n    relation_oid oid NOT NULL,\n    geometry_attnum smallint NOT NULL CHECK (geometry_attnum > 0),\n    storage_srid integer NOT NULL CHECK (storage_srid > 0),\n    coordinate_epoch double precision,\n    updated_at timestamptz NOT NULL DEFAULT now(),\n    PRIMARY KEY (schema_name, table_name, geometry_column),\n    CHECK (char_length(schema_name) BETWEEN 1 AND 63),\n    CHECK (char_length(table_name) BETWEEN 1 AND 63),\n    CHECK (char_length(geometry_column) BETWEEN 1 AND 63),\n    CHECK (coordinate_epoch IS NULL OR\n        (coordinate_epoch > '-Infinity'::double precision AND coordinate_epoch < 'Infinity'::double precision))\n);\n\nCOMMENT ON TABLE $HonuaSchema$.imported_dataset_spatial_metadata IS\n    'Identity-bound import storage CRS and epoch; written with import rows and projected into existing Metadata v2 on publication.';\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.215_AddConsoleAccessEnvironmentOwnership.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Give every Console-created role the Environment ownership grant beside its existing\n-- workspace ownership grant. Expand-only: the existing grant stays, so a server from\n-- before this migration still finds its roles; this server reads only the Environment\n-- grant. A role that already holds the Environment grant keeps one copy.\nINSERT INTO \"honua\".rbac_role_permissions (role_id, service, layer, operation)\nSELECT role_id, service, layer, 'environment-membership'\nFROM \"honua\".rbac_role_permissions\nWHERE lower(service) = 'console-access' AND operation = 'workspace-membership'\nON CONFLICT (role_id, service, layer, operation) DO NOTHING"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.215_AddConsoleAccessEnvironmentOwnership.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "DC92706724D09FD47A9B8CAE86CE2D6964C43037EE05D42677371FD3048C634A",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Give every Console-created role the Environment ownership grant beside its existing\n-- workspace ownership grant. Expand-only: the existing grant stays, so a server from\n-- before this migration still finds its roles; this server reads only the Environment\n-- grant. A role that already holds the Environment grant keeps one copy.\nINSERT INTO $HonuaSchema$.rbac_role_permissions (role_id, service, layer, operation)\nSELECT role_id, service, layer, 'environment-membership'\nFROM $HonuaSchema$.rbac_role_permissions\nWHERE lower(service) = 'console-access' AND operation = 'workspace-membership'\nON CONFLICT (role_id, service, layer, operation) DO NOTHING;\n"
+  }
+}

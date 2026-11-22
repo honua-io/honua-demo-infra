@@ -7,7 +7,7 @@ if [[ $# -lt 3 || $# -gt 4 ]]; then
 fi
 readonly PHASE="$1" MERGED_SHA="$2" EVIDENCE_DIR="$3" STACK="stacks/aws-db-migration-runner"
 readonly CANONICAL_ARCHIVE="$STACK/db-migration-runner.zip"
-readonly ARCHIVE_SHA256="d4f12977293d623283d39ccdc2c5644909e293a39a1054f391d0a59dc3d5f416"
+readonly ARCHIVE_SHA256="221caa61e28c716fca4b5286267a2f037c2927d05ac473c9318d37be0319982d"
 [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
 readonly TERRAFORM="${TERRAFORM:-terraform}"
 readonly ROOT="$(git rev-parse --show-toplevel)"

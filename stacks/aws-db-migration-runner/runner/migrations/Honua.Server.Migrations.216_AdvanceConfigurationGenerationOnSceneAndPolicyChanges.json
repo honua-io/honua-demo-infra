@@ -1,0 +1,17 @@
+{
+  "name": "Honua.Server.Migrations.216_AdvanceConfigurationGenerationOnSceneAndPolicyChanges.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Scene datasets and row and field-mask policies shape responses that every server task caches.\n-- A change to any of them advances the shared configuration generation, which keys those cached\n-- responses, so no task keeps serving a response shaped by the previous rows. The tables stay in\n-- the honua schema; the generation lives in the metadata schema.\nCREATE OR REPLACE TRIGGER scene_datasets_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.scene_datasets FOR EACH ROW\n    EXECUTE FUNCTION \"honua\".advance_configuration_generation()",
+    "CREATE OR REPLACE TRIGGER rbac_rls_policies_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.rbac_rls_policies FOR EACH ROW\n    EXECUTE FUNCTION \"honua\".advance_configuration_generation()",
+    "CREATE OR REPLACE TRIGGER rbac_field_mask_policies_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.rbac_field_mask_policies FOR EACH ROW\n    EXECUTE FUNCTION \"honua\".advance_configuration_generation()"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.216_AdvanceConfigurationGenerationOnSceneAndPolicyChanges.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "FC64240E001381A30DD1E62C73AB2801AA18C6E0A5337CC0A07CBCE56EF1F5BD",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Scene datasets and row and field-mask policies shape responses that every server task caches.\n-- A change to any of them advances the shared configuration generation, which keys those cached\n-- responses, so no task keeps serving a response shaped by the previous rows. The tables stay in\n-- the honua schema; the generation lives in the metadata schema.\nCREATE OR REPLACE TRIGGER scene_datasets_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.scene_datasets FOR EACH ROW\n    EXECUTE FUNCTION $HonuaSchema$.advance_configuration_generation();\n\nCREATE OR REPLACE TRIGGER rbac_rls_policies_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.rbac_rls_policies FOR EACH ROW\n    EXECUTE FUNCTION $HonuaSchema$.advance_configuration_generation();\n\nCREATE OR REPLACE TRIGGER rbac_field_mask_policies_configuration_generation AFTER INSERT OR UPDATE OR DELETE\n    ON honua.rbac_field_mask_policies FOR EACH ROW\n    EXECUTE FUNCTION $HonuaSchema$.advance_configuration_generation();\n"
+  }
+}

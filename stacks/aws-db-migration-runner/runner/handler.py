@@ -1,4 +1,4 @@
-"""Fixed, transactional Honua database migration runner for the honua-server 574c804 pending set.
+"""Fixed, transactional Honua database migration runner for the honua-server 99c4226 pending set.
 
 The runner replays exactly what honua-server's own migration engine (DbUp, single transaction,
 journal ``public.schema_versions``) would execute for the reviewed pending set, using commands
@@ -22,7 +22,7 @@ import boto3
 import pg8000.native
 
 
-OPERATION = "apply-574c804"
+OPERATION = "apply-99c4226"
 SCHEMA = "honua-db-migration-result-v2"
 MANIFEST_SCHEMA = "honua-db-migration-runner-manifest-v2"
 ROOT = Path(__file__).resolve().parent

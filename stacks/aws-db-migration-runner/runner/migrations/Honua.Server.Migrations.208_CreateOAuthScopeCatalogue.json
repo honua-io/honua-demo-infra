@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.208_CreateOAuthScopeCatalogue.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".oauth_scope_catalogue (\n    scope_key TEXT COLLATE \"C\" PRIMARY KEY,\n    body JSONB NOT NULL\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.208_CreateOAuthScopeCatalogue.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "FFEFC8D5B68C34F405BBCE785262BD482F90439D7F9A07FDE82BDAA78D9F7525",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.oauth_scope_catalogue (\n    scope_key TEXT COLLATE \"C\" PRIMARY KEY,\n    body JSONB NOT NULL\n);\n"
+  }
+}

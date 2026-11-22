@@ -12,19 +12,87 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STACK = ROOT / "stacks" / "aws-db-migration-runner"
 RUNNER = STACK / "runner"
-SERVER_SOURCE = "574c804176d969550a8e3002e0ebcc5b12df6893"
-SERVING_IMAGE_DIGEST = "sha256:82cf04288a8f7a5aa054f06e7a2201fbc72e00fe7e6fabfa7b7eac4acfd0788e"
-PENDING_DIGEST = "ed316a74359ebf8a72348159955745ab3032fbfe035c4453dda826c0ce7ac6a3"
-EXECUTED_DIGEST = "9b9cbb998176d159b278e5a57515aeaed3e37c490943585089a6e974cb02cc33"
+SERVER_SOURCE = "99c422646c4cd246a73e9b65efd00e9e36724587"
+CANDIDATE_IMAGE_DIGEST = "sha256:2ef00dc750c8222ed01694f52371bfd3e7b17cd12378ad6f2281efdde2bd2e76"
+PENDING_DIGEST = "0727b14c42422add2eaa88e45ee1f8be5e70762a1faf7405bd9fca7216197ecb"
+EXECUTED_DIGEST = "b5bbb10c11ce58f33b6a1d92e4228544fa9728c30b75192f36770f4cf5dd8903"
+# honua-server MigrationSafetyClassifier at SERVER_SOURCE: one ContractAnnotated script (drop-index).
+CONTRACT_SCRIPTS = ["Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql"]
+CONTRACT_APPROVAL_NONCE = "bc2202c7644b6d7f"
+# Reader-compatibility classes the server declares for this set (MigrationReaderCompatibility.Declare).
+READER_CLASSES = {"expand", "reader-incompatible", "contract"}
 PENDING_SCRIPTS = [
-    "Honua.Postgres.Migrations.008_AddRasterSamplingFunctions.sql",
-    "Honua.Server.Migrations.136_CreateAdminApiKeys.sql",
-    "Honua.Server.Migrations.137_CaptureFeatureChangeCommittedImage.sql",
-    "Honua.Server.Migrations.138_CreateJobArtifactImportReceipt.sql",
-    "Honua.Server.Migrations.139_AddAdminApiKeyRestrictions.sql",
-    "Honua.Server.Migrations.140_CreateAiExecutionAdmission.sql",
+    "Honua.Server.Migrations.141_CreateImportedDatasetSpatialMetadata.sql",
+    "Honua.Server.Migrations.142_CreateAiFinancialAccounting.sql",
+    "Honua.Server.Migrations.143_PromoteImportTypedColumns.sql",
+    "Honua.Server.Migrations.144_RenameGeoServicesRestSourceKind.sql",
+    "Honua.Server.Migrations.145_ProtectImportDependencies.sql",
+    "Honua.Server.Migrations.146_AddMigrationBatchPublicationTarget.sql",
+    "Honua.Server.Migrations.147_CreateJobSubstrate.sql",
+    "Honua.Server.Migrations.148_CreateControlPlaneState.sql",
+    "Honua.Server.Migrations.149_CreateSecurityState.sql",
+    "Honua.Server.Migrations.150_CreateOAuthClientsAndOperationProgress.sql",
+    "Honua.Server.Migrations.151_CreateCdnReleaseRecord.sql",
+    "Honua.Server.Migrations.152_IndexAdminApiKeyExpiry.sql",
+    "Honua.Server.Migrations.153_CreateVersionJobsAndTileGenerationCheckpoints.sql",
+    "Honua.Server.Migrations.154_CreatePackageDraftsAndMcpSessions.sql",
+    "Honua.Server.Migrations.155_CreateAgentWorkspaceIdentities.sql",
+    "Honua.Server.Migrations.155_CreateMetadataFieldHistory.sql",
+    "Honua.Server.Migrations.156_CreateConfigurationDocuments.sql",
+    "Honua.Server.Migrations.157_FeatureChangeRealtimeStream.sql",
+    "Honua.Server.Migrations.158_CreateRealtimeEventLog.sql",
+    "Honua.Server.Migrations.161_CreateOpsExternalEvents.sql",
+    "Honua.Server.Migrations.161_CreateOpsNotificationSchedules.sql",
+    "Honua.Server.Migrations.161_PublishSavedMapOperationsToRealtime.sql",
+    "Honua.Server.Migrations.162_CreateCatalogActivationWatches.sql",
+    "Honua.Server.Migrations.162_CreateStudioDraftRevisions.sql",
+    "Honua.Server.Migrations.163_CreateCdnDeploymentPurges.sql",
+    "Honua.Server.Migrations.165_CreateExternalLayerChanges.sql",
+    "Honua.Server.Migrations.166_CreateSourceWatermarks.sql",
+    "Honua.Server.Migrations.167_CreateWorkflowStores.sql",
+    "Honua.Server.Migrations.168_AddAgentAuditActor.sql",
+    "Honua.Server.Migrations.169_CreateOpsIncidentObservations.sql",
+    "Honua.Server.Migrations.170_CreateAiMonthlyActorSpend.sql",
+    "Honua.Server.Migrations.171_CaptureObservationRealtimeEvents.sql",
+    "Honua.Server.Migrations.172_CreateOpsIncidentEpisodes.sql",
+    "Honua.Server.Migrations.174_CreateOperationProposalBatches.sql",
+    "Honua.Server.Migrations.175_CreateRealtimeJobCatalogTriggers.sql",
+    "Honua.Server.Migrations.176_CreateRemoteImportCommitReceipt.sql",
+    "Honua.Server.Migrations.180_CreateFeatureLocks.sql",
+    "Honua.Server.Migrations.181_CreateAttachmentUploadSessions.sql",
+    "Honua.Server.Migrations.182_CreateAttachmentNativeMetadata.sql",
+    "Honua.Server.Migrations.183_RemoveUnusedFeatureIndexes.sql",
+    "Honua.Server.Migrations.186_ExpandMetadataV2Vocabulary.sql",
+    "Honua.Server.Migrations.189_AssignFeatureChangeTransactionId.sql",
+    "Honua.Server.Migrations.191_CreateCdnPurgeBudget.sql",
+    "Honua.Server.Migrations.192_CreateWfsStoredQueries.sql",
+    "Honua.Server.Migrations.193_AllowIncidentInvestigationReferences.sql",
+    "Honua.Server.Migrations.194_CaptureFeatureOperationEvidence.sql",
+    "Honua.Server.Migrations.195_AddGrpcReceiptOperationEvidence.sql",
+    "Honua.Server.Migrations.198_EnforceMetadataGlobalIdUniqueness.sql",
+    "Honua.Server.Migrations.199_AddAnalysisContentTenantOwnership.sql",
+    "Honua.Server.Migrations.200_ExpandAdminApiKeyStorage.sql",
+    "Honua.Server.Migrations.201_CreateEmbedKeyUsage.sql",
+    "Honua.Server.Migrations.204_CreateAttachmentUploadCleanupLedger.sql",
+    "Honua.Server.Migrations.205_AddAttachmentPublicationScope.sql",
+    "Honua.Server.Migrations.206_CreateAttachmentCleanupRetries.sql",
+    "Honua.Server.Migrations.207_CreateAnalysisReports.sql",
+    "Honua.Server.Migrations.208_CreateOAuthScopeCatalogue.sql",
+    "Honua.Server.Migrations.212_CreateConfigurationDocumentRevisions.sql",
+    "Honua.Server.Migrations.213_CreateFeatureChangeReadHorizon.sql",
+    "Honua.Server.Migrations.214_StageFeatureChangePrefixPublisher.sql",
+    "Honua.Server.Migrations.215_AddConsoleAccessEnvironmentOwnership.sql",
+    "Honua.Server.Migrations.216_AdvanceConfigurationGenerationOnSceneAndPolicyChanges.sql",
+    "Honua.Server.Migrations.217_CreateAiIncidentSpend.sql",
+    "Honua.Server.Migrations.218_CreateAssetTaskCore.sql",
+    "Honua.Server.Migrations.219_SkipGlobalIdIndexesOfPublishingLayers.sql",
+    "Honua.Server.Migrations.220_AddPolicyRestrictions.sql",
+    "Honua.Server.Migrations.221_CreateProposalEvidenceConsumptions.sql",
+    "Honua.Server.Migrations.222_CreateObjectStorageConnections.sql",
+    "Honua.Server.Migrations.223_AddCloudRasterDecodeMetadata.sql",
+    "Honua.Server.Migrations.224_CreateRealtimeSecurityTriggers.sql",
 ]
-ARCHIVE_SHA256 = "d4f12977293d623283d39ccdc2c5644909e293a39a1054f391d0a59dc3d5f416"
+ARCHIVE_SHA256 = "221caa61e28c716fca4b5286267a2f037c2927d05ac473c9318d37be0319982d"
 
 
 def require(value: bool, message: str) -> None:
@@ -55,18 +123,20 @@ def main() -> None:
     manifest_path = RUNNER / "migration-manifest.v2.json"
     require(not (RUNNER / "migration-manifest.v1.json").exists(), "retired v1 manifest still present")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    require(manifest["schemaVersion"] == "honua-db-migration-runner-manifest-v2" and manifest["operation"] == "apply-574c804", "manifest schema/operation drifted")
+    require(manifest["schemaVersion"] == "honua-db-migration-runner-manifest-v2" and manifest["operation"] == "apply-99c4226", "manifest schema/operation drifted")
     require(manifest["sourceCommit"] == SERVER_SOURCE, "server source pin drifted")
-    require(manifest["candidateImageDigest"] == SERVING_IMAGE_DIGEST, "candidate image pin drifted")
+    require(manifest["candidateImageDigest"] == CANDIDATE_IMAGE_DIGEST, "candidate image pin drifted")
     executed = manifest["executedScripts"]
-    require(len(executed) == 158 and len(set(executed)) == 158 and executed == sorted(executed), "executed-script baseline size or order drifted")
+    require(len(executed) == 164 and len(set(executed)) == 164 and executed == sorted(executed), "executed-script baseline size or order drifted")
     require(all(re.fullmatch(r"Honua\.(Server|Postgres)\.Migrations\.\d{3}_[A-Za-z0-9_]+\.sql", name) for name in executed), "executed-script baseline name drifted")
     require("Honua.Server.Migrations.109_AdoptConfiguredGuardedSchema.sql" not in executed, "non-default-schema adoption script admitted")
     require(hashlib.sha256("\n".join(executed).encode()).hexdigest() == EXECUTED_DIGEST == manifest["executedScriptsSha256"], "executed-script baseline digest drifted")
     entries = manifest["scripts"]
     names = [entry["name"] for entry in entries]
     require(names == PENDING_SCRIPTS, "pending script set or order drifted")
-    require(all(entry["phase"] == "Expand" for entry in entries) and manifest["contractApprovalNonce"] is None, "Contract migration admitted without a reviewed approval nonce")
+    require([entry["name"] for entry in entries if entry["phase"] == "Contract"] == CONTRACT_SCRIPTS, "Contract script set drifted")
+    require(all(entry["phase"] in {"Expand", "Contract"} for entry in entries), "unknown migration phase admitted")
+    require(manifest["contractApprovalNonce"] == CONTRACT_APPROVAL_NONCE, "Contract migration admitted without the reviewed approval nonce")
     require(not set(names) & set(executed), "pending script overlaps the baseline")
     require(hashlib.sha256("\n".join(names).encode()).hexdigest() == PENDING_DIGEST == manifest["pendingScriptsSha256"], "pending digest drifted")
     require(set(path.name for path in (RUNNER / "migrations").iterdir()) == {entry["file"] for entry in entries}, "migration source set drifted")
@@ -76,7 +146,7 @@ def main() -> None:
         script = json.loads(data)
         require(script["name"] == entry["name"] and script["phase"] == entry["phase"] and script["commands"], f"migration body drifted: {entry['file']}")
         declaration = script["declaration"]
-        require(declaration["scriptName"] == entry["name"] and declaration["declarationFormat"] == 1 and declaration["classification"] == "expand", f"reader declaration drifted: {entry['file']}")
+        require(declaration["scriptName"] == entry["name"] and declaration["declarationFormat"] == 1 and declaration["classification"] in READER_CLASSES and (declaration["classification"] == "contract") == (entry["phase"] == "Contract"), f"reader declaration drifted: {entry['file']}")
         require(hashlib.sha256(declaration["scriptText"].encode()).hexdigest().upper() == declaration["scriptSha256"], f"reader declaration hash drifted: {entry['file']}")
         require(not any(re.search(r"\$Honua[A-Za-z0-9_]*\$", command) for command in script["commands"]), f"unrendered DbUp variable: {entry['file']}")
     handler = (RUNNER / "handler.py").read_text(encoding="utf-8")

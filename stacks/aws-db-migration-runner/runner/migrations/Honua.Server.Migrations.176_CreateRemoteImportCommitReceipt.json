@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.176_CreateRemoteImportCommitReceipt.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- A worker can die after importing rows but before publishing its terminal progress.\n-- This record commits with the rows and prevents a replacement worker from replaying them.\nCREATE TABLE IF NOT EXISTS \"honua\".remote_import_commit_receipt (\n    job_id TEXT COLLATE \"C\" PRIMARY KEY,\n    schema_name TEXT NOT NULL,\n    table_name TEXT NOT NULL,\n    source_service_url TEXT NOT NULL,\n    source_layer_id INTEGER NOT NULL,\n    feature_count INTEGER NOT NULL CHECK (feature_count >= 0),\n    failed_features INTEGER NOT NULL CHECK (failed_features >= 0),\n    committed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.176_CreateRemoteImportCommitReceipt.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "1F3B195A8EB21FCC7028051A8DCD026750E75D32169A81EE30F810316D414624",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- A worker can die after importing rows but before publishing its terminal progress.\n-- This record commits with the rows and prevents a replacement worker from replaying them.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.remote_import_commit_receipt (\n    job_id TEXT COLLATE \"C\" PRIMARY KEY,\n    schema_name TEXT NOT NULL,\n    table_name TEXT NOT NULL,\n    source_service_url TEXT NOT NULL,\n    source_layer_id INTEGER NOT NULL,\n    feature_count INTEGER NOT NULL CHECK (feature_count >= 0),\n    failed_features INTEGER NOT NULL CHECK (failed_features >= 0),\n    committed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\n"
+  }
+}

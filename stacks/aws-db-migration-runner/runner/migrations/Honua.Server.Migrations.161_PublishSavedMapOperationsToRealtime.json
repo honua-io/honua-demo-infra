@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.161_PublishSavedMapOperationsToRealtime.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Publish only references to accepted operations. The trigger shares the operation transaction,\n-- so rollback also restores the realtime head and commit makes the reference visible to peers.\nCREATE OR REPLACE FUNCTION \"honua\".publish_saved_map_operation_to_realtime()\nRETURNS TRIGGER\nLANGUAGE plpgsql\nSET search_path = pg_catalog, pg_temp\nAS $$\nBEGIN\n    PERFORM \"honua\".realtime_append('collab-ops', jsonb_build_array(jsonb_build_object(\n        'scope_key', NEW.map_id,\n        'kind', 'operation-appended',\n        'payload', jsonb_build_object(\n            'operationId', NEW.operation_id,\n            'mapId', NEW.map_id,\n            'serverCursor', NEW.server_cursor,\n            'baseCursor', NEW.base_cursor,\n            'actorId', NEW.actor_id,\n            'kind', NEW.operation_kind))));\n    RETURN NEW;\nEND;\n$$",
+    "CREATE OR REPLACE TRIGGER trg_publish_saved_map_operation_to_realtime\n    AFTER INSERT ON \"honua\".saved_map_operations\n    FOR EACH ROW EXECUTE FUNCTION \"honua\".publish_saved_map_operation_to_realtime()"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.161_PublishSavedMapOperationsToRealtime.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "55A972B9C808185FC1F0C60FAED6C464F8B9F519FD5533D8C263EC35F84A5D0B",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Publish only references to accepted operations. The trigger shares the operation transaction,\n-- so rollback also restores the realtime head and commit makes the reference visible to peers.\nCREATE OR REPLACE FUNCTION $HonuaSchema$.publish_saved_map_operation_to_realtime()\nRETURNS TRIGGER\nLANGUAGE plpgsql\nSET search_path = pg_catalog, pg_temp\nAS $$\nBEGIN\n    PERFORM $HonuaSchema$.realtime_append('collab-ops', jsonb_build_array(jsonb_build_object(\n        'scope_key', NEW.map_id,\n        'kind', 'operation-appended',\n        'payload', jsonb_build_object(\n            'operationId', NEW.operation_id,\n            'mapId', NEW.map_id,\n            'serverCursor', NEW.server_cursor,\n            'baseCursor', NEW.base_cursor,\n            'actorId', NEW.actor_id,\n            'kind', NEW.operation_kind))));\n    RETURN NEW;\nEND;\n$$;\n\nCREATE OR REPLACE TRIGGER trg_publish_saved_map_operation_to_realtime\n    AFTER INSERT ON $HonuaSchema$.saved_map_operations\n    FOR EACH ROW EXECUTE FUNCTION $HonuaSchema$.publish_saved_map_operation_to_realtime();\n"
+  }
+}

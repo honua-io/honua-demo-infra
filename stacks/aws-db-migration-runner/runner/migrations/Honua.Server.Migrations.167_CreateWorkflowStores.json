@@ -1,0 +1,21 @@
+{
+  "name": "Honua.Server.Migrations.167_CreateWorkflowStores.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".workflow_definitions (\n    workflow_id TEXT COLLATE \"C\" PRIMARY KEY,\n    record JSONB NOT NULL\n)",
+    "CREATE TABLE IF NOT EXISTS \"honua\".workflow_runs (\n    run_id TEXT COLLATE \"C\" PRIMARY KEY,\n    workflow_id TEXT COLLATE \"C\" NOT NULL,\n    active BOOLEAN NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    record JSONB NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS workflow_runs_active ON \"honua\".workflow_runs (created_at, run_id) WHERE active",
+    "CREATE INDEX IF NOT EXISTS workflow_runs_history ON \"honua\".workflow_runs (workflow_id, created_at DESC, run_id)",
+    "CREATE INDEX IF NOT EXISTS workflow_runs_expiry ON \"honua\".workflow_runs (expires_at) WHERE NOT active",
+    "CREATE TABLE IF NOT EXISTS \"honua\".workflow_schedule_cursors (\n    workflow_id TEXT COLLATE \"C\" PRIMARY KEY,\n    completed_ticks BIGINT,\n    pending_ticks BIGINT\n)",
+    "CREATE TABLE IF NOT EXISTS \"honua\".workflow_trigger_cursors (\n    workflow_id TEXT COLLATE \"C\" NOT NULL,\n    cursor_kind TEXT COLLATE \"C\" NOT NULL,\n    marker TEXT NOT NULL,\n    ordinal BYTEA NOT NULL,\n    PRIMARY KEY (workflow_id, cursor_kind)\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.167_CreateWorkflowStores.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "DB57891ADC0A98D59F1CCB882BEB3D42FADC2B0E43D0D2727A047AFCBB7B5C13",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.workflow_definitions (\n    workflow_id TEXT COLLATE \"C\" PRIMARY KEY,\n    record JSONB NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.workflow_runs (\n    run_id TEXT COLLATE \"C\" PRIMARY KEY,\n    workflow_id TEXT COLLATE \"C\" NOT NULL,\n    active BOOLEAN NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL,\n    expires_at TIMESTAMPTZ NOT NULL,\n    record JSONB NOT NULL\n);\nCREATE INDEX IF NOT EXISTS workflow_runs_active ON $HonuaSchema$.workflow_runs (created_at, run_id) WHERE active;\nCREATE INDEX IF NOT EXISTS workflow_runs_history ON $HonuaSchema$.workflow_runs (workflow_id, created_at DESC, run_id);\nCREATE INDEX IF NOT EXISTS workflow_runs_expiry ON $HonuaSchema$.workflow_runs (expires_at) WHERE NOT active;\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.workflow_schedule_cursors (\n    workflow_id TEXT COLLATE \"C\" PRIMARY KEY,\n    completed_ticks BIGINT,\n    pending_ticks BIGINT\n);\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.workflow_trigger_cursors (\n    workflow_id TEXT COLLATE \"C\" NOT NULL,\n    cursor_kind TEXT COLLATE \"C\" NOT NULL,\n    marker TEXT NOT NULL,\n    ordinal BYTEA NOT NULL,\n    PRIMARY KEY (workflow_id, cursor_kind)\n);\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.213_CreateFeatureChangeReadHorizon.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Migration: 213_CreateFeatureChangeReadHorizon.sql\n-- Description: Change-feed readers take their committed horizon from this one function instead\n--              of reading MAX(generation) themselves. It returns MAX(generation) today, which the\n--              global feature-writer lock keeps gap-free, so behaviour is unchanged. A later release\n--              that scopes the writer lock per layer replaces only this function body (for example\n--              with a published committed watermark); readers of every running release then follow\n--              it without a code change, which keeps a rolling upgrade from skipping a late commit.\n-- Dependencies: Requires honua.feature_changes (migration 012) and the change-tracking\n--              functions from migrations 067, 137 and 189.\n\nCREATE OR REPLACE FUNCTION honua.feature_change_read_horizon()\nRETURNS BIGINT\nLANGUAGE sql\nSTABLE\nAS $$\n    SELECT COALESCE(MAX(generation), 0)::BIGINT FROM honua.feature_changes\n$$"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.213_CreateFeatureChangeReadHorizon.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "DA43DEC76DB272CA1B4DEB6418AFAD7F34073833DEF64E8B833B504F14498275",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Migration: 213_CreateFeatureChangeReadHorizon.sql\n-- Description: Change-feed readers take their committed horizon from this one function instead\n--              of reading MAX(generation) themselves. It returns MAX(generation) today, which the\n--              global feature-writer lock keeps gap-free, so behaviour is unchanged. A later release\n--              that scopes the writer lock per layer replaces only this function body (for example\n--              with a published committed watermark); readers of every running release then follow\n--              it without a code change, which keeps a rolling upgrade from skipping a late commit.\n-- Dependencies: Requires honua.feature_changes (migration 012) and the change-tracking\n--              functions from migrations 067, 137 and 189.\n\nCREATE OR REPLACE FUNCTION honua.feature_change_read_horizon()\nRETURNS BIGINT\nLANGUAGE sql\nSTABLE\nAS $$\n    SELECT COALESCE(MAX(generation), 0)::BIGINT FROM honua.feature_changes\n$$;\n"
+  }
+}

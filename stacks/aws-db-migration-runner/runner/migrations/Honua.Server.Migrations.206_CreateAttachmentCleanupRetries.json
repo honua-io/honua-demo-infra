@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.206_CreateAttachmentCleanupRetries.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Schedule retries independently of historical physical attachment authorities.\nCREATE TABLE IF NOT EXISTS \"honua\".attachment_cleanup_retries (\n    cleanup_authority TEXT NOT NULL,\n    storage_path TEXT NOT NULL,\n    next_attempt_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (cleanup_authority, storage_path)\n)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.206_CreateAttachmentCleanupRetries.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "9771852064162A0211C50A7D176A4186A4B6D9FC9804FA0651BFFF2E55301DD0",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\n-- Schedule retries independently of historical physical attachment authorities.\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.attachment_cleanup_retries (\n    cleanup_authority TEXT NOT NULL,\n    storage_path TEXT NOT NULL,\n    next_attempt_at TIMESTAMPTZ NOT NULL,\n    PRIMARY KEY (cleanup_authority, storage_path)\n);\n"
+  }
+}

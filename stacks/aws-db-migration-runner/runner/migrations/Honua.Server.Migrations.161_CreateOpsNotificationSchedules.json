@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.161_CreateOpsNotificationSchedules.sql",
+  "phase": "Expand",
+  "commands": [
+    "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS \"honua\".ops_notification_schedules (\n    source TEXT COLLATE \"C\" NOT NULL,\n    subject_id TEXT COLLATE \"C\" NOT NULL,\n    episode_id UUID NOT NULL,\n    first_seen_at TIMESTAMPTZ NOT NULL,\n    severity INTEGER NOT NULL CHECK (severity BETWEEN 0 AND 2),\n    notice_number INTEGER NOT NULL DEFAULT 0 CHECK (notice_number >= 0),\n    next_notice_at TIMESTAMPTZ NOT NULL,\n    last_seen_at TIMESTAMPTZ NOT NULL,\n    closed_at TIMESTAMPTZ,\n    revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),\n    PRIMARY KEY (source, subject_id)\n)",
+    "CREATE INDEX IF NOT EXISTS idx_ops_notification_schedules_due\n    ON \"honua\".ops_notification_schedules (next_notice_at)\n    WHERE closed_at IS NULL"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.161_CreateOpsNotificationSchedules.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "3D7152E2AF1580007FD8F2E7DD7375403EF98CFFD7170D975EB54B847BDC4735",
+    "minReaderSchema": 0,
+    "scriptText": "-- Copyright (c) Honua Geo Inc. All rights reserved.\n-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.\n\nCREATE TABLE IF NOT EXISTS $HonuaSchema$.ops_notification_schedules (\n    source TEXT COLLATE \"C\" NOT NULL,\n    subject_id TEXT COLLATE \"C\" NOT NULL,\n    episode_id UUID NOT NULL,\n    first_seen_at TIMESTAMPTZ NOT NULL,\n    severity INTEGER NOT NULL CHECK (severity BETWEEN 0 AND 2),\n    notice_number INTEGER NOT NULL DEFAULT 0 CHECK (notice_number >= 0),\n    next_notice_at TIMESTAMPTZ NOT NULL,\n    last_seen_at TIMESTAMPTZ NOT NULL,\n    closed_at TIMESTAMPTZ,\n    revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),\n    PRIMARY KEY (source, subject_id)\n);\n\nCREATE INDEX IF NOT EXISTS idx_ops_notification_schedules_due\n    ON $HonuaSchema$.ops_notification_schedules (next_notice_at)\n    WHERE closed_at IS NULL;\n"
+  }
+}

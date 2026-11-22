@@ -1,0 +1,17 @@
+{
+  "name": "Honua.Server.Migrations.161_CreateOpsExternalEvents.sql",
+  "phase": "Expand",
+  "commands": [
+    "CREATE TABLE IF NOT EXISTS \"honua\".ops_external_events (\n    event_id TEXT PRIMARY KEY,\n    occurred_at TIMESTAMPTZ NOT NULL,\n    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    body JSONB NOT NULL\n)",
+    "CREATE INDEX IF NOT EXISTS ix_ops_external_events_occurred_at\n    ON \"honua\".ops_external_events (occurred_at DESC, event_id)",
+    "CREATE INDEX IF NOT EXISTS ix_ops_external_events_received_at\n    ON \"honua\".ops_external_events (received_at)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.161_CreateOpsExternalEvents.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "6B4B573E991DFB89EA1D8B0BAA4F5F0869AAC9B686998EE53E20BF34CD0DA78B",
+    "minReaderSchema": 0,
+    "scriptText": "CREATE TABLE IF NOT EXISTS $HonuaSchema$.ops_external_events (\n    event_id TEXT PRIMARY KEY,\n    occurred_at TIMESTAMPTZ NOT NULL,\n    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n    body JSONB NOT NULL\n);\nCREATE INDEX IF NOT EXISTS ix_ops_external_events_occurred_at\n    ON $HonuaSchema$.ops_external_events (occurred_at DESC, event_id);\nCREATE INDEX IF NOT EXISTS ix_ops_external_events_received_at\n    ON $HonuaSchema$.ops_external_events (received_at);\n"
+  }
+}

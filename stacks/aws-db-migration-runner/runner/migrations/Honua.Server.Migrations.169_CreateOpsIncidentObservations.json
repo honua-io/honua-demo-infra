@@ -1,0 +1,16 @@
+{
+  "name": "Honua.Server.Migrations.169_CreateOpsIncidentObservations.sql",
+  "phase": "Expand",
+  "commands": [
+    "CREATE TABLE IF NOT EXISTS \"honua\".ops_incident_observations (\n    authority_scope TEXT NOT NULL CHECK (length(btrim(authority_scope)) > 0 AND octet_length(authority_scope) <= 256),\n    source_id TEXT NOT NULL CHECK (length(btrim(source_id)) > 0 AND octet_length(source_id) <= 256),\n    observation_id TEXT NOT NULL CHECK (length(btrim(observation_id)) > 0 AND octet_length(observation_id) <= 256),\n    finding_id TEXT NOT NULL CHECK (length(btrim(finding_id)) > 0 AND octet_length(finding_id) <= 256),\n    observed_at TIMESTAMPTZ NOT NULL,\n    state INTEGER NOT NULL CHECK (state IN (0, 1, 2)),\n    evidence TEXT NOT NULL CHECK (octet_length(evidence) <= 65536 AND evidence::json IS NOT NULL),\n    PRIMARY KEY (authority_scope, source_id, observation_id)\n)",
+    "CREATE INDEX IF NOT EXISTS ix_ops_incident_observations_authority_time\n    ON \"honua\".ops_incident_observations (authority_scope, observed_at DESC, source_id, observation_id)"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.169_CreateOpsIncidentObservations.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "496E67D08C71610EF73889B1E432E8BEA53DC15A9DCB4D4F3D07D09F12377865",
+    "minReaderSchema": 0,
+    "scriptText": "CREATE TABLE IF NOT EXISTS $HonuaSchema$.ops_incident_observations (\n    authority_scope TEXT NOT NULL CHECK (length(btrim(authority_scope)) > 0 AND octet_length(authority_scope) <= 256),\n    source_id TEXT NOT NULL CHECK (length(btrim(source_id)) > 0 AND octet_length(source_id) <= 256),\n    observation_id TEXT NOT NULL CHECK (length(btrim(observation_id)) > 0 AND octet_length(observation_id) <= 256),\n    finding_id TEXT NOT NULL CHECK (length(btrim(finding_id)) > 0 AND octet_length(finding_id) <= 256),\n    observed_at TIMESTAMPTZ NOT NULL,\n    state INTEGER NOT NULL CHECK (state IN (0, 1, 2)),\n    evidence TEXT NOT NULL CHECK (octet_length(evidence) <= 65536 AND evidence::json IS NOT NULL),\n    PRIMARY KEY (authority_scope, source_id, observation_id)\n);\nCREATE INDEX IF NOT EXISTS ix_ops_incident_observations_authority_time\n    ON $HonuaSchema$.ops_incident_observations (authority_scope, observed_at DESC, source_id, observation_id);\n"
+  }
+}

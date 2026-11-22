@@ -1,0 +1,15 @@
+{
+  "name": "Honua.Server.Migrations.146_AddMigrationBatchPublicationTarget.sql",
+  "phase": "Expand",
+  "commands": [
+    "ALTER TABLE honua.migration_batch_children\n    ADD COLUMN IF NOT EXISTS publication_target JSONB"
+  ],
+  "declaration": {
+    "scriptName": "Honua.Server.Migrations.146_AddMigrationBatchPublicationTarget.sql",
+    "declarationFormat": 1,
+    "classification": "expand",
+    "scriptSha256": "0F09CE3C38D7C2FBF21A9497B6F575EC04C7B84ED5C74CFE510EDCF02D24AA7A",
+    "minReaderSchema": 0,
+    "scriptText": "ALTER TABLE honua.migration_batch_children\n    ADD COLUMN IF NOT EXISTS publication_target JSONB;\n"
+  }
+}
